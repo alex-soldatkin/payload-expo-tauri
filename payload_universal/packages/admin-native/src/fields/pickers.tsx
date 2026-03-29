@@ -1,16 +1,19 @@
 /**
  * Picker-based fields that open a BottomSheet: select, radio, relationship, upload.
  */
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from 'react-native'
+import { Picker } from '@react-native-picker/picker'
+import { Link } from 'expo-router'
 
 import type {
   ClientRadioField,
@@ -48,7 +51,7 @@ const FieldShell: React.FC<{
 )
 
 // ---------------------------------------------------------------------------
-// Select → BottomSheet with option list
+// Select — native Picker (single) or multi-select chips (hasMany)
 // ---------------------------------------------------------------------------
 
 export const SelectField: React.FC<FieldComponentProps<ClientSelectField>> = ({
@@ -58,9 +61,22 @@ export const SelectField: React.FC<FieldComponentProps<ClientSelectField>> = ({
   disabled,
   error,
 }) => {
-  const [open, setOpen] = useState(false)
   const options = (field.options ?? []).map(normalizeOption)
-  const selected = options.find((o) => o.value === value)
+  const isMulti = field.hasMany === true
+  const isDisabled = disabled || field.admin?.readOnly
+
+  // Multi-select: value is an array of strings
+  const selectedValues: string[] = isMulti
+    ? (Array.isArray(value) ? value as string[] : value ? [String(value)] : [])
+    : []
+
+  const toggleMulti = (optValue: string) => {
+    if (selectedValues.includes(optValue)) {
+      onChange(selectedValues.filter((v) => v !== optValue))
+    } else {
+      onChange([...selectedValues, optValue])
+    }
+  }
 
   return (
     <FieldShell
@@ -69,46 +85,48 @@ export const SelectField: React.FC<FieldComponentProps<ClientSelectField>> = ({
       required={field.required}
       error={error}
     >
-      <Pressable
-        style={[styles.pickerButton, error && styles.pickerButtonError]}
-        onPress={() => !disabled && setOpen(true)}
-        disabled={disabled || field.admin?.readOnly}
-      >
-        <Text style={[styles.pickerText, !selected && styles.pickerPlaceholder]}>
-          {selected?.label ?? 'Select...'}
-        </Text>
-        <Text style={styles.chevron}>›</Text>
-      </Pressable>
-
-      <BottomSheet visible={open} onClose={() => setOpen(false)} height={0.45}>
-        <Text style={styles.sheetTitle}>{getFieldLabel(field)}</Text>
-        <FlatList
-          data={options}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.optionRow, item.value === value && styles.optionSelected]}
-              onPress={() => { onChange(item.value); setOpen(false) }}
-            >
-              <Text style={[styles.optionText, item.value === value && styles.optionTextSelected]}>
-                {item.label}
-              </Text>
-              {item.value === value && <Text style={styles.checkMark}>✓</Text>}
-            </Pressable>
-          )}
-        />
-        {value != null && (
-          <Pressable style={styles.clearBtn} onPress={() => { onChange(null); setOpen(false) }}>
-            <Text style={styles.clearText}>Clear selection</Text>
-          </Pressable>
-        )}
-      </BottomSheet>
+      {isMulti ? (
+        /* Multi-select: chip toggles */
+        <View style={selectStyles.chipContainer}>
+          {options.map((opt) => {
+            const isSelected = selectedValues.includes(opt.value)
+            return (
+              <Pressable
+                key={opt.value}
+                style={[selectStyles.chip, isSelected && selectStyles.chipSelected]}
+                onPress={() => !isDisabled && toggleMulti(opt.value)}
+                disabled={isDisabled}
+              >
+                <Text style={[selectStyles.chipText, isSelected && selectStyles.chipTextSelected]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            )
+          })}
+        </View>
+      ) : (
+        /* Single select: native Picker */
+        <View style={[selectStyles.pickerWrapper, error && styles.pickerButtonError]}>
+          <Picker
+            selectedValue={value ?? ''}
+            onValueChange={(v) => onChange(v === '' ? null : v)}
+            enabled={!isDisabled}
+            style={selectStyles.picker}
+            itemStyle={selectStyles.pickerItem}
+          >
+            <Picker.Item label="Select..." value="" color={t.colors.textPlaceholder} />
+            {options.map((opt) => (
+              <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+            ))}
+          </Picker>
+        </View>
+      )}
     </FieldShell>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Radio → BottomSheet with option list (single-select, no clear)
+// Radio — native Picker (always single-select)
 // ---------------------------------------------------------------------------
 
 export const RadioField: React.FC<FieldComponentProps<ClientRadioField>> = ({
@@ -118,9 +136,8 @@ export const RadioField: React.FC<FieldComponentProps<ClientRadioField>> = ({
   disabled,
   error,
 }) => {
-  const [open, setOpen] = useState(false)
   const options = (field.options ?? []).map(normalizeOption)
-  const selected = options.find((o) => o.value === value)
+  const isDisabled = disabled || field.admin?.readOnly
 
   return (
     <FieldShell
@@ -129,35 +146,20 @@ export const RadioField: React.FC<FieldComponentProps<ClientRadioField>> = ({
       required={field.required}
       error={error}
     >
-      <Pressable
-        style={[styles.pickerButton, error && styles.pickerButtonError]}
-        onPress={() => !disabled && setOpen(true)}
-        disabled={disabled || field.admin?.readOnly}
-      >
-        <Text style={[styles.pickerText, !selected && styles.pickerPlaceholder]}>
-          {selected?.label ?? 'Select...'}
-        </Text>
-        <Text style={styles.chevron}>›</Text>
-      </Pressable>
-
-      <BottomSheet visible={open} onClose={() => setOpen(false)} height={0.45}>
-        <Text style={styles.sheetTitle}>{getFieldLabel(field)}</Text>
-        <FlatList
-          data={options}
-          keyExtractor={(item) => item.value}
-          renderItem={({ item }) => (
-            <Pressable
-              style={[styles.optionRow, item.value === value && styles.optionSelected]}
-              onPress={() => { onChange(item.value); setOpen(false) }}
-            >
-              <View style={[styles.radioCircle, item.value === value && styles.radioCircleSelected]}>
-                {item.value === value && <View style={styles.radioDot} />}
-              </View>
-              <Text style={styles.optionText}>{item.label}</Text>
-            </Pressable>
-          )}
-        />
-      </BottomSheet>
+      <View style={[selectStyles.pickerWrapper, error && styles.pickerButtonError]}>
+        <Picker
+          selectedValue={value ?? ''}
+          onValueChange={(v) => onChange(v === '' ? null : v)}
+          enabled={!isDisabled}
+          style={selectStyles.picker}
+          itemStyle={selectStyles.pickerItem}
+        >
+          <Picker.Item label="Select..." value="" color={t.colors.textPlaceholder} />
+          {options.map((opt) => (
+            <Picker.Item key={opt.value} label={opt.label} value={opt.value} />
+          ))}
+        </Picker>
+      </View>
     </FieldShell>
   )
 }
@@ -166,6 +168,25 @@ export const RadioField: React.FC<FieldComponentProps<ClientRadioField>> = ({
 // Relationship → BottomSheet with search + paginated results
 // ---------------------------------------------------------------------------
 
+/** Extract a human-readable title from a document, respecting useAsTitle. */
+const docDisplayTitle = (doc: Record<string, unknown>, useAsTitle?: string): string => {
+  if (useAsTitle && doc[useAsTitle] != null) return String(doc[useAsTitle])
+  return String(doc.title ?? doc.name ?? doc.email ?? doc.id ?? '')
+}
+
+/**
+ * Optional import of local-db for local-first relationship queries.
+ * Wrapped in try/catch so admin-native doesn't hard-depend on local-db.
+ */
+let _useLocalDB: (() => any) | null = null
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const localDbModule = require('@payload-universal/local-db')
+  _useLocalDB = localDbModule.useLocalDB
+} catch {
+  // local-db not available — will fall back to REST API
+}
+
 export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipField>> = ({
   field,
   value,
@@ -173,43 +194,117 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
   disabled,
   error,
 }) => {
-  const { baseURL, auth } = usePayloadNative()
+  const { baseURL, auth, schema } = usePayloadNative()
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
-  const [docs, setDocs] = useState<Array<Record<string, unknown>>>([])
+  const [allDocs, setAllDocs] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(false)
+  // Cached display label for the selected value (survives value being just an ID)
+  const [displayLabel, setDisplayLabel] = useState<string | null>(null)
   const relationTo = Array.isArray(field.relationTo) ? field.relationTo[0] : field.relationTo
 
-  const loadDocs = useCallback(async (q?: string) => {
+  // Get useAsTitle from the related collection's menu model
+  const useAsTitle = schema?.menuModel?.collections.find(
+    (c: any) => c.slug === relationTo,
+  )?.useAsTitle
+
+  // Local-first: try to get local DB from context
+  const localDB = _useLocalDB ? _useLocalDB() : null
+  const localCollection = localDB?.collections?.[relationTo]
+
+  // Load all docs for the related collection (local-first, API fallback)
+  const loadDocs = useCallback(async () => {
     setLoading(true)
     try {
-      const where = q ? { or: [
-        { title: { contains: q } },
-        { name: { contains: q } },
-        { email: { contains: q } },
-      ]} : undefined
-      const result = await payloadApi.find({ baseURL, token: auth.token }, relationTo, {
-        limit: 25,
-        where: where as Record<string, unknown> | undefined,
-        depth: 0,
-      })
-      setDocs(result.docs)
+      if (localCollection) {
+        // Local-first: query RxDB directly
+        const results = await localCollection.find({
+          selector: { _deleted: { $eq: false } },
+          sort: [{ updatedAt: 'desc' }],
+          limit: 50,
+        }).exec()
+        setAllDocs(results.map((r: any) => r.toJSON()))
+      } else {
+        // API fallback
+        const result = await payloadApi.find({ baseURL, token: auth.token }, relationTo, {
+          limit: 50,
+          depth: 0,
+          sort: '-updatedAt',
+        })
+        setAllDocs(result.docs)
+      }
     } catch {
-      setDocs([])
+      setAllDocs([])
     } finally {
       setLoading(false)
     }
-  }, [baseURL, auth.token, relationTo])
+  }, [localCollection, baseURL, auth.token, relationTo])
 
   useEffect(() => {
     if (open) loadDocs()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
-  const displayValue = value
+  // Client-side search filtering
+  const filteredDocs = useMemo(() => {
+    if (!search.trim()) return allDocs
+    const q = search.toLowerCase()
+    return allDocs.filter((doc) => {
+      // Search across useAsTitle field + common fields
+      const fields = new Set(['title', 'name', 'email', 'id'])
+      if (useAsTitle) fields.add(useAsTitle)
+      return Array.from(fields).some((f) => {
+        const val = doc[f]
+        return val != null && String(val).toLowerCase().includes(q)
+      })
+    })
+  }, [allDocs, search, useAsTitle])
+
+  // Resolve display label when the value is an object (populated) or just an ID
+  const selectedId = value
     ? (typeof value === 'object' && value !== null
-        ? (value as Record<string, unknown>).title ?? (value as Record<string, unknown>).name ?? (value as Record<string, unknown>).email ?? (value as Record<string, unknown>).id
-        : value)
+        ? String((value as Record<string, unknown>).id ?? '')
+        : String(value))
+    : null
+
+  // If value is a populated object, extract display title immediately
+  useEffect(() => {
+    if (!value) {
+      setDisplayLabel(null)
+      return
+    }
+    if (typeof value === 'object' && value !== null) {
+      setDisplayLabel(docDisplayTitle(value as Record<string, unknown>, useAsTitle))
+      return
+    }
+    // Value is just an ID — resolve display title (local-first, API fallback)
+    if (typeof value === 'string' && value.length > 0) {
+      let cancelled = false
+      const resolve = async () => {
+        try {
+          if (localCollection) {
+            const rxDoc = await localCollection.findOne(value).exec()
+            if (!cancelled && rxDoc) {
+              setDisplayLabel(docDisplayTitle(rxDoc.toJSON(), useAsTitle))
+              return
+            }
+          }
+          // API fallback
+          const doc = await payloadApi.findByID({ baseURL, token: auth.token }, relationTo, value, { depth: 0 })
+          if (!cancelled && doc) setDisplayLabel(docDisplayTitle(doc, useAsTitle))
+        } catch {
+          if (!cancelled) setDisplayLabel(String(value))
+        }
+      }
+      resolve()
+      return () => { cancelled = true }
+    }
+  }, [value, baseURL, auth.token, relationTo, useAsTitle, localCollection])
+
+  const displayValue = displayLabel || (selectedId ?? null)
+
+  const selectedHref = selectedId
+    ? `/(admin)/collections/${relationTo}/${selectedId}`
     : null
 
   return (
@@ -219,38 +314,60 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
       required={field.required}
       error={error}
     >
+      {/* Selected value: tap opens picker, long-press the label previews the related doc */}
       <Pressable
         style={[styles.pickerButton, error && styles.pickerButtonError]}
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled || field.admin?.readOnly}
       >
-        <Text style={[styles.pickerText, !displayValue && styles.pickerPlaceholder]}>
-          {displayValue ? String(displayValue) : `Select ${relationTo}...`}
-        </Text>
+        {selectedHref && displayValue ? (
+          <Link href={selectedHref as any} push style={{ flex: 1 }}>
+            <Link.Trigger>
+              <Text style={styles.pickerText} numberOfLines={1}>{String(displayValue)}</Text>
+            </Link.Trigger>
+            <Link.Preview />
+            <Link.Menu>
+              <Link.MenuAction icon="eye" onPress={() => {}}>
+                View {relationTo}
+              </Link.MenuAction>
+              <Link.MenuAction icon="pencil" onPress={() => !disabled && setOpen(true)}>
+                Change
+              </Link.MenuAction>
+              <Link.MenuAction icon="xmark.circle" destructive onPress={() => onChange(null)}>
+                Clear
+              </Link.MenuAction>
+            </Link.Menu>
+          </Link>
+        ) : (
+          <Text style={[styles.pickerText, styles.pickerPlaceholder]}>
+            {`Select ${relationTo}...`}
+          </Text>
+        )}
         <Text style={styles.chevron}>›</Text>
       </Pressable>
 
+      {/* Picker bottom sheet — Link.Preview not used here (modals don't support it) */}
       <BottomSheet visible={open} onClose={() => setOpen(false)} height={0.6}>
         <Text style={styles.sheetTitle}>Select {relationTo}</Text>
         <TextInput
           style={styles.searchInput}
           value={search}
-          onChangeText={(v) => { setSearch(v); loadDocs(v) }}
+          onChangeText={setSearch}
           placeholder="Search..."
           placeholderTextColor={t.colors.textPlaceholder}
           autoCapitalize="none"
         />
         {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
         <FlatList
-          data={docs}
+          data={filteredDocs}
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => {
-            const title = String(item.title ?? item.name ?? item.email ?? item.id)
+            const title = docDisplayTitle(item, useAsTitle)
             const isSelected = value === item.id || (typeof value === 'object' && value !== null && (value as Record<string, unknown>).id === item.id)
             return (
               <Pressable
                 style={[styles.optionRow, isSelected && styles.optionSelected]}
-                onPress={() => { onChange(item.id); setOpen(false) }}
+                onPress={() => { setDisplayLabel(title); onChange(item.id); setOpen(false) }}
               >
                 <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{title}</Text>
                 {isSelected && <Text style={styles.checkMark}>✓</Text>}
@@ -535,4 +652,54 @@ const styles = StyleSheet.create({
   uploadClear: { fontSize: 16, color: t.colors.textMuted, fontWeight: '700', padding: t.spacing.xs },
 
   emptyText: { textAlign: 'center', paddingVertical: t.spacing.xl, color: t.colors.textMuted, fontSize: t.fontSize.sm },
+})
+
+// ---------------------------------------------------------------------------
+// Select / Radio native picker styles
+// ---------------------------------------------------------------------------
+
+const selectStyles = StyleSheet.create({
+  pickerWrapper: {
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    borderRadius: t.borderRadius.sm,
+    backgroundColor: t.colors.surface,
+    overflow: 'hidden',
+  },
+  picker: {
+    ...Platform.select({
+      ios: { marginHorizontal: -8 },
+      android: { marginHorizontal: 4 },
+    }),
+  },
+  pickerItem: {
+    fontSize: t.fontSize.md,
+    color: t.colors.text,
+  },
+  // Multi-select chips
+  chipContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: t.spacing.xs,
+  },
+  chip: {
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs + 2,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    backgroundColor: t.colors.surface,
+  },
+  chipSelected: {
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
+  },
+  chipText: {
+    fontSize: t.fontSize.sm,
+    color: t.colors.text,
+    fontWeight: '500',
+  },
+  chipTextSelected: {
+    color: t.colors.primaryText,
+  },
 })

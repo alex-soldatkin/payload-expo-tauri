@@ -16,7 +16,8 @@ Data flow
 1. Payload server builds ClientConfig with createClientConfig and exposes it via a new admin schema endpoint.
 2. Clients fetch the admin schema and build their field maps and form state in admin-core.
 3. UI components render fields using platform adapters and a component registry.
-4. Data reads and writes go through @payloadcms/sdk so all clients share the same API shape.
+4. Web/desktop: data reads and writes go through the Payload REST API directly.
+5. Mobile (Expo): data reads come from local RxDB (reactive, instant). Writes are optimistic local-first — `useLocalMutations` inserts/patches into RxDB immediately, replication pushes to the server in the background.
 
 Custom components
 - Keep the import map from Payload. Extend it with platform specific entries such as "web" and "native".
@@ -50,7 +51,20 @@ Local-first architecture (2026-03-29)
 - Conflict resolution: server wins (last-write-wins via updatedAt)
 - React hooks: useLocalCollection (reactive list), useLocalDocument (reactive single doc)
 - DocumentList accepts optional localData prop for local-first rendering
-- In-memory storage by default, can swap to SQLite for persistence
+- Custom SQLite storage (packages/local-db/src/storage/) replaces the RxDB trial plugin:
+  - No document or operation limits
+  - SQL-level WHERE, ORDER BY, LIMIT/OFFSET (Mango-to-SQL converter)
+  - Expression indexes on json_extract() for schema-declared index fields
+  - Efficient bulkWrite (loads only affected docs) and findDocumentsById (WHERE id IN)
+  - Optional getChangedDocumentsSince() for fast replication checkpoint queries
+  - Falls back to JS filtering for unsupported Mango operators ($regex, $elemMatch, etc.)
+- Evaluated Zero (Rocicorp) as a sync alternative but rejected: no offline writes, Postgres-only, not local-first
+- WebSocket sync server (port 3001) broadcasts change events in real-time from Payload afterChange/afterDelete hooks
+- Three sync endpoints: /sync/diff (lightweight manifests), /sync/pull (selective fetch by IDs), /sync/push (field-level three-way merge)
+- Field-level three-way merge: non-conflicting field changes from both sides merge automatically; true conflicts (same field) → client wins
+- Select/Radio fields use native @react-native-picker/picker; multi-select uses toggle chips; relationship fields use searchable BottomSheet
+- Collection card summary fields: user-selectable via gear icon, persisted in AsyncStorage per collection
+- Link.Preview (iOS peek/pop) on document list rows and relationship field values
 
 Shared hooks and DB schema
 - Hooks stay in packages/schema and are used by the server only.

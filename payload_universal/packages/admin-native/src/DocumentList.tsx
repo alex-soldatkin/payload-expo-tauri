@@ -19,15 +19,17 @@ import {
   Text,
   View,
 } from 'react-native'
+import { Link } from 'expo-router'
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
-import { extractRootFields, getDocumentTitle } from './schemaHelpers'
+import { extractRootFields, getDocumentTitle, getFieldLabel } from './schemaHelpers'
 import { usePayloadNative } from './PayloadNativeProvider'
 import { payloadApi } from './api'
 import { useDocumentListFilters } from './useDocumentListFilters'
 import { FilterChips } from './FilterChips'
 import { FilterBottomSheet } from './FilterBottomSheet'
+import { BottomSheet } from './BottomSheet'
 
 type Props = {
   /** Collection slug */
@@ -51,6 +53,11 @@ type Props = {
   /** Fields to search across for text search */
   searchFields?: string[]
   /**
+   * Build an href for a document row — enables Link.Preview on long-press (iOS).
+   * Example: `(doc) => \`/(admin)/collections/posts/\${doc.id}\``
+   */
+  docHref?: (doc: Record<string, unknown>) => string
+  /**
    * Optional external data source (e.g. from local-db).
    * When provided, the component skips its own REST API calls
    * and uses this data directly. The parent is responsible for
@@ -62,6 +69,13 @@ type Props = {
     loading: boolean
     refetch: () => void
   }
+  /**
+   * Field names to display as summary on each card (below the title).
+   * Controlled externally — use with onSummaryFieldsChange for persistence.
+   */
+  summaryFields?: string[]
+  /** Called when the user changes the summary field selection via the gear icon. */
+  onSummaryFieldsChange?: (fields: string[]) => void
 }
 
 export const DocumentList: React.FC<Props> = ({
@@ -75,7 +89,10 @@ export const DocumentList: React.FC<Props> = ({
   schemaMap,
   searchText: externalSearchText,
   searchFields,
+  docHref,
   localData,
+  summaryFields = [],
+  onSummaryFieldsChange,
 }) => {
   const { baseURL, auth } = usePayloadNative()
   const [data, setData] = useState<PaginatedDocs | null>(null)
@@ -84,6 +101,7 @@ export const DocumentList: React.FC<Props> = ({
   const [page, setPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
   const [filterSheetOpen, setFilterSheetOpen] = useState(false)
+  const [summaryPickerOpen, setSummaryPickerOpen] = useState(false)
 
   // When local data is provided, use it as the primary data source
   const effectiveDocs = localData?.docs ?? data?.docs ?? []
@@ -155,13 +173,14 @@ export const DocumentList: React.FC<Props> = ({
     [baseURL, collection, limit],
   )
 
-  // Initial load + re-load when filters/search change
+  // Initial load + re-load when filters/search change (skip if using local data)
   useEffect(() => {
+    if (localData) return
     if (!auth.token) return
     setLoading(true)
     setPage(1)
     load(1, false, whereQuery as Record<string, unknown> | undefined)
-  }, [auth.token, load, whereQuery])
+  }, [localData, auth.token, load, whereQuery])
 
   const handleRefresh = () => {
     if (localData) {
@@ -193,9 +212,79 @@ export const DocumentList: React.FC<Props> = ({
     }
   }
 
+  /** Format a field value for display on the card. */
+  const formatFieldValue = (val: unknown): string => {
+    if (val === null || val === undefined) return '—'
+    if (typeof val === 'boolean') return val ? 'Yes' : 'No'
+    if (typeof val === 'object') {
+      // Relationship (populated object) — show title/name/email
+      const obj = val as Record<string, unknown>
+      return String(obj.title ?? obj.name ?? obj.email ?? obj.id ?? JSON.stringify(val))
+    }
+    const s = String(val)
+    // Date-like strings — format nicely
+    if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return formatDate(s)
+    return s
+  }
+
+  /** Resolve a field's label from the schema. */
+  const fieldLabelMap = new Map<string, string>()
+  if (schemaMap) {
+    for (const f of extractRootFields(schemaMap, collection)) {
+      if (f.name) fieldLabelMap.set(f.name, getFieldLabel(f))
+    }
+  }
+
   const renderItem = ({ item }: { item: Record<string, unknown> }) => {
     const title = getDocumentTitle(item, titleField)
     const subtitle = renderSubtitle?.(item) ?? (item.updatedAt ? `Updated ${formatDate(item.updatedAt as string)}` : undefined)
+
+    // Build summary lines from selected fields
+    const summaryLines = summaryFields
+      .filter((f) => f !== titleField) // don't duplicate the title
+      .map((fieldName) => ({
+        label: fieldLabelMap.get(fieldName) ?? fieldName,
+        value: formatFieldValue(item[fieldName]),
+      }))
+      .filter((line) => line.value !== '—') // skip empty
+
+    const rowContent = (
+      <View style={styles.row}>
+        <View style={styles.rowContent}>
+          <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
+          {subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>}
+          {summaryLines.length > 0 && (
+            <View style={styles.summaryContainer}>
+              {summaryLines.map((line, i) => (
+                <React.Fragment key={line.label}>
+                  <View style={styles.summaryRow}>
+                    <Text style={styles.summaryLabel} numberOfLines={1}>{line.label}</Text>
+                    <Text style={styles.summaryValue} numberOfLines={1}>{line.value}</Text>
+                  </View>
+                </React.Fragment>
+              ))}
+            </View>
+          )}
+        </View>
+        <Text style={styles.rowChevron}>›</Text>
+      </View>
+    )
+
+    // When docHref is provided, wrap in Link with long-press preview (iOS)
+    if (docHref) {
+      const href = docHref(item)
+      return (
+        <Link href={href as any} push style={{ marginBottom: t.spacing.sm }}>
+          <Link.Trigger>{rowContent}</Link.Trigger>
+          <Link.Preview />
+          <Link.Menu>
+            <Link.MenuAction icon="doc.text" onPress={() => onPress(item)}>
+              Open
+            </Link.MenuAction>
+          </Link.Menu>
+        </Link>
+      )
+    }
 
     return (
       <Pressable style={styles.row} onPress={() => onPress(item)}>
@@ -211,11 +300,23 @@ export const DocumentList: React.FC<Props> = ({
   // --- Header component rendered above the list ---
   const ListHeader = () => (
     <View>
-      {onCreate && (
-        <Pressable style={styles.createBtn} onPress={onCreate}>
-          <Text style={styles.createText}>+ Create new</Text>
-        </Pressable>
-      )}
+      {/* Top row: Create button + gear icon */}
+      <View style={styles.headerTopRow}>
+        {onCreate && (
+          <Pressable style={[styles.createBtn, { flex: 1 }]} onPress={onCreate}>
+            <Text style={styles.createText}>+ Create new</Text>
+          </Pressable>
+        )}
+        {onSummaryFieldsChange && (
+          <Pressable
+            style={styles.gearBtn}
+            onPress={() => setSummaryPickerOpen(true)}
+            hitSlop={8}
+          >
+            <Text style={styles.gearIcon}>⚙</Text>
+          </Pressable>
+        )}
+      </View>
 
       {/* Filter chips / add filter */}
       <View style={styles.filterRow}>
@@ -303,6 +404,52 @@ export const DocumentList: React.FC<Props> = ({
         fields={filterableFields}
         onApply={(f) => { addFilter(f); setFilterSheetOpen(false) }}
       />
+
+      {/* Summary fields picker bottom sheet */}
+      {onSummaryFieldsChange && (
+        <BottomSheet visible={summaryPickerOpen} onClose={() => setSummaryPickerOpen(false)} height={0.55}>
+          <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
+          <Text style={sfStyles.sheetHint}>Select fields to show on each card below the title.</Text>
+          <FlatList
+            data={filterableFields.filter((f) =>
+              f.name && !['id', 'createdAt', 'updatedAt'].includes(f.name) &&
+              ['text', 'email', 'number', 'date', 'select', 'radio', 'checkbox', 'relationship', 'upload', 'textarea', 'richText', 'point', 'json'].includes(f.type),
+            )}
+            keyExtractor={(item) => item.name!}
+            renderItem={({ item: field }) => {
+              const fieldName = field.name!
+              const isSelected = summaryFields.includes(fieldName)
+              return (
+                <Pressable
+                  style={sfStyles.fieldRow}
+                  onPress={() => {
+                    const next = isSelected
+                      ? summaryFields.filter((f) => f !== fieldName)
+                      : [...summaryFields, fieldName]
+                    onSummaryFieldsChange(next)
+                  }}
+                >
+                  <View style={[sfStyles.checkbox, isSelected && sfStyles.checkboxSelected]}>
+                    {isSelected && <Text style={sfStyles.checkmark}>✓</Text>}
+                  </View>
+                  <View style={sfStyles.fieldInfo}>
+                    <Text style={sfStyles.fieldLabel}>{getFieldLabel(field)}</Text>
+                    <Text style={sfStyles.fieldType}>{field.type}</Text>
+                  </View>
+                </Pressable>
+              )
+            }}
+            ListEmptyComponent={
+              <Text style={sfStyles.emptyText}>No displayable fields</Text>
+            }
+          />
+          {summaryFields.length > 0 && (
+            <Pressable style={sfStyles.clearBtn} onPress={() => onSummaryFieldsChange([])}>
+              <Text style={sfStyles.clearText}>Clear all</Text>
+            </Pressable>
+          )}
+        </BottomSheet>
+      )}
     </View>
   )
 }
@@ -314,8 +461,6 @@ const styles = StyleSheet.create({
 
   // Create button
   createBtn: {
-    marginTop: t.spacing.md,
-    marginBottom: t.spacing.sm,
     paddingVertical: t.spacing.md,
     backgroundColor: t.colors.primary,
     borderRadius: t.borderRadius.sm,
@@ -341,6 +486,28 @@ const styles = StyleSheet.create({
     marginBottom: t.spacing.sm,
   },
 
+  // Header top row (create + gear)
+  headerTopRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.sm,
+    marginTop: t.spacing.md,
+    marginBottom: t.spacing.sm,
+  },
+
+  // Gear icon
+  gearBtn: {
+    width: 44,
+    height: 44,
+    borderRadius: t.borderRadius.sm,
+    backgroundColor: t.colors.surface,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  gearIcon: { fontSize: 20, color: t.colors.textMuted },
+
   // Row
   row: {
     flexDirection: 'row',
@@ -360,6 +527,27 @@ const styles = StyleSheet.create({
   rowSubtitle: { fontSize: t.fontSize.sm, color: t.colors.textMuted, marginTop: 2 },
   rowChevron: { fontSize: 20, color: t.colors.textMuted, marginLeft: t.spacing.sm },
 
+  // Summary fields on cards
+  summaryContainer: {
+    marginTop: t.spacing.xs,
+    gap: 2,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.xs,
+  },
+  summaryLabel: {
+    fontSize: t.fontSize.xs,
+    color: t.colors.textMuted,
+    fontWeight: '500',
+  },
+  summaryValue: {
+    fontSize: t.fontSize.xs,
+    color: t.colors.text,
+    flex: 1,
+  },
+
   // States
   errorText: { color: t.colors.error, fontSize: t.fontSize.md, textAlign: 'center', marginBottom: t.spacing.md },
   retryBtn: { paddingHorizontal: t.spacing.xl, paddingVertical: t.spacing.sm, backgroundColor: t.colors.primary, borderRadius: t.borderRadius.sm },
@@ -368,4 +556,39 @@ const styles = StyleSheet.create({
   emptyText: { color: t.colors.textMuted, fontSize: t.fontSize.md },
   clearFiltersBtn: { marginTop: t.spacing.md },
   clearFiltersText: { color: t.colors.primary, fontSize: t.fontSize.sm, fontWeight: '600' },
+})
+
+// Summary field picker styles
+const sfStyles = StyleSheet.create({
+  sheetTitle: { fontSize: t.fontSize.lg, fontWeight: '700', color: t.colors.text, marginBottom: 4 },
+  sheetHint: { fontSize: t.fontSize.sm, color: t.colors.textMuted, marginBottom: t.spacing.md },
+  fieldRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: t.spacing.md,
+    paddingHorizontal: t.spacing.sm,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.separator,
+  },
+  checkbox: {
+    width: 22,
+    height: 22,
+    borderRadius: 6,
+    borderWidth: 2,
+    borderColor: t.colors.border,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: t.spacing.md,
+  },
+  checkboxSelected: {
+    backgroundColor: t.colors.primary,
+    borderColor: t.colors.primary,
+  },
+  checkmark: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  fieldInfo: { flex: 1 },
+  fieldLabel: { fontSize: t.fontSize.md, color: t.colors.text, fontWeight: '500' },
+  fieldType: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 1 },
+  clearBtn: { paddingVertical: t.spacing.md, alignItems: 'center' },
+  clearText: { fontSize: t.fontSize.sm, color: t.colors.destructive, fontWeight: '600' },
+  emptyText: { textAlign: 'center', paddingVertical: t.spacing.xl, color: t.colors.textMuted, fontSize: t.fontSize.sm },
 })

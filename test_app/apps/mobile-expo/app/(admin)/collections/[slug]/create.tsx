@@ -1,42 +1,48 @@
 /**
- * Document create screen – presented as a modal.
- * Uses the same DocumentForm but with empty initial data.
+ * Document create screen — always local-first.
+ *
+ * Inserts the new document into local RxDB immediately (instant),
+ * then navigates to the edit screen. The sync engine pushes to the
+ * server in the background.
  */
 import React from 'react'
-import { Alert, Text, View } from 'react-native'
+import { ActivityIndicator, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 
 import {
   DocumentForm,
   getCollectionLabel,
-  payloadApi,
   useAdminSchema,
   useMenuModel,
-  usePayloadNative,
 } from '@payload-universal/admin-native'
+import { useLocalDB, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
 
 export default function DocumentCreateScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>()
   const router = useRouter()
-  const { baseURL, auth } = usePayloadNative()
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
+  const localDB = useLocalDB()
+  const { isReady } = useLocalDBStatus()
+  const { create } = useLocalMutations(localDB, slug)
 
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
 
   const handleSubmit = async (data: Record<string, unknown>) => {
-    const created = await payloadApi.create({ baseURL, token: auth.token }, slug, data)
-    Alert.alert('Created', `New ${collectionLabel} created successfully.`)
-    // Navigate to the edit screen for the new document
-    router.replace(`/(admin)/collections/${slug}/${(created as Record<string, unknown>).id}`)
+    const id = await create(data)
+    router.replace(`/(admin)/collections/${slug}/${id}`)
   }
 
-  if (!schemaMap) {
+  if (!isReady || !schemaMap) {
     return (
       <View className="flex-1 items-center justify-center bg-paper">
         <Stack.Screen options={{ title: `New ${collectionLabel}` }} />
-        <Text className="text-base text-ink-muted">Schema not available</Text>
+        {!isReady ? (
+          <ActivityIndicator size="large" />
+        ) : (
+          <Text className="text-base text-ink-muted">Schema not available</Text>
+        )}
       </View>
     )
   }

@@ -14,16 +14,19 @@
 
 // Provider & status hooks
 export { LocalDBProvider, useLocalDB, useLocalDBStatus } from './LocalDBProvider'
+export type { SyncProgress } from './LocalDBProvider'
 
 // React hooks for data access
 export {
   useLocalCollection,
   useLocalDocument,
   useLocalQuery,
+  useLocalMutations,
 } from './hooks'
 export type {
   UseLocalCollectionResult,
   UseLocalDocumentResult,
+  UseLocalMutationsResult,
 } from './hooks'
 
 // Upload queue hook
@@ -42,6 +45,14 @@ export type { PayloadDoc, PayloadFieldDef, PayloadCollectionMeta } from './schem
 export { startReplication } from './replication'
 export type { ReplicationConfig } from './replication'
 
+// WebSocket sync replication
+export { startSyncReplication } from './syncReplication'
+export type { SyncReplicationConfig, SyncReplicationState } from './syncReplication'
+
 // Upload queue
 export { UploadQueueManager, UPLOAD_QUEUE_COLLECTION } from './uploadQueue'
 export type { PendingUploadItem, UploadStatus, EnqueueArgs } from './uploadQueue'
+
+// SQLite storage (drop-in replacement for rxdb trial)
+export { getRxStorageSQLite, getSQLiteBasicsExpoSQLiteAsync } from './storage'
+export type { SQLiteStorageSettings } from './storage'

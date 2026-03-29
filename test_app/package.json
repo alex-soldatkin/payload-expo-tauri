@@ -26,5 +26,19 @@
     "jsdom": "^25.0.0",
     "typescript": "^5.9.2",
     "vitest": "^2.1.0"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@swc/core",
+      "esbuild",
+      "sharp",
+      "bufferutil",
+      "utf-8-validate",
+      "protobufjs",
+      "rxdb",
+      "@sentry/cli",
+      "@firebase/util",
+      "mongodb-memory-server"
+    ]
   }
 }

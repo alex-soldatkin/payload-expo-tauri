@@ -5,11 +5,12 @@
  *   ToastProvider         → in-app notifications
  *
  * Auth gate: unauthenticated → login screen, authenticated → admin tabs.
+ * Shows sync progress on splash screen and toasts for background updates.
  */
 import '../global.css'
 
-import React, { useCallback, useEffect, useState } from 'react'
-import { ActivityIndicator, View } from 'react-native'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { ActivityIndicator, Text, View } from 'react-native'
 import { Slot, useRouter, useSegments } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import * as Notifications from 'expo-notifications'
@@ -23,9 +24,15 @@ import {
   useAuth,
   useBaseURL,
   usePayloadNative,
+  useToast,
 } from '@payload-universal/admin-native'
-import { LocalDBProvider } from '@payload-universal/local-db'
-import { getRxStorageSQLite } from 'rxdb/plugins/storage-sqlite'
+import {
+  LocalDBProvider,
+  getRxStorageSQLite,
+  getSQLiteBasicsExpoSQLiteAsync,
+  useLocalDBStatus,
+  type SyncProgress,
+} from '@payload-universal/local-db'
 import * as SQLite from 'expo-sqlite'
 
 // Configure local notifications to show banners while the app is in the foreground
@@ -42,17 +49,66 @@ const TOKEN_KEY = 'payload_auth_token'
 const BASE_URL_KEY = 'payload_base_url'
 
 const DEFAULT_BASE_URL = __DEV__ ? 'http://localhost:3000' : 'https://your-server.com'
+const DEFAULT_WS_URL = __DEV__ ? 'ws://localhost:3001' : 'wss://your-server.com/ws'
 
-// Persistent SQLite storage for RxDB
+// Persistent SQLite storage for RxDB (custom full implementation — no trial limits)
 const sqliteStorage = getRxStorageSQLite({
-  sqliteQueryWithParams: (db: any, sql: string, params: any[]) => {
-    const result = db.getAllSync(sql, params)
-    return { rows: result }
-  },
-  openSQLiteDatabase: (name: string) => {
-    return SQLite.openDatabaseSync(name)
-  },
+  sqliteBasics: getSQLiteBasicsExpoSQLiteAsync(SQLite.openDatabaseSync),
 })
+
+/** Shows sync progress indicator below the spinner during initial load. */
+function SyncProgressIndicator() {
+  const { syncStatus, syncProgress } = useLocalDBStatus()
+
+  if (syncStatus !== 'syncing' || syncProgress.total === 0) return null
+
+  const pct = Math.round((syncProgress.completed / syncProgress.total) * 100)
+
+  return (
+    <View style={{ marginTop: 16, alignItems: 'center' }}>
+      <Text style={{ fontSize: 13, color: '#888', marginBottom: 4 }}>
+        Syncing{syncProgress.current ? ` ${syncProgress.current}` : ''}...
+      </Text>
+      {/* Progress bar */}
+      <View style={{
+        width: 180,
+        height: 4,
+        backgroundColor: '#e5e5e5',
+        borderRadius: 2,
+        overflow: 'hidden',
+      }}>
+        <View style={{
+          width: `${pct}%`,
+          height: '100%',
+          backgroundColor: '#1f1f1f',
+          borderRadius: 2,
+        }} />
+      </View>
+      <Text style={{ fontSize: 11, color: '#aaa', marginTop: 4 }}>
+        {syncProgress.completed}/{syncProgress.total} collections
+      </Text>
+    </View>
+  )
+}
+
+/** Fires toasts when background sync receives updates. */
+function SyncToastBridge() {
+  const toast = useToast()
+  const { syncStatus } = useLocalDBStatus()
+  const prevStatus = useRef(syncStatus)
+
+  useEffect(() => {
+    if (prevStatus.current === 'syncing' && syncStatus === 'idle') {
+      toast.showToast('Sync complete', { type: 'success', duration: 2000 })
+    }
+    if (syncStatus === 'error' && prevStatus.current !== 'error') {
+      toast.showToast('Sync error — using local data', { type: 'error' })
+    }
+    prevStatus.current = syncStatus
+  }, [syncStatus, toast])
+
+  return null
+}
 
 /** Inner component that has access to PayloadNativeProvider context. */
 function LocalDBGate({ children }: { children: React.ReactNode }) {
@@ -65,7 +121,7 @@ function LocalDBGate({ children }: { children: React.ReactNode }) {
       schema={schema}
       baseURL={baseURL}
       token={auth.token}
-      pullInterval={30_000}
+      wsURL={DEFAULT_WS_URL}
       storage={sqliteStorage}
     >
       {children}
@@ -75,6 +131,7 @@ function LocalDBGate({ children }: { children: React.ReactNode }) {
 
 function AuthGate() {
   const { isAuthenticated, isLoading } = useAuth()
+  const { isReady } = useLocalDBStatus()
   const segments = useSegments()
   const router = useRouter()
 
@@ -94,11 +151,17 @@ function AuthGate() {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6f4f1' }}>
         <ActivityIndicator size="large" />
+        <SyncProgressIndicator />
       </View>
     )
   }
 
-  return <Slot />
+  return (
+    <>
+      <SyncToastBridge />
+      <Slot />
+    </>
+  )
 }
 
 export default function RootLayout() {

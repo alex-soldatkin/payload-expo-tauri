@@ -12,9 +12,21 @@ Expo UI components
 - The docs label Jetpack Compose as alpha and SwiftUI as beta.
 - Use Expo UI only for targeted components where native platform UI is a must. Keep the main admin UI on React Native plus NativeWind for consistency across platforms.
 
-Status (2026-02-05)
-- apps/mobile-expo currently renders the admin schema preview (fetches `/api/admin-schema`).
-- NativeWind is configured; full admin-native UI is still pending.
+Status (2026-03-29)
+- apps/mobile-expo has auth gate, admin tab navigation, and local-first data layer.
+- NativeWind configured; admin-native provides DocumentList, DocumentForm, FieldRenderer.
+- Local-first architecture via RxDB + custom SQLite storage (no trial limits):
+  - `_layout.tsx` creates `getRxStorageSQLite()` with Expo SQLite, passes to `LocalDBProvider`.
+  - Schema changes auto-propagate: Payload config → admin schema → RxDB collections → SQLite tables + indexes.
+  - Hooks: `useLocalCollection`, `useLocalDocument`, `useLocalQuery`, `usePendingUploads`.
+  - Upload queue with retry logic via `UploadQueueManager`.
+- PayloadNativeProvider handles auth (JWT), schema fetching, token persistence via SecureStore.
+- Sync progress shown on splash screen (progress bar + collection counter); toasts on sync complete/error.
+- Select/Radio fields use native @react-native-picker/picker; multi-select uses toggle chips.
+- Collection cards have configurable summary fields (gear icon → field picker → persisted in AsyncStorage).
+- Link.Preview (iOS peek/pop) on document list rows and relationship field selected values.
+- App no longer blocks on DB init — auth gate shows UI immediately, screens show own loading states.
+- Polyfill `globalThis.crypto` with expo-crypto for RxDB compatibility on Hermes.
 
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.

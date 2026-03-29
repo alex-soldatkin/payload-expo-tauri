@@ -13,7 +13,9 @@
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-native": ">=0.72.0",
-    "expo-image-picker": ">=15.0.0"
+    "expo-router": ">=4.0.0",
+    "expo-image-picker": ">=15.0.0",
+    "@react-native-picker/picker": ">=2.0.0"
   },
   "dependencies": {
     "@payload-universal/admin-schema": "workspace:*"

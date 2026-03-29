@@ -25,4 +25,29 @@ Spacedrive references
 Local workspace references
 - payload_universal/packages/schema/src/createPayloadConfig.ts for the shared Payload config builder.
 - payload_universal/packages/admin-schema/src/index.ts for admin schema generation.
+- payload_universal/packages/local-db/src/database.ts for the RxDB database factory (createLocalDB).
+- payload_universal/packages/local-db/src/storage/index.ts for the custom RxDB SQLite storage (getRxStorageSQLite).
+- payload_universal/packages/local-db/src/storage/mango-to-sql.ts for Mango query to SQL WHERE conversion.
+- payload_universal/packages/local-db/src/replication.ts for HTTP replication to Payload REST API.
+- payload_universal/packages/local-db/src/hooks.ts for useLocalCollection, useLocalDocument, useLocalQuery.
+- payload_universal/packages/admin-native/ for React Native admin UI components.
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.
+- test_app/apps/mobile-expo/app/_layout.tsx for the Expo root layout (auth, local DB, storage init).
+- test_app/.env for PAYLOAD_SECRET and DATABASE_URL.
+
+Server sync endpoints
+- payload_universal/packages/schema/src/endpoints/syncDiff.ts — GET /api/sync/diff handler
+- payload_universal/packages/schema/src/endpoints/syncPull.ts — POST /api/sync/pull handler
+- payload_universal/packages/schema/src/endpoints/syncPush.ts — POST /api/sync/push + three-way merge
+- payload_universal/packages/schema/src/endpoints/syncWebSocket.ts — WS server, broadcastChange(), createSyncHooks()
+- payload_universal/packages/schema/src/endpoints/syncTombstones.ts — _sync_tombstones collection + afterDelete hook
+- test_app/apps/server/src/instrumentation.ts — starts WS sync server on Next.js boot (port 3001)
+- test_app/apps/server/next.config.mjs — Turbopack config (root: monoRoot, requires root node_modules symlink)
+
+Repository
+- Remote: https://github.com/alex-soldatkin/payload-expo-tauri.git (branch: main)
+
+Critical: root node_modules symlink
+- payload_expo_tauri/node_modules → test_app/node_modules (MUST exist for Turbopack)
+- Turbopack resolves transitive deps (@floating-ui/react, clsx) from payload-main through this
+- Do NOT delete during cleanup

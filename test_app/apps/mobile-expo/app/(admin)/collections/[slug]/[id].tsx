@@ -1,10 +1,10 @@
 /**
- * Document edit screen – renders the full DocumentForm driven by the admin schema.
+ * Document edit screen — always local-first.
  *
- * Replaces the web admin's edit view. Popovers become bottom sheets,
- * field groups become collapsible sections, and tabs use a segmented control.
+ * Reads from local RxDB (reactive — updates instantly when data changes).
+ * Writes go to local DB first (instant), sync pushes to server in background.
  */
-import React, { useEffect, useRef, useState } from 'react'
+import React, { useRef } from 'react'
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
@@ -14,55 +14,32 @@ import {
   DocumentForm,
   getCollectionLabel,
   getDocumentTitle,
-  payloadApi,
   useAdminSchema,
   useMenuModel,
-  usePayloadNative,
 } from '@payload-universal/admin-native'
+import { useLocalDB, useLocalDocument, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
 
 export default function DocumentEditScreen() {
   const { slug, id } = useLocalSearchParams<{ slug: string; id: string }>()
   const router = useRouter()
   const headerHeight = useHeaderHeight()
-  const { baseURL, auth } = usePayloadNative()
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
+  const localDB = useLocalDB()
+  const { isReady } = useLocalDBStatus()
 
   const formRef = useRef<{ submit: () => void }>(null)
-  const [doc, setDoc] = useState<Record<string, unknown> | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+
+  // Reactive local document — updates instantly when RxDB data changes
+  const { doc, loading, error } = useLocalDocument(localDB, slug, id)
+  const { update, remove } = useLocalMutations(localDB, slug)
 
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
   const useAsTitle = menuModel?.collections.find((c) => c.slug === slug)?.useAsTitle
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        setLoading(true)
-        const result = await payloadApi.findByID(
-          { baseURL, token: auth.token },
-          slug,
-          id,
-          { depth: 0 },
-        )
-        setDoc(result)
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load document')
-      } finally {
-        setLoading(false)
-      }
-    }
-    load()
-  }, [baseURL, auth.token, slug, id])
-
   const handleSubmit = async (data: Record<string, unknown>) => {
-    await payloadApi.update({ baseURL, token: auth.token }, slug, id, data)
-    // Refresh doc
-    const updated = await payloadApi.findByID({ baseURL, token: auth.token }, slug, id, { depth: 0 })
-    setDoc(updated)
-    Alert.alert('Saved', `${collectionLabel} updated successfully.`)
+    await update(id, data)
   }
 
   const handleDelete = () => {
@@ -76,7 +53,7 @@ export default function DocumentEditScreen() {
           style: 'destructive',
           onPress: async () => {
             try {
-              await payloadApi.deleteDoc({ baseURL, token: auth.token }, slug, id)
+              await remove(id)
               router.back()
             } catch (err) {
               Alert.alert('Error', err instanceof Error ? err.message : 'Delete failed')
@@ -87,9 +64,9 @@ export default function DocumentEditScreen() {
     )
   }
 
-  const title = doc ? getDocumentTitle(doc, useAsTitle) : 'Loading...'
+  const title = doc ? getDocumentTitle(doc as Record<string, unknown>, useAsTitle) : 'Loading...'
 
-  if (loading) {
+  if (!isReady || loading) {
     return (
       <View className="flex-1 items-center justify-center bg-paper">
         <Stack.Screen options={{ title: collectionLabel }} />
@@ -126,7 +103,7 @@ export default function DocumentEditScreen() {
         ref={formRef}
         schemaMap={schemaMap}
         slug={slug}
-        initialData={doc ?? {}}
+        initialData={(doc as Record<string, unknown>) ?? {}}
         onSubmit={handleSubmit}
         onDelete={handleDelete}
         submitLabel="Update"

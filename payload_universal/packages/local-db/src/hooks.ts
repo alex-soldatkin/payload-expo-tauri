@@ -1,15 +1,27 @@
 /**
- * React hooks for reading from the local RxDB database.
+ * React hooks for reading and writing to the local RxDB database.
  *
  * These replace direct REST API calls in the UI layer:
  *   useLocalCollection(slug) → reactive paginated list (replaces DocumentList API calls)
  *   useLocalDocument(slug, id) → reactive single document (replaces DocumentForm API calls)
  *   useLocalQuery(slug, query) → reactive filtered/sorted query
+ *   useLocalMutations(slug) → create / update / remove helpers for optimistic writes
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { MangoQuery, RxCollection, RxDocument } from 'rxdb'
 import type { PayloadDoc } from './schemaFromPayload'
 import type { PayloadLocalDB } from './database'
+
+import { getRandomBytes } from 'expo-crypto'
+
+/**
+ * Generate a random 24-character hex string compatible with MongoDB ObjectIds.
+ * Uses expo-crypto for cryptographically secure random bytes on all RN platforms.
+ */
+function generateId(): string {
+  const bytes = getRandomBytes(12)
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
+}
 
 // ---------------------------------------------------------------------------
 // useLocalCollection — reactive paginated list
@@ -50,7 +62,7 @@ export const useLocalCollection = (
 
   useEffect(() => {
     if (!collection) {
-      setLoading(false)
+      // Keep loading=true while waiting for the DB to initialize
       return
     }
 
@@ -151,7 +163,7 @@ export const useLocalDocument = (
 
   useEffect(() => {
     if (!collection || !id) {
-      setLoading(false)
+      // Keep loading=true while waiting for the DB to initialize
       return
     }
 
@@ -229,6 +241,80 @@ export const useLocalQuery = (
   }, [collection, queryKey])
 
   return { docs, loading }
+}
+
+// ---------------------------------------------------------------------------
+// useLocalMutations — optimistic create / update / remove
+// ---------------------------------------------------------------------------
+
+export type UseLocalMutationsResult = {
+  /**
+   * Insert a new document into the local DB.
+   * Generates a client-side ID and returns it immediately.
+   * The replication engine will push the document to the server in the background.
+   */
+  create: (data: Record<string, unknown>) => Promise<string>
+  /**
+   * Patch an existing document locally.
+   * Replication will push the changes to the server.
+   */
+  update: (id: string, data: Record<string, unknown>) => Promise<void>
+  /**
+   * Soft-delete a document locally.
+   * Replication will send a DELETE request to the server.
+   */
+  remove: (id: string) => Promise<void>
+}
+
+export const useLocalMutations = (
+  localDB: PayloadLocalDB | null,
+  slug: string,
+): UseLocalMutationsResult => {
+  const collection = localDB?.collections[slug]
+
+  const create = useCallback(
+    async (data: Record<string, unknown>): Promise<string> => {
+      if (!collection) throw new Error(`Local collection "${slug}" not ready`)
+      const id = generateId()
+      const now = new Date().toISOString()
+      await collection.insert({
+        id,
+        ...data,
+        createdAt: now,
+        updatedAt: now,
+        _deleted: false,
+        _locallyModified: true,
+      } as any)
+      return id
+    },
+    [collection, slug],
+  )
+
+  const update = useCallback(
+    async (id: string, data: Record<string, unknown>): Promise<void> => {
+      if (!collection) throw new Error(`Local collection "${slug}" not ready`)
+      const rxDoc = await collection.findOne(id).exec()
+      if (!rxDoc) throw new Error(`Document ${id} not found in local DB`)
+      await rxDoc.incrementalPatch({
+        ...data,
+        updatedAt: new Date().toISOString(),
+        _locallyModified: true,
+      })
+    },
+    [collection, slug],
+  )
+
+  const remove = useCallback(
+    async (id: string): Promise<void> => {
+      if (!collection) throw new Error(`Local collection "${slug}" not ready`)
+      const rxDoc = await collection.findOne(id).exec()
+      if (!rxDoc) return
+      await rxDoc.incrementalPatch({ _deleted: true, _locallyModified: true } as any)
+    },
+    [collection, slug],
+  )
+
+  return { create, update, remove }
 }
 
 // ---------------------------------------------------------------------------

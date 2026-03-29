@@ -28,6 +28,8 @@ export type PayloadDoc = {
   createdAt: string
   updatedAt: string
   _deleted: boolean
+  /** True when the doc has been modified locally but not yet pushed to the server. */
+  _locallyModified?: boolean
   [key: string]: unknown
 }
 
@@ -44,6 +46,7 @@ export const buildRxSchema = (slug: string, fields: PayloadFieldDef[]): RxJsonSc
     createdAt: { type: 'string', maxLength: 50 },
     updatedAt: { type: 'string', maxLength: 50 },
     _deleted: { type: 'boolean' },
+    _locallyModified: { type: 'boolean' },
   }
 
   const required: string[] = ['id', 'updatedAt', 'createdAt', '_deleted']
@@ -56,7 +59,7 @@ export const buildRxSchema = (slug: string, fields: PayloadFieldDef[]): RxJsonSc
   }
 
   return {
-    version: 0,
+    version: 1,
     primaryKey: 'id',
     type: 'object',
     properties: properties as any,

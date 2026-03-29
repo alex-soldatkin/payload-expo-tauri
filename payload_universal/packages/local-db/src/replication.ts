@@ -117,6 +117,9 @@ export const startReplication = (
           const doc = row.newDocumentState
           const isNew = !row.assumedMasterState
 
+          // Strip RxDB internal fields before sending to Payload REST API
+          const { _deleted, _rev, _meta, _attachments, ...payloadBody } = doc as any
+
           try {
             if (doc._deleted) {
               // Delete
@@ -125,11 +128,11 @@ export const startReplication = (
                 headers: buildHeaders(token),
               })
             } else if (isNew) {
-              // Create
+              // Create — send clean body to Payload
               const res = await fetch(`${baseURL}/api/${slug}`, {
                 method: 'POST',
                 headers: buildHeaders(token),
-                body: JSON.stringify(doc),
+                body: JSON.stringify(payloadBody),
               })
               if (!res.ok) {
                 const body = await res.json().catch(() => ({}))
@@ -142,6 +145,12 @@ export const startReplication = (
                   continue
                 }
                 throw new Error(body.errors?.[0]?.message || `Push create failed: ${res.status}`)
+              }
+              // Update local doc with server-assigned fields (e.g. server-set updatedAt)
+              const created = await res.json().then((r: any) => r.doc).catch(() => null)
+              if (created && created.id !== doc.id) {
+                // Server assigned a different ID — unlikely but handle gracefully.
+                // The pull handler will pick up the server doc on next cycle.
               }
             } else {
               // Update — check for conflicts via updatedAt
@@ -161,7 +170,7 @@ export const startReplication = (
               const res = await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
                 method: 'PATCH',
                 headers: buildHeaders(token),
-                body: JSON.stringify(doc),
+                body: JSON.stringify(payloadBody),
               })
               if (!res.ok) {
                 const body = await res.json().catch(() => ({}))
