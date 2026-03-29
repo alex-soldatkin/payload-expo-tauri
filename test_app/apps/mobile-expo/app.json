@@ -1,0 +1,28 @@
+{
+  "expo": {
+    "name": "Payload Universal Mobile",
+    "slug": "payload-universal-mobile",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "payload-mobile",
+    "platforms": [
+      "ios",
+      "android"
+    ],
+    "userInterfaceStyle": "light",
+    "sdkVersion": "55.0.0",
+    "ios": {
+      "bundleIdentifier": "com.alexsoldatkin.payload-universal-mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#f6f4f1"
+      }
+    },
+    "plugins": [
+      "expo-router",
+      "expo-secure-store"
+    ]
+  }
+}

@@ -1,0 +1,23 @@
+[package]
+name = "payload-universal-desktop"
+version = "0.1.0"
+edition = "2021"
+
+[[bin]]
+name = "payload-universal-desktop"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.1", features = ["macos-private-api"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+window-vibrancy = "0.6.0"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

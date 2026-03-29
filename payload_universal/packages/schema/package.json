@@ -1,0 +1,19 @@
+{
+  "name": "@payload-universal/schema",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./payload.config": "./src/payload.config.ts"
+  },
+  "dependencies": {
+    "@payload-universal/admin-schema": "workspace:*",
+    "payload": "file:../../../payload-main/packages/payload",
+    "@payloadcms/db-mongodb": "file:../../../payload-main/packages/db-mongodb",
+    "@payloadcms/next": "file:../../../payload-main/packages/next",
+    "@payloadcms/richtext-lexical": "file:../../../payload-main/packages/richtext-lexical",
+    "sharp": "^0.33.0",
+    "yjs": "^13.6.21"
+  }
+}

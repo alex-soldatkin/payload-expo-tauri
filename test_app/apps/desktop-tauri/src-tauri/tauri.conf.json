@@ -1,0 +1,38 @@
+{
+  "productName": "Payload Universal Desktop",
+  "version": "0.1.0",
+  "identifier": "com.payload.universal.desktop",
+  "build": {
+    "devUrl": "http://127.0.0.1:3000/admin",
+    "frontendDist": "../../web",
+    "beforeDevCommand": "pnpm -C ../.. dev:server"
+  },
+  "app": {
+    "security": {
+      "capabilities": ["default"]
+    },
+    "macOSPrivateApi": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Payload Admin",
+        "width": 1200,
+        "height": 800,
+        "resizable": true,
+        "titleBarStyle": "Overlay",
+        "trafficLightPosition": {
+          "x": 20,
+          "y": 20
+        },
+        "hiddenTitle": true,
+        "transparent": true,
+        "backgroundColor": "#00000000",
+        "windowEffects": {
+          "effects": ["sidebar"],
+          "state": "active"
+        },
+        "devtools": true
+      }
+    ]
+  }
+}

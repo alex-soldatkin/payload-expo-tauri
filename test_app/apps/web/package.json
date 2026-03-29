@@ -1,0 +1,12 @@
+{
+  "name": "@payload-universal-test/web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "sirv . --dev --port 4173",
+    "start": "sirv . --port 4173"
+  },
+  "devDependencies": {
+    "sirv-cli": "^2.0.2"
+  }
+}

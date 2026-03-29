@@ -1,0 +1,15 @@
+{
+  "name": "@payload-universal/admin-schema-gen",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "tsx src/cli.ts"
+  },
+  "dependencies": {
+    "@payload-universal/admin-schema": "workspace:*",
+    "@payload-universal/schema": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}

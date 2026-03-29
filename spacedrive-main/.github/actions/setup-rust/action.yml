@@ -1,0 +1,37 @@
+name: Setup Rust
+description: Setup Rust toolchain and dependencies
+inputs:
+  target:
+    description: toolchain target triple
+    required: false
+  save-cache:
+    description: Whether to save the Rust cache
+    required: false
+    default: 'false'
+  restore-cache:
+    description: Whether to restore the Rust cache
+    required: false
+    default: 'true'
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Rust
+      id: toolchain
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.target }}
+        components: clippy, rustfmt
+
+    - name: Cache Rust Dependencies
+      if: ${{ inputs.restore-cache == 'true' }}
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.target }}
+        save-if: ${{ inputs.save-cache }}
+        shared-key: stable-cache
+
+    # TODO: Re-enable cargo config generation when preprep.mjs is ported
+    # For now, use cargo's defaults which work fine without native deps
+    # - name: Cargo config.toml
+    #   shell: bash
+    #   run: echo '{}' | npx -y mustache - .cargo/config.toml.mustache .cargo/config.toml

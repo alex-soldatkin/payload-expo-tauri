@@ -1,0 +1,333 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+  pull_request:
+    paths:
+      - ".github/workflows/release.yml"
+      - ".github/actions/publish-artifacts/**"
+  workflow_dispatch:
+
+# From: https://github.com/rust-lang/rust-analyzer/blob/master/.github/workflows/release.yaml#L13-L21
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_NET_RETRY: 10
+  RUSTUP_MAX_RETRIES: 10
+
+jobs:
+  # CLI builds for v2
+  # cli-build:
+  #   strategy:
+  #     matrix:
+  #       include:
+  #         # macOS builds
+  #         - host: self-hosted
+  #           target: aarch64-apple-darwin
+  #           platform: macos-aarch64
+  #         - host: macos-15-intel
+  #           target: x86_64-apple-darwin
+  #           platform: macos-x86_64
+  #         # Linux builds
+  #         - host: ubuntu-22.04
+  #           target: x86_64-unknown-linux-gnu
+  #           platform: linux-x86_64
+  #         # Windows builds
+  #         - host: windows-latest
+  #           target: x86_64-pc-windows-msvc
+  #           platform: windows-x86_64
+  #   name: CLI - ${{ matrix.platform }}
+  #   runs-on: ${{ matrix.host }}
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+
+  #     - name: Setup Rust
+  #       uses: dtolnay/rust-toolchain@stable
+  #       with:
+  #         targets: ${{ matrix.target }}
+
+  #     - name: Setup System and Rust
+  #       uses: ./.github/actions/setup-system
+  #       with:
+  #         token: ${{ secrets.GITHUB_TOKEN }}
+  #         target: ${{ matrix.target }}
+
+  #     - name: Install cross-compilation tools (Linux ARM)
+  #       if: matrix.target == 'aarch64-unknown-linux-gnu'
+  #       run: |
+  #         sudo apt-get update
+  #         sudo apt-get install -y gcc-aarch64-linux-gnu
+
+  #     - name: Setup native dependencies
+  #       run: cargo run -p xtask -- setup
+
+  #     - name: Build CLI binaries
+  #       run: |
+  #         cargo build --release --bin sd-cli --bin sd-daemon --features heif,ffmpeg --target ${{ matrix.target }}
+  #       env:
+  #         # Set linker for cross-compilation
+  #         CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+  #     - name: Prepare binaries (Unix)
+  #       if: runner.os != 'Windows'
+  #       run: |
+  #         mkdir -p dist
+  #         cp target/${{ matrix.target }}/release/sd-cli dist/sd-${{ matrix.platform }}
+  #         cp target/${{ matrix.target }}/release/sd-daemon dist/sd-daemon-${{ matrix.platform }}
+  #         chmod +x dist/*
+
+  #     - name: Prepare binaries (Windows)
+  #       if: runner.os == 'Windows'
+  #       shell: pwsh
+  #       run: |
+  #         New-Item -ItemType Directory -Force -Path dist
+  #         Copy-Item target/${{ matrix.target }}/release/sd-cli.exe dist/sd-${{ matrix.platform }}.exe
+  #         Copy-Item target/${{ matrix.target }}/release/sd-daemon.exe dist/sd-daemon-${{ matrix.platform }}.exe
+
+  #     - name: Generate checksums
+  #       shell: bash
+  #       run: |
+  #         cd dist
+  #         if [ "$RUNNER_OS" == "Windows" ]; then
+  #           sha256sum *.exe > checksums-${{ matrix.platform }}.txt
+  #         else
+  #           sha256sum * > checksums-${{ matrix.platform }}.txt
+  #         fi
+
+  #     - name: Upload artifacts
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: cli-${{ matrix.platform }}
+  #         path: dist/*
+
+  # Server builds for self-hosting
+  server-build:
+    strategy:
+      matrix:
+        settings:
+          - host: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            platform: linux-x86_64
+          - host: ubuntu-22.04
+            target: blacksmith-4vcpu-ubuntu-2404-arm
+            platform: linux-aarch64
+    name: Server - ${{ matrix.settings.platform }}
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - name: Setup System and Rust
+        uses: ./.github/actions/setup-system
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: ${{ matrix.settings.target }}
+
+      - name: Install cross-compilation tools (ARM)
+        if: matrix.settings.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install OpenSSL
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libssl-dev
+
+      - name: Setup native dependencies
+        run: cargo run -p xtask -- setup
+
+      - name: Build server binary
+        run: |
+          cargo build --release --bin sd-server --features sd-core/heif,sd-core/ffmpeg --target ${{ matrix.settings.target }}
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+
+      - name: Prepare server binary
+        run: |
+          mkdir -p dist
+          cp target/${{ matrix.settings.target }}/release/sd-server dist/sd-server-${{ matrix.settings.platform }}
+          chmod +x dist/sd-server-${{ matrix.settings.platform }}
+
+      - name: Generate checksum
+        run: |
+          cd dist
+          sha256sum sd-server-${{ matrix.settings.platform }} > sd-server-${{ matrix.settings.platform }}.sha256
+
+      - name: Create archive
+        run: |
+          cd dist
+          tar -czf sd-server-${{ matrix.settings.platform }}.tar.gz sd-server-${{ matrix.settings.platform }} sd-server-${{ matrix.settings.platform }}.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: server-${{ matrix.settings.platform }}
+          path: dist/sd-server-${{ matrix.settings.platform }}.tar.gz
+
+  # V2 Desktop builds
+  desktop-main:
+    strategy:
+      matrix:
+        settings:
+          # macOS builds
+          - host: self-hosted
+            target: aarch64-apple-darwin
+            bundles: dmg,app
+            os: darwin
+            arch: aarch64
+          - host: self-hosted
+            target: x86_64-apple-darwin
+            bundles: dmg,app
+            os: darwin
+            arch: x86_64
+          # Windows builds
+          # - host: windows-latest
+          #   target: x86_64-pc-windows-msvc
+          #   bundles: msi
+          #   os: windows
+          #   arch: x86_64
+          # Linux builds
+          - host: ubuntu-22.04
+            target: blacksmith-4vcpu-ubuntu-2404
+            bundles: deb
+            os: linux
+            arch: x86_64
+    name: Desktop - Main ${{ matrix.settings.target }}
+    runs-on: ${{ matrix.settings.host }}
+    steps:
+      - name: Maximize build space
+        if: ${{ runner.os == 'Linux' }}
+        uses: easimon/maximize-build-space@master
+        with:
+          swap-size-mb: 3072
+          root-reserve-mb: 6144
+          remove-dotnet: "true"
+          remove-codeql: "true"
+          remove-haskell: "true"
+          remove-docker-images: "true"
+
+      - name: Symlink target to C:\
+        if: ${{ runner.os == 'Windows' }}
+        shell: powershell
+        run: |
+          New-Item -ItemType Directory -Force -Path C:\spacedrive_target
+          New-Item -Path target -ItemType Junction -Value C:\spacedrive_target
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.settings.target }}
+
+      - name: Install Apple API key
+        if: ${{ runner.os == 'macOS' }}
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys/
+          cd ~/.appstoreconnect/private_keys/
+          echo ${{ secrets.APPLE_API_KEY_BASE64 }} >> AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64
+          base64 --decode -i AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64 -o AuthKey_${{ secrets.APPLE_API_KEY }}.p8
+          rm AuthKey_${{ secrets.APPLE_API_KEY }}.p8.base64
+
+      - name: Install Codesigning Certificate
+        if: ${{ runner.os == 'macOS' }}
+        uses: apple-actions/import-codesign-certs@v2
+        with:
+          p12-file-base64: ${{ secrets.APPLE_CERTIFICATE }}
+          p12-password: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+
+      - name: Setup System and Rust
+        uses: ./.github/actions/setup-system
+        env:
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target: ${{ matrix.settings.target }}
+
+      - name: Install target
+        run: rustup target add ${{ matrix.settings.target }}
+
+      - name: Setup Bun and dependencies
+        uses: ./.github/actions/setup-bun
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Verify native deps were downloaded
+        if: runner.os == 'Linux'
+        run: |
+          echo "Checking apps/.deps directory:"
+          ls -la apps/.deps/ || echo "Directory doesn't exist"
+          echo "Checking apps/.deps/lib directory:"
+          ls -la apps/.deps/lib/ || echo "lib/ subdirectory doesn't exist - creating empty dir"
+          mkdir -p apps/.deps/lib
+
+      - name: Build
+        working-directory: apps/tauri
+        run: |
+          bun tauri build --ci -vv --target ${{ matrix.settings.target }} --bundles ${{ matrix.settings.bundles }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_KEY_PASSWORD }}
+          ENABLE_CODE_SIGNING: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_PROVIDER_SHORT_NAME: ${{ secrets.APPLE_PROVIDER_SHORT_NAME }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
+          CFLAGS: ${{ matrix.settings.arch == 'aarch64' && '-march=armv8.2-a+crypto' || '' }}
+          CXXFLAGS: ${{ matrix.settings.arch == 'aarch64' && '-march=armv8.2-a+crypto' || '' }}
+          CPATH: ${{ github.workspace }}/apps/.deps/include
+          C_INCLUDE_PATH: ${{ github.workspace }}/apps/.deps/include
+
+      - name: Package frontend
+        if: ${{ runner.os == 'Linux' }}
+        run: |
+          set -eux
+          XZ_OPT='-T0 -7' tar -cJf apps/tauri/dist.tar.xz -C apps/tauri/dist .
+
+      - name: Publish Artifacts
+        uses: ./.github/actions/publish-artifacts
+        with:
+          os: ${{ matrix.settings.os }}
+          arch: ${{ matrix.settings.arch }}
+          target: ${{ matrix.settings.target }}
+          profile: release
+
+      - name: Cleanup keychain
+        if: always() && runner.os == 'macOS'
+        run: security delete-keychain signing_temp.keychain || true
+
+  # Create unified release with Server, CLI, and Desktop artifacts
+  release:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: blacksmith-4vcpu-ubuntu-2404
+    name: Create Release
+    needs: [server-build, desktop-main]
+    permissions:
+      contents: write
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          files: |
+            cli-*/*
+            server-*/*
+            */*.dmg
+            */*.msi
+            */*.deb
+            */*.tar.xz
+            */*.tar.gz
+            */*.sig

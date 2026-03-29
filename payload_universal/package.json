@@ -1,0 +1,13 @@
+{
+  "name": "payload-universal",
+  "private": true,
+  "packageManager": "pnpm@10.27.0",
+  "workspaces": [
+    "apps/*",
+    "packages/*",
+    "tools/*"
+  ],
+  "scripts": {
+    "generate:admin-schema": "pnpm --filter @payload-universal/admin-schema-gen generate"
+  }
+}

@@ -1,0 +1,24 @@
+# Component translation guide
+
+You will translate Payload field components to React Native while keeping the same props and state contracts from admin-core.
+
+Field mapping targets
+- text, email, slug, password, confirm-password: React Native TextInput.
+- textarea: TextInput with multiline and a larger height.
+- number: TextInput with numeric keyboard and min or max handling in validation.
+- checkbox: Switch or a custom checkbox component.
+- select, radio: Picker or a modal list with single select and multi select.
+- relationship, upload: modal list with search and pagination. Use file picker for uploads.
+- date: native date and time picker.
+- richText: start with a simple editor or a web view based editor. Add full rich text later.
+- code, json: multiline editor with monospaced font. Add syntax help later.
+- array, blocks: list with add, delete, and reorder controls. Use cards for each row or block.
+- group, row, collapsible: layout wrappers that control spacing and visibility.
+- tabs: top tabs or segmented controls.
+- join: read only panel with navigation to the related collection.
+- UI field and custom admin components: use the component registry.
+
+Component registry
+- Keep a registry keyed by component path or id.
+- Support platform specific entries such as "web" and "native".
+- If a native component is missing, render a fallback component that explains the gap and keeps the form usable.

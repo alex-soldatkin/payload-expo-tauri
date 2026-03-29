@@ -1,0 +1,14 @@
+{
+  "name": "@payload-universal/admin-core",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/schema/index.ts"
+  },
+  "dependencies": {
+    "payload": "file:../../../payload-main/packages/payload",
+    "@payloadcms/translations": "file:../../../payload-main/packages/translations"
+  }
+}

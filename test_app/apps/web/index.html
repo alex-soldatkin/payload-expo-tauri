@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Payload Admin</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: ui-sans-serif, system-ui, -apple-system, sans-serif;
+      }
+      body {
+        margin: 0;
+        background: #f6f4f1;
+        color: #1f1f1f;
+      }
+      main {
+        max-width: 720px;
+        margin: 20vh auto 0;
+        padding: 0 24px;
+        text-align: center;
+      }
+      a {
+        color: inherit;
+        font-weight: 600;
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Opening Payload Admin...</h1>
+      <p>
+        Redirecting to
+        <a href="http://localhost:3000/admin">http://localhost:3000/admin</a>.
+      </p>
+      <p>If the admin is not running yet, start the server and reload.</p>
+    </main>
+    <script>
+      const params = new URLSearchParams(window.location.search)
+      if (!params.has('noRedirect')) {
+        window.location.replace('http://localhost:3000/admin')
+      }
+    </script>
+  </body>
+</html>

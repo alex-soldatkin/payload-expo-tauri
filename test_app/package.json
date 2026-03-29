@@ -1,0 +1,30 @@
+{
+  "name": "payload-universal-test-app",
+  "private": true,
+  "packageManager": "pnpm@10.27.0",
+  "scripts": {
+    "dev:server": "pnpm --filter @payload-universal-test/server dev",
+    "dev:web": "pnpm --filter @payload-universal-test/web dev",
+    "dev:web-next": "pnpm --filter @payload-universal-test/web-next dev",
+    "dev:desktop": "pnpm --filter @payload-universal-test/desktop-tauri dev",
+    "dev:mobile": "pnpm --filter @payload-universal-test/mobile-expo start",
+    "dev:mobile:ios": "pnpm --filter @payload-universal-test/mobile-expo ios",
+    "dev:mobile:android": "pnpm --filter @payload-universal-test/mobile-expo android",
+    "dev:all": "concurrently -k -n server,web,web-next,desktop,mobile \"pnpm dev:server\" \"pnpm dev:web\" \"pnpm dev:web-next\" \"pnpm dev:desktop\" \"pnpm dev:mobile\"",
+    "test": "vitest",
+    "test:playwright": "playwright test",
+    "test:mobile": "pnpm --filter @payload-universal-test/mobile-expo test",
+    "test:web-next": "pnpm --filter @payload-universal-test/web-next test"
+  },
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@playwright/test": "^1.49.0",
+    "concurrently": "^9.0.0",
+    "jsdom": "^25.0.0",
+    "typescript": "^5.9.2",
+    "vitest": "^2.1.0"
+  }
+}

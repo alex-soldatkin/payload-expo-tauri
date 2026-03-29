@@ -1,0 +1,36 @@
+{
+  "name": "@payload-universal-test/server",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node ./scripts/dev.mjs",
+    "dev:webpack": "next dev --webpack",
+    "build": "next build",
+    "start": "next start",
+    "generate:types": "payload generate:types",
+    "generate:importmap": "payload generate:importmap"
+  },
+  "dependencies": {
+    "@floating-ui/react": "^0.27.19",
+    "@payload-universal/admin-schema": "workspace:*",
+    "@payload-universal/schema": "workspace:*",
+    "@payloadcms/db-mongodb": "workspace:*",
+    "@payloadcms/next": "workspace:*",
+    "@payloadcms/richtext-lexical": "workspace:*",
+    "@payloadcms/ui": "workspace:*",
+    "@tauri-apps/api": "^2.0.0",
+    "graphql": "^16.8.1",
+    "next": "16.1.6",
+    "payload": "workspace:*",
+    "react": "19.2.1",
+    "react-dom": "19.2.1",
+    "sharp": "0.34.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.5.4",
+    "@types/react": "19.2.9",
+    "@types/react-dom": "19.2.3",
+    "dotenv": "16.4.7",
+    "typescript": "5.9.3"
+  }
+}
