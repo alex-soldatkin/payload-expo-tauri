@@ -204,6 +204,53 @@ if (INTERNAL_SLUGS.has(slug) || slug.startsWith('payload-')) continue
 
 ---
 
+## Swipe-to-Delete
+
+### Use legacy `Swipeable`, NOT `ReanimatedSwipeable`
+`ReanimatedSwipeable` uses Reanimated worklets that crash with a native SIGABRT when combined with expo-router's `Link` component in the same tree. Use the legacy `Swipeable` from `react-native-gesture-handler/Swipeable` instead.
+
+```tsx
+import Swipeable from 'react-native-gesture-handler/Swipeable'
+
+<Swipeable
+  friction={1.5}
+  rightThreshold={40}
+  renderRightActions={() => <DeleteButton />}
+  onSwipeableOpen={(dir) => { if (dir === 'right') confirmDelete() }}
+  overshootRight
+>
+  {cardContent}
+</Swipeable>
+```
+
+### Full card height
+Use `alignSelf: 'stretch'` on the action container + `flex: 1` on the button inside.
+
+### Full swipe = confirmation dialog
+`onSwipeableOpen` fires when user swipes all the way. Show `Alert.alert()` — never delete without confirmation.
+
+### `GestureHandlerRootView` required
+Must wrap the entire app tree (in root `_layout.tsx`) for any gesture handler components to work.
+
+---
+
+## Push Replication: ID Mismatch Bug
+
+### The Problem
+Client generates a 24-char hex ID locally. Payload's MongoDB adapter ignores it and assigns its own ObjectId. Pull handler sees the server doc with a different ID → treats as "new" → inserts locally → push creates another copy → infinite duplication.
+
+### The Fix
+After successful POST in push handler:
+1. Strip client `id` from POST body (let Payload assign its own)
+2. Check if server ID differs from client ID
+3. If so: `collection.findOne(clientId).remove()` + `collection.upsert(serverDoc)`
+4. This prevents the pull handler from seeing a phantom "new" doc
+
+### Also strip from push payload
+`_deleted`, `_rev`, `_meta`, `_attachments`, `_locallyModified`, and `id` (for creates only)
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink

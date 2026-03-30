@@ -126,6 +126,25 @@ This log captures what has been implemented so far and the current state of the 
 - Fixed `useLocalCollection`/`useLocalDocument` returning `loading: false` prematurely when DB wasn't ready yet.
 - Restored root `node_modules` symlink after cleanup broke Turbopack's transitive dependency resolution for `/admin`.
 - Added `pnpm.onlyBuiltDependencies` to test_app/package.json for native build scripts.
+- **Fixed critical push duplication bug**: client-generated IDs differ from Payload's MongoDB ObjectIds. Push handler now removes local doc and re-inserts with server-assigned ID after successful POST. Strips client `id` from body.
+- Used legacy `Swipeable` instead of `ReanimatedSwipeable` — Reanimated worklets crash when combined with expo-router `Link` in the component tree.
+
+### Phase 5 — Sync duplication fix + swipe-to-delete (2026-03-30)
+- **Fixed critical duplication bug** (65,000+ duplicate posts created):
+  - Root cause: client generates local ID, Payload ignores it and assigns its own MongoDB ObjectId on POST. Pull handler sees mismatched IDs → treats server doc as "new" → infinite create loop.
+  - Fix: after successful POST, push handler removes old local doc (client ID) and upserts with server-assigned ID. Also strips client `id` from POST body so Payload cleanly assigns its own.
+  - Also strips `_locallyModified` from push payload.
+- **Swipe-to-delete** on collection cards:
+  - Uses legacy `Swipeable` from `react-native-gesture-handler` (not `ReanimatedSwipeable` — crashes when combined with `Link.Preview` in worklet runtime)
+  - Full-height delete button matching card height via `alignSelf: 'stretch'`
+  - Full swipe triggers confirmation dialog (not instant delete)
+  - Tap on revealed button also triggers confirmation dialog
+  - `GestureHandlerRootView` wrapping root layout
+- **Shake-to-undo** after delete:
+  - Uses `expo-sensors` `DeviceMotion` to detect shake (threshold 1.5g)
+  - Stashes deleted doc data in ref; shake re-inserts via `col.upsert()`
+  - Toast "Deleted — shake to undo" / "Undo successful"
+  - 2-second cooldown between shake detections
 
 ## Critical infrastructure notes
 - **Root `node_modules` symlink** (`payload_expo_tauri/node_modules → test_app/node_modules`) is **required** for Turbopack. The `turbopack.root` is set to the monorepo root, and Turbopack resolves `@floating-ui/react`, `clsx`, and other transitive deps of `payload-main` through this symlink. **Do not delete it during cleanup.**

@@ -133,6 +133,14 @@ await remove(id)
 - Replication push handler strips RxDB internals (`_rev`, `_meta`, `_attachments`, `_deleted`) before sending to Payload REST API
 - Screen files (`create.tsx`, `[id].tsx`) no longer call `payloadApi.create()`/`payloadApi.update()` — all writes go through local RxDB
 
+## Push replication: ID mismatch fix (2026-03-30)
+Client-generated IDs (24-char hex) differ from Payload's MongoDB ObjectIds. On POST, Payload assigns its own `_id`. The push handler now:
+1. Strips client `id` from POST body
+2. After success: removes local doc with client ID, upserts with server-assigned ID
+3. Prevents infinite duplication loop (pull sees mismatch → inserts → push creates → repeat)
+
+This caused 65,000+ duplicate documents before the fix was applied.
+
 ## Dependencies
 Reuses from `rxdb/plugins/storage-sqlite` (not reimplemented):
 - `getDatabaseConnection` / `closeDatabaseConnection` — connection pooling

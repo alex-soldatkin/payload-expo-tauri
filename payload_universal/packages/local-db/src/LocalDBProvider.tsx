@@ -96,6 +96,8 @@ export const LocalDBProvider: React.FC<Props> = ({
 
   const dbRef = useRef<PayloadLocalDB | null>(null)
   const initRef = useRef(false)
+  const tokenRef = useRef(token)
+  tokenRef.current = token // always keep ref in sync with latest prop
 
   useEffect(() => {
     if (!schema || !token || initRef.current) return
@@ -108,7 +110,7 @@ export const LocalDBProvider: React.FC<Props> = ({
         const db = await createLocalDB({
           schema,
           baseURL,
-          token,
+          token: () => tokenRef.current,
           pullInterval,
           storage,
           wsURL,

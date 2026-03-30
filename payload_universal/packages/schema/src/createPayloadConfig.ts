@@ -172,6 +172,7 @@ export const createRawConfig = (args: PayloadUniversalConfigArgs): Config => {
       db ??
       mongooseAdapter({
         url: process.env.DATABASE_URL || '',
+        allowIDOnCreate: true, // Allow mobile clients to set document IDs for sync
       }),
     endpoints: [],
     plugins: plugins ?? [],

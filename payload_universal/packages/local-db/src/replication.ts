@@ -10,11 +10,14 @@
  */
 import { replicateRxCollection } from 'rxdb/plugins/replication'
 import type { RxCollection, RxReplicationState } from 'rxdb'
+import { Subject, interval as rxInterval } from 'rxjs'
+import { map } from 'rxjs/operators'
 import type { PayloadDoc } from './schemaFromPayload'
 
 export type ReplicationConfig = {
   baseURL: string
-  token: string | null
+  /** Token or getter function for the latest token (supports re-auth). */
+  token: string | null | (() => string | null)
   collection: RxCollection<PayloadDoc>
   slug: string
   /** Pull batch size. Defaults to 50. */
@@ -41,7 +44,7 @@ export const startReplication = (
 ): RxReplicationState<PayloadDoc, Checkpoint> => {
   const {
     baseURL,
-    token,
+    token: tokenOrGetter,
     collection,
     slug,
     batchSize = 50,
@@ -49,7 +52,11 @@ export const startReplication = (
     livePush = true,
   } = config
 
-  return replicateRxCollection<PayloadDoc, Checkpoint>({
+  /** Always get the latest token (supports re-auth after logout/login). */
+  const getToken = (): string | null =>
+    typeof tokenOrGetter === 'function' ? tokenOrGetter() : tokenOrGetter
+
+  const replicationConfig: any = {
     collection,
     replicationIdentifier: `payload-${slug}`,
     deletedField: '_deleted',
@@ -69,7 +76,7 @@ export const startReplication = (
         }
 
         const res = await fetch(`${baseURL}/api/${slug}?${params}`, {
-          headers: buildHeaders(token),
+          headers: buildHeaders(getToken()),
         })
 
         if (!res.ok) {
@@ -81,7 +88,38 @@ export const startReplication = (
           ...doc,
           id: String(doc.id),
           _deleted: false,
+          _locallyModified: false,
         }))
+
+        // Also check for tombstones (server-side deletions).
+        // Always fetch ALL tombstones for this collection (they're lightweight
+        // and there are usually few). The checkpoint filter only applies to
+        // regular docs, not tombstones — a tombstone's deletedAt might be
+        // before the current checkpoint if the doc was deleted while the client
+        // was syncing other changes.
+        try {
+          const tombParams = new URLSearchParams()
+          tombParams.set('limit', '200')
+          tombParams.set('sort', 'deletedAt')
+          tombParams.set('depth', '0')
+          tombParams.set('where[sourceCollection][equals]', slug)
+          const tombRes = await fetch(`${baseURL}/api/_sync_tombstones?${tombParams}`, {
+            headers: buildHeaders(getToken()),
+          })
+          if (tombRes.ok) {
+            const tombData = await tombRes.json()
+            for (const tomb of tombData.docs ?? []) {
+              docs.push({
+                id: String(tomb.docId),
+                updatedAt: tomb.deletedAt,
+                createdAt: tomb.deletedAt,
+                _deleted: true,
+              } as PayloadDoc)
+            }
+          }
+        } catch {
+          // Non-fatal — tombstone collection may not exist
+        }
 
         // Filter out docs we already have at this exact checkpoint
         // (the query uses greater_than_equal so the checkpoint doc may come back)
@@ -100,13 +138,41 @@ export const startReplication = (
             }
           : checkpoint
 
+        // Force-update local docs that were changed on the server.
+        // RxDB's replication may skip updates for docs that were originally
+        // pushed by the client (it considers the client authoritative).
+        // We bypass this by upserting directly for non-locally-modified docs.
+        for (const doc of filtered) {
+          if (doc._deleted) continue
+          try {
+            const localDoc = await collection.findOne(doc.id).exec()
+            if (localDoc) {
+              const localData = localDoc.toJSON(true) as any
+              // Only update if not locally modified and server version is newer
+              if (!localData._locallyModified && localData.updatedAt !== doc.updatedAt) {
+                await localDoc.incrementalPatch({
+                  ...doc,
+                  _locallyModified: false,
+                })
+              }
+            }
+          } catch {
+            // Non-fatal — replication will handle it
+          }
+        }
+
         return {
           documents: filtered,
           checkpoint: newCheckpoint,
         }
       },
       batchSize,
-      ...(pullInterval > 0 ? { initialCheckpoint: null } : {}),
+      initialCheckpoint: null,
+      // Emit at regular intervals to trigger re-pull (live pulling).
+      // Without this, the pull handler only runs once on startup.
+      stream$: pullInterval > 0
+        ? rxInterval(pullInterval).pipe(map(() => 'RESYNC' as const))
+        : new Subject<'RESYNC'>().asObservable(),
     },
 
     push: {
@@ -118,46 +184,41 @@ export const startReplication = (
           const isNew = !row.assumedMasterState
 
           // Strip RxDB internal fields before sending to Payload REST API
-          const { _deleted, _rev, _meta, _attachments, ...payloadBody } = doc as any
+          const { _deleted, _rev, _meta, _attachments, _locallyModified, ...payloadBody } = doc as any
 
           try {
             if (doc._deleted) {
               // Delete
               await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
                 method: 'DELETE',
-                headers: buildHeaders(token),
+                headers: buildHeaders(getToken()),
               })
             } else if (isNew) {
-              // Create — send clean body to Payload
+              // Create — include the client-generated id in the body.
+              // Payload's MongoDB adapter accepts it as _id if it's a valid ObjectId
+              // (24-char hex string). This ensures server and local IDs match.
               const res = await fetch(`${baseURL}/api/${slug}`, {
                 method: 'POST',
-                headers: buildHeaders(token),
+                headers: buildHeaders(getToken()),
                 body: JSON.stringify(payloadBody),
               })
               if (!res.ok) {
                 const body = await res.json().catch(() => ({}))
-                // If it's a conflict (doc already exists), return as conflict
                 if (res.status === 400 || res.status === 409) {
                   const existing = await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
-                    headers: buildHeaders(token),
+                    headers: buildHeaders(getToken()),
                   }).then((r) => r.json()).catch(() => null)
                   if (existing) conflicts.push({ ...existing, _deleted: false })
                   continue
                 }
                 throw new Error(body.errors?.[0]?.message || `Push create failed: ${res.status}`)
               }
-              // Update local doc with server-assigned fields (e.g. server-set updatedAt)
-              const created = await res.json().then((r: any) => r.doc).catch(() => null)
-              if (created && created.id !== doc.id) {
-                // Server assigned a different ID — unlikely but handle gracefully.
-                // The pull handler will pick up the server doc on next cycle.
-              }
             } else {
               // Update — check for conflicts via updatedAt
               const assumed = row.assumedMasterState
               if (assumed) {
                 const serverDoc = await fetch(`${baseURL}/api/${slug}/${doc.id}?depth=0`, {
-                  headers: buildHeaders(token),
+                  headers: buildHeaders(getToken()),
                 }).then((r) => r.json()).catch(() => null)
 
                 if (serverDoc && serverDoc.updatedAt !== assumed.updatedAt) {
@@ -169,7 +230,7 @@ export const startReplication = (
 
               const res = await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
                 method: 'PATCH',
-                headers: buildHeaders(token),
+                headers: buildHeaders(getToken()),
                 body: JSON.stringify(payloadBody),
               })
               if (!res.ok) {
@@ -187,5 +248,7 @@ export const startReplication = (
       },
       batchSize: 1, // Push one at a time for conflict detection
     },
-  })
+  }
+
+  return replicateRxCollection<PayloadDoc, Checkpoint>(replicationConfig)
 }

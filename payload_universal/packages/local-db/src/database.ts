@@ -96,8 +96,8 @@ export type CreateLocalDBArgs = {
   schema: AdminSchema
   /** Server base URL */
   baseURL: string
-  /** Auth token */
-  token: string | null
+  /** Auth token or getter function for the latest token (supports re-auth). */
+  token: string | null | (() => string | null)
   /** Pull interval in ms. Defaults to 30000. Only used with polling replication. */
   pullInterval?: number
   /** RxDB storage factory. Defaults to in-memory. Pass getRxStorageSQLite() for persistence. */
@@ -189,7 +189,8 @@ export const createLocalDB = async ({
       token,
       collection: col,
       slug,
-      pullInterval: wsURL ? 0 : pullInterval, // disable polling interval if WS handles real-time
+      pullInterval: pullInterval || 30_000, // always poll for changes (including deletions)
+      livePush: true, // Push enabled — ID reconciliation no longer upserts (no loop)
     })
   }
 
