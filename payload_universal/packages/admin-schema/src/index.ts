@@ -68,12 +68,17 @@ export const buildAdminSchema = async ({
   importMap,
   language,
 }: BuildAdminSchemaArgs): Promise<AdminSchema> => {
-  const shouldSkipBuild =
-    Array.isArray(config.collections) &&
-    config.collections.some((collection) => collection.slug === 'payload-kv') &&
-    Boolean((config as SanitizedConfig).kv?.kvCollection)
+  // Detect whether the config is already sanitized (has i18n.supportedLanguages
+  // or the payload-kv collection added during sanitization). If so, skip
+  // re-running buildConfig to avoid issues with translation imports in
+  // compiled server contexts.
+  const isAlreadySanitized =
+    Boolean((config as SanitizedConfig).i18n?.supportedLanguages) ||
+    (Array.isArray(config.collections) &&
+      config.collections.some((collection) => collection.slug === 'payload-kv') &&
+      Boolean((config as SanitizedConfig).kv?.kvCollection))
 
-  const sanitizedConfig = shouldSkipBuild
+  const sanitizedConfig = isAlreadySanitized
     ? (config as SanitizedConfig)
     : await buildConfig(config)
 

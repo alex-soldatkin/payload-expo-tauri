@@ -54,8 +54,12 @@ export const createAdminSchemaEndpoint = (
       const language =
         url.searchParams.get('language') || url.searchParams.get('lang') || req.i18n?.language
 
+      // Use the already-sanitized config from the running Payload instance
+      // instead of the raw config. This avoids re-running buildConfig() inside
+      // the handler, which can fail when translations aren't resolvable in
+      // the compiled server chunk context.
       const schema = await buildAdminSchema({
-        config: getConfig(),
+        config: req.payload.config,
         importMap: req.payload.importMap,
         language: language || undefined,
       })

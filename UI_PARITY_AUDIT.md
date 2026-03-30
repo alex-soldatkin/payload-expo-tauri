@@ -3,7 +3,7 @@
 ## Overview
 This document tracks the status of Payload CMS UI component ports to React Native/Expo, with a focus on achieving feature parity while adopting iOS 26 design patterns (liquid glass, etc.).
 
-**Current Status:** Early implementation phase - Core field components ported, UI field support missing, advanced components not yet implemented.
+**Current Status:** Native SwiftUI upgrade in progress - Core fields ported (21/21), @expo/ui SwiftUI components integrated for iOS (Toggle, DatePicker, Picker, DisclosureGroup, BottomSheet), glass effects applied.
 
 ---
 
@@ -138,21 +138,30 @@ This document tracks the status of Payload CMS UI component ports to React Nativ
   - `react-native-reanimated` (4.2.1) - Animations
   - `react-native-gesture-handler` (2.30.0) - Gestures
 
-### ❌ iOS 26 Design System Integration
+- **@expo/ui SwiftUI Components (iOS):** `@expo/ui` integrated with platform-aware fallbacks
+  - `NativeHost` wrapper for SwiftUI ↔ React Native bridging
+  - `Toggle` for CheckboxField (system styling, haptics)
+  - `DatePicker` for DateField (inline native, locale-aware, no custom modal needed)
+  - `Picker` for SelectField/RadioField (menu + segmented styles)
+  - `DisclosureGroup` for CollapsibleField (native accordion animation)
+  - `Picker` (segmented) for TabsField tab switching
+  - Native `BottomSheet` for sheets (replaces Modal+Animated+PanResponder)
 
-**Current Gap:** No explicit iOS 26 (liquid glass) design patterns implemented yet
+### 🟡 iOS 26 Design System Integration — In Progress
 
-**Expo Resources Available:**
-- `expo-glass-effect` (55.0.4) - Already installed! Provides platform native glass morphism
-- `expo-system-ui` (55.0.4) - System UI integration
+**Implemented:**
+- [x] Glass effect on navigation headers (Collections, Globals stack navigators)
+- [x] Glass effect on BottomSheet fallback (GlassView background layer)
+- [x] Native SwiftUI BottomSheet (automatic system sheet presentation)
+- [x] Tab bar with glass effect style
 
-**Required Work:**
+**Remaining:**
+- [ ] `GlassEffectContainer` from @expo/ui for blending adjacent glass elements
 - [ ] Design tokens for iOS 26 liquid glass effects
   - [ ] Semi-transparent glassmorphism backgrounds
   - [ ] Blur effect intensities (light, medium, dark)
   - [ ] Backdrop color mixing
   - [ ] Animation curves aligned to iOS motion
-- [ ] Apply glass effects to modals, sheets, and overlays
 - [ ] Implement system color semantics (iOS semantic colors)
 - [ ] Adopt SF Pro typography
 - [ ] Create shadow depth system (iOS consistent)
@@ -165,9 +174,12 @@ This document tracks the status of Payload CMS UI component ports to React Nativ
 ### Current Field Registry (admin-native/src/fields/index.ts)
 ```
 Inputs: text, email, number, textarea, code, json, point
-Controls: checkbox, date
-Pickers: select, radio, relationship, upload
-Structural: array, blocks, group, collapsible, row, tabs
+Controls: checkbox, date          ← @expo/ui Toggle/Switch + DatePicker
+Pickers: select, radio            ← @expo/ui Picker/SegmentedButton
+         relationship, upload     (BottomSheet-based, platform-agnostic)
+Structural: collapsible           ← @expo/ui DisclosureGroup (iOS)
+            tabs                  ← @expo/ui Picker segmented / SegmentedButton
+            array, blocks, group, row
 RichText: richText
 Fallback: FallbackField (for unimplemented types)
 ```
@@ -178,16 +190,29 @@ payload_universal/packages/admin-native/src/
 ├── FieldRenderer.tsx          # Dispatches field types to components
 ├── fields/
 │   ├── index.ts              # Registry + exports
+│   ├── NativeHost.tsx         # Cross-platform @expo/ui Host wrapper
 │   ├── inputs.tsx            # Text, Email, Number, Textarea, Code, JSON, Point
-│   ├── controls.tsx          # Checkbox, Date
-│   ├── pickers.tsx           # Select, Radio, Relationship, Upload
-│   ├── structural.tsx        # Array, Blocks, Group, Collapsible, Row, Tabs
+│   ├── controls.tsx          # Checkbox, Date ← @expo/ui (iOS + Android)
+│   ├── pickers.tsx           # Select, Radio ← @expo/ui (iOS + Android)
+│   │                         # Relationship, Upload (BottomSheet)
+│   ├── structural.tsx        # Collapsible ← DisclosureGroup (iOS)
+│   │                         # Tabs ← Picker segmented / SegmentedButton
+│   │                         # Array, Blocks, Group, Row
 │   ├── richtext.tsx          # RichTextField
 │   └── fallback.tsx          # Fallback for unimplemented types
 ├── theme.ts                   # Theme tokens
+├── BottomSheet.tsx            # Already native (expo bottom sheet)
 ├── PayloadNativeProvider.tsx   # Auth & schema provider
 └── ... (Toast, DocumentForm, DocumentList, etc.)
 ```
+
+### Native Component Strategy
+Each field component follows a three-tier pattern:
+1. **@expo/ui native** (preferred): SwiftUI on iOS, Jetpack Compose on Android
+2. **React Native built-in** (fallback): RN Switch, TextInput, Picker, etc.
+3. **FallbackField** (last resort): For completely unimplemented field types
+
+Platform detection uses dynamic `require()` with try/catch so `@expo/ui` remains an optional peer dependency.
 
 ### Fallback Behavior
 Unimplemented field types fall back to `FallbackField`, which displays the field's `name` and a message that it's not yet implemented.
@@ -318,9 +343,11 @@ Unimplemented field types fall back to `FallbackField`, which displays the field
 | Aspect | Status | Progress |
 |--------|--------|----------|
 | **Core Field Types** | ✅ Complete | 21/21 (100%) |
+| **@expo/ui Native Components** | ✅ Integrated | 6 field types upgraded (Toggle, DatePicker, Picker, DisclosureGroup, SegmentedButton) |
+| **Cross-Platform** | ✅ Both | iOS (SwiftUI) + Android (Jetpack Compose) with RN fallback |
 | **UI Field Support** | ❌ Missing | 0/1 (0%) |
-| **UI Components** | ⏳ In Progress | ~5/100+ (5%) |
-| **Theme System** | ✅ Partial | Tokens exist, iOS 26 pending |
-| **iOS 26 Design** | ❌ Pending | 0% (expo-glass-effect available) |
-| **Overall Parity** | 🟡 ~15-20% | Core fields done, UI layer missing |
+| **UI Components** | ⏳ In Progress | ~10/100+ (10%) |
+| **Theme System** | ✅ Partial | Tokens exist, iOS 26 in progress |
+| **iOS 26 Design** | 🟡 Started | Nav headers + native components |
+| **Overall Parity** | 🟡 ~25% | Core fields done + native upgrade, UI layer missing |
 

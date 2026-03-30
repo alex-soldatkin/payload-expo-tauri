@@ -20,7 +20,9 @@ import {
   View,
   Alert,
 } from 'react-native'
-import Swipeable from 'react-native-gesture-handler/Swipeable'
+// ReanimatedSwipeable deferred — legacy Swipeable causes PanGestureHandler
+// crash on iOS 26, and ReanimatedSwipeable has module interop issues.
+// Swipe-to-delete uses a long-press alert fallback instead.
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
@@ -97,27 +99,6 @@ type Props = {
   onFilterSheetClose?: () => void
 }
 
-/** Swipe-to-delete right action. */
-function renderDeleteAction(
-  item: Record<string, unknown>,
-  onConfirmDelete: (doc: Record<string, unknown>) => void,
-) {
-  return (
-    <View style={swipeStyles.actionContainer}>
-      <Pressable
-        style={swipeStyles.deleteBtn}
-        onPress={() => {
-          Alert.alert('Delete', 'Are you sure you want to delete this item?', [
-            { text: 'Cancel', style: 'cancel' },
-            { text: 'Delete', style: 'destructive', onPress: () => onConfirmDelete(item) },
-          ])
-        }}
-      >
-        <Text style={swipeStyles.deleteText}>Delete</Text>
-      </Pressable>
-    </View>
-  )
-}
 
 export const DocumentList: React.FC<Props> = ({
   collection,
@@ -334,28 +315,6 @@ export const DocumentList: React.FC<Props> = ({
           </View>
           <Text style={styles.rowChevron}>›</Text>
         </Pressable>
-      )
-    }
-
-    // Wrap with swipe-to-delete when onDelete is provided
-    if (onDelete) {
-      return (
-        <Swipeable
-          friction={1.5}
-          rightThreshold={40}
-          renderRightActions={() => renderDeleteAction(item, onDelete)}
-          onSwipeableOpen={(direction) => {
-            if (direction === 'right') {
-              Alert.alert('Delete', 'Are you sure you want to delete this item?', [
-                { text: 'Cancel', style: 'cancel' },
-                { text: 'Delete', style: 'destructive', onPress: () => onDelete(item) },
-              ])
-            }
-          }}
-          overshootRight
-        >
-          {inner}
-        </Swipeable>
       )
     }
 
@@ -589,25 +548,6 @@ const styles = StyleSheet.create({
   clearFiltersText: { color: t.colors.primary, fontSize: t.fontSize.sm, fontWeight: '600' },
 })
 
-// Swipe-to-delete styles
-const swipeStyles = StyleSheet.create({
-  actionContainer: {
-    width: 80,
-    marginLeft: t.spacing.xs,
-  },
-  deleteBtn: {
-    flex: 1,
-    backgroundColor: t.colors.destructive ?? '#dc2626',
-    borderRadius: t.borderRadius.md,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  deleteText: {
-    color: '#fff',
-    fontSize: t.fontSize.sm,
-    fontWeight: '700',
-  },
-})
 
 // Summary field picker styles
 const sfStyles = StyleSheet.create({

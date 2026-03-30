@@ -8,14 +8,14 @@
  *  - Draft / Publish: when the collection has `versions.drafts` enabled,
  *    shows dual Save Draft / Publish buttons and a status pill.
  *  - Versions: when the collection has `versions` enabled, shows a versions
- *    option under the (...) menu. Versions are fetched from the server
+ *    option under the (...) native menu. Versions are fetched from the server
  *    directly (not local-first) and can be compared and restored.
  */
 import React, { useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
-import { MoreHorizontal, Save } from 'lucide-react-native'
+import { Save } from 'lucide-react-native'
 
 import {
   DocumentActionsMenu,
@@ -57,8 +57,7 @@ export default function DocumentEditScreen() {
   const hasDrafts = collectionMeta?.drafts ?? false
   const hasVersions = collectionMeta?.versions ?? false
 
-  // Bottom sheet state
-  const [actionsMenuVisible, setActionsMenuVisible] = useState(false)
+  // Versions bottom sheet state
   const [versionsVisible, setVersionsVisible] = useState(false)
 
   // API config for direct server calls (versions are server-side only)
@@ -131,11 +130,19 @@ export default function DocumentEditScreen() {
           title: title,
           headerRight: () => (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
-              {/* Actions menu (versions, draft/publish actions) */}
+              {/* Native actions menu (versions, draft/publish) — renders as
+                  a SwiftUI Picker with menu style on iOS (native dropdown),
+                  falls back to BottomSheet on Android. */}
               {(hasVersions || hasDrafts) && (
-                <Pressable onPress={() => setActionsMenuVisible(true)} hitSlop={8}>
-                  <MoreHorizontal size={22} color="#1f1f1f" />
-                </Pressable>
+                <DocumentActionsMenu
+                  hasVersions={hasVersions}
+                  hasDrafts={hasDrafts}
+                  currentStatus={docStatus}
+                  onViewVersions={() => setVersionsVisible(true)}
+                  onSaveDraft={() => formRef.current?.submitWithStatus('draft')}
+                  onPublish={() => formRef.current?.submitWithStatus('published')}
+                  onUnpublish={() => formRef.current?.submitWithStatus('draft')}
+                />
               )}
               {/* Save button */}
               <Pressable
@@ -167,32 +174,6 @@ export default function DocumentEditScreen() {
         submitLabel={hasDrafts ? undefined : 'Update'}
         draftStatus={hasDrafts ? ((docStatus as 'draft' | 'published') ?? 'draft') : undefined}
         contentInsetTop={headerHeight}
-      />
-
-      {/* Actions menu bottom sheet */}
-      <DocumentActionsMenu
-        visible={actionsMenuVisible}
-        onClose={() => setActionsMenuVisible(false)}
-        hasVersions={hasVersions}
-        hasDrafts={hasDrafts}
-        currentStatus={docStatus}
-        onViewVersions={() => {
-          setActionsMenuVisible(false)
-          // Small delay to let the actions menu dismiss before opening versions
-          setTimeout(() => setVersionsVisible(true), 300)
-        }}
-        onSaveDraft={() => {
-          formRef.current?.submitWithStatus('draft')
-          setActionsMenuVisible(false)
-        }}
-        onPublish={() => {
-          formRef.current?.submitWithStatus('published')
-          setActionsMenuVisible(false)
-        }}
-        onUnpublish={() => {
-          formRef.current?.submitWithStatus('draft')
-          setActionsMenuVisible(false)
-        }}
       />
 
       {/* Versions bottom sheet */}

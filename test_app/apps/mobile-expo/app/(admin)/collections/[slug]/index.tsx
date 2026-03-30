@@ -137,11 +137,23 @@ export default function CollectionDocumentsScreen() {
             <Link.MenuAction icon="doc.text" onPress={onPress}>
               Open
             </Link.MenuAction>
+            <Link.MenuAction
+              icon="trash"
+              destructive
+              onPress={() => {
+                Alert.alert('Delete', 'Are you sure you want to delete this item?', [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item) },
+                ])
+              }}
+            >
+              Delete
+            </Link.MenuAction>
           </Link.Menu>
         </Link>
       )
     },
-    [slug],
+    [slug, handleDelete],
   )
 
   return (

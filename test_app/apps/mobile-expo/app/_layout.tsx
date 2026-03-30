@@ -198,30 +198,28 @@ export default function RootLayout() {
     }
   }, [])
 
-  if (!ready) {
-    return (
-      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6f4f1' }}>
-        <ActivityIndicator size="large" />
-      </View>
-    )
-  }
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-    <SafeAreaProvider>
-      <PayloadNativeProvider
-        baseURL={baseURL}
-        initialToken={initialToken}
-        onTokenChange={handleTokenChange}
-      >
-        <LocalDBGate>
-          <ToastProvider>
-            <StatusBar style="dark" />
-            <AuthGate />
-          </ToastProvider>
-        </LocalDBGate>
-      </PayloadNativeProvider>
-    </SafeAreaProvider>
+      <SafeAreaProvider>
+        {!ready ? (
+          <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6f4f1' }}>
+            <ActivityIndicator size="large" />
+          </View>
+        ) : (
+          <PayloadNativeProvider
+            baseURL={baseURL}
+            initialToken={initialToken}
+            onTokenChange={handleTokenChange}
+          >
+            <LocalDBGate>
+              <ToastProvider>
+                <StatusBar style="dark" />
+                <AuthGate />
+              </ToastProvider>
+            </LocalDBGate>
+          </PayloadNativeProvider>
+        )}
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   )
 }

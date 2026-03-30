@@ -1,6 +1,6 @@
 /**
  * Field component registry.
- * Maps Payload field types → native React Native components.
+ * Maps Payload field types → native React Native / @expo/ui components.
  */
 import type React from 'react'
 import type { FieldComponentProps } from '../types'
@@ -12,38 +12,22 @@ import { ArrayField, BlocksField, CollapsibleField, GroupField, RowField, TabsFi
 import { RichTextField } from './richtext'
 import { FallbackField } from './fallback'
 
-// Re-export everything for direct imports
+// Re-export field components
 export {
-  // inputs
-  TextField,
-  EmailField,
-  NumberField,
-  TextareaField,
-  CodeField,
-  JSONField,
-  PointField,
-  // controls
-  CheckboxField,
-  DateField,
-  // pickers
-  SelectField,
-  RadioField,
-  RelationshipField,
-  UploadField,
-  // structural
-  ArrayField,
-  BlocksField,
-  GroupField,
-  CollapsibleField,
-  RowField,
-  TabsField,
-  // richtext
-  RichTextField,
-  // fallback
-  FallbackField,
+  TextField, EmailField, NumberField, TextareaField, CodeField, JSONField, PointField,
+  CheckboxField, DateField,
+  SelectField, RadioField, RelationshipField, UploadField,
+  ArrayField, BlocksField, GroupField, CollapsibleField, RowField, TabsField,
+  RichTextField, FallbackField,
 }
 
+// Re-export structural contexts
 export { ErrorMapContext, FieldRendererContext } from './structural'
+
+// Re-export native utilities
+export { NativeHost, isNativeUIAvailable } from './NativeHost'
+export { FieldShell, fieldShellStyles, nativeComponents } from './shared'
+export type { NativeComponentRegistry } from './shared'
 
 // ---------------------------------------------------------------------------
 // Registry: field.type → component

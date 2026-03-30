@@ -16,8 +16,14 @@
     "expo-router": ">=4.0.0",
     "expo-image-picker": ">=15.0.0",
     "@react-native-picker/picker": ">=2.0.0",
+    "@expo/ui": ">=55.0.0",
+    "expo-glass-effect": ">=55.0.0",
     "react-native-gesture-handler": ">=2.0.0",
     "react-native-reanimated": ">=3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@expo/ui": { "optional": true },
+    "expo-glass-effect": { "optional": true }
   },
   "dependencies": {
     "@payload-universal/admin-schema": "workspace:*"

@@ -10,6 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
+    "@expo/ui": "55.0.0-canary-20260128-67ce8d5",
     "@payload-universal/admin-native": "workspace:*",
     "@payload-universal/admin-schema": "workspace:*",
     "@payload-universal/local-db": "workspace:*",
@@ -19,6 +20,7 @@
     "expo": "55.0.0-canary-20260128-67ce8d5",
     "expo-constants": "55.0.3-canary-20260128-67ce8d5",
     "expo-crypto": "^55.0.10",
+    "expo-dev-client": "55.0.4-canary-20260128-67ce8d5",
     "expo-document-picker": "55.0.4-canary-20260128-67ce8d5",
     "expo-file-system": "55.0.4-canary-20260128-67ce8d5",
     "expo-glass-effect": "55.0.4-canary-20260128-67ce8d5",

@@ -1,6 +1,9 @@
 /**
- * Checkbox (Switch) and Date fields.
- * Date uses a native-feeling inline picker built with ScrollView wheels.
+ * Checkbox (Toggle/Switch) and Date fields.
+ *
+ * Uses @expo/ui native components when available (resolved per-platform
+ * via shared/native.ios.ts / native.android.ts). Falls back to React
+ * Native built-ins otherwise.
  */
 import React, { useCallback, useState } from 'react'
 import {
@@ -17,12 +20,41 @@ import {
 import type { ClientCheckboxField, ClientDateField, FieldComponentProps } from '../types'
 import { defaultTheme as t } from '../theme'
 import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
+import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
+import { NativeHost } from './NativeHost'
 
 // ---------------------------------------------------------------------------
-// Checkbox → Switch
+// Checkbox
 // ---------------------------------------------------------------------------
 
-export const CheckboxField: React.FC<FieldComponentProps<ClientCheckboxField>> = ({
+const CheckboxFieldNative: React.FC<FieldComponentProps<ClientCheckboxField>> = ({
+  field,
+  value,
+  onChange,
+  disabled,
+  error,
+}) => {
+  const Toggle = nativeComponents.Toggle!
+  const isDisabled = disabled || field.admin?.readOnly
+
+  return (
+    <View style={fieldShellStyles.container}>
+      <NativeHost>
+        <Toggle
+          isOn={Boolean(value)}
+          label={getFieldLabel(field)}
+          onIsOnChange={(isOn) => { if (!isDisabled) onChange(isOn) }}
+        />
+      </NativeHost>
+      {getFieldDescription(field) && (
+        <Text style={fieldShellStyles.description}>{getFieldDescription(field)}</Text>
+      )}
+      {error && <Text style={fieldShellStyles.error}>{error}</Text>}
+    </View>
+  )
+}
+
+const CheckboxFieldFallback: React.FC<FieldComponentProps<ClientCheckboxField>> = ({
   field,
   value,
   onChange,
@@ -38,65 +70,103 @@ export const CheckboxField: React.FC<FieldComponentProps<ClientCheckboxField>> =
       thumbColor={Platform.OS === 'android' ? '#fff' : undefined}
     />
     <View style={styles.checkboxLabel}>
-      <Text style={styles.label}>{getFieldLabel(field)}</Text>
+      <Text style={fieldShellStyles.label}>{getFieldLabel(field)}</Text>
       {getFieldDescription(field) && (
-        <Text style={styles.description}>{getFieldDescription(field)}</Text>
+        <Text style={fieldShellStyles.description}>{getFieldDescription(field)}</Text>
       )}
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={fieldShellStyles.error}>{error}</Text>}
     </View>
   </View>
 )
 
+export const CheckboxField: React.FC<FieldComponentProps<ClientCheckboxField>> = (props) =>
+  nativeComponents.Toggle
+    ? <CheckboxFieldNative {...props} />
+    : <CheckboxFieldFallback {...props} />
+
 // ---------------------------------------------------------------------------
-// Date → Modal picker with scrollable columns
+// Date
 // ---------------------------------------------------------------------------
 
-const MONTHS = [
-  'January', 'February', 'March', 'April', 'May', 'June',
-  'July', 'August', 'September', 'October', 'November', 'December',
-]
-
-const MONTHS_SHORT = [
-  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-]
-
-const formatDate = (iso: string | null | undefined): string => {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime())) return String(iso)
-    return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
-  } catch {
-    return String(iso)
+/** Map Payload's pickerAppearance to @expo/ui displayedComponents. */
+const getDisplayedComponents = (
+  appearance?: string,
+): Array<'date' | 'hourAndMinute'> => {
+  switch (appearance) {
+    case 'dayOnly':
+    case 'monthOnly':
+      return ['date']
+    case 'timeOnly':
+      return ['hourAndMinute']
+    case 'dayAndTime':
+    default:
+      return ['date', 'hourAndMinute']
   }
 }
 
-const formatDateTime = (iso: string | null | undefined): string => {
-  if (!iso) return ''
-  try {
-    const d = new Date(iso)
-    if (isNaN(d.getTime())) return String(iso)
-    const h = d.getHours()
-    const m = d.getMinutes()
-    const ampm = h >= 12 ? 'PM' : 'AM'
-    const h12 = h % 12 || 12
-    return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${h12}:${m.toString().padStart(2, '0')} ${ampm}`
-  } catch {
-    return String(iso)
-  }
+const DateFieldNative: React.FC<FieldComponentProps<ClientDateField>> = ({
+  field,
+  value,
+  onChange,
+  disabled,
+  error,
+}) => {
+  const DatePicker = nativeComponents.DatePicker!
+  const isDisabled = disabled || field.admin?.readOnly
+  const label = getFieldLabel(field)
+  const description = getFieldDescription(field)
+
+  const currentDate = value ? new Date(value as string) : new Date()
+  const validDate = isNaN(currentDate.getTime()) ? new Date() : currentDate
+
+  const handleDateChange = useCallback((date: Date) => {
+    if (!isDisabled) onChange(date.toISOString())
+  }, [isDisabled, onChange])
+
+  return (
+    <FieldShell label={label} description={description} required={field.required} error={error}>
+      <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
+        <DatePicker
+          title={label}
+          selection={validDate}
+          displayedComponents={getDisplayedComponents(field.admin?.date?.pickerAppearance)}
+          onDateChange={handleDateChange}
+        />
+      </NativeHost>
+    </FieldShell>
+  )
 }
 
-const range = (start: number, end: number) => {
-  const arr: number[] = []
-  for (let i = start; i <= end; i++) arr.push(i)
-  return arr
-}
+export const DateField: React.FC<FieldComponentProps<ClientDateField>> = (props) =>
+  nativeComponents.DatePicker
+    ? <DateFieldNative {...props} />
+    : <DateFieldFallback {...props} />
 
+// ---------------------------------------------------------------------------
+// Date fallback — custom wheel picker modal
+// ---------------------------------------------------------------------------
+
+const MONTHS_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+const MONTHS_FULL = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+const range = (start: number, end: number) => Array.from({ length: end - start + 1 }, (_, i) => start + i)
 const YEARS = range(1970, 2050)
 const DAYS = range(1, 31)
 const HOURS = range(0, 23)
 const MINUTES = range(0, 59)
+
+const formatDate = (iso: string): string => {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return String(iso)
+  return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`
+}
+
+const formatDateTime = (iso: string): string => {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return String(iso)
+  const h = d.getHours()
+  const m = d.getMinutes()
+  return `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()} ${h % 12 || 12}:${m.toString().padStart(2, '0')} ${h >= 12 ? 'PM' : 'AM'}`
+}
 
 const WheelColumn: React.FC<{
   data: Array<{ label: string; value: number }>
@@ -123,7 +193,7 @@ const WheelColumn: React.FC<{
   />
 )
 
-export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
+const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
   field,
   value,
   onChange,
@@ -156,8 +226,7 @@ export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
   }, [value])
 
   const handleConfirm = () => {
-    const d = new Date(year, month, day, hour, minute)
-    onChange(d.toISOString())
+    onChange(new Date(year, month, day, hour, minute).toISOString())
     setOpen(false)
   }
 
@@ -166,12 +235,12 @@ export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
     : null
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.label}>
-        {getFieldLabel(field)}
-        {field.required && <Text style={styles.required}> *</Text>}
-      </Text>
-
+    <FieldShell
+      label={getFieldLabel(field)}
+      description={getFieldDescription(field)}
+      required={field.required}
+      error={error}
+    >
       <Pressable
         style={[styles.dateButton, error && styles.dateButtonError]}
         onPress={() => !disabled && handleOpen()}
@@ -181,11 +250,6 @@ export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
           {displayValue ?? 'Select date...'}
         </Text>
       </Pressable>
-
-      {getFieldDescription(field) && (
-        <Text style={styles.description}>{getFieldDescription(field)}</Text>
-      )}
-      {error && <Text style={styles.error}>{error}</Text>}
 
       <Modal visible={open} transparent animationType="slide" onRequestClose={() => setOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
@@ -199,51 +263,30 @@ export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
             <Text style={styles.pickerTitle}>
               {showDate && `${MONTHS_SHORT[month]} ${day}, ${year}`}
               {showTime && showDate && ' '}
-              {showTime && `${(hour % 12 || 12)}:${minute.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`}
+              {showTime && `${hour % 12 || 12}:${minute.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`}
             </Text>
             <Pressable onPress={handleConfirm}>
               <Text style={styles.pickerDone}>Done</Text>
             </Pressable>
           </View>
-
           <View style={styles.wheelRow}>
             {showDate && (
               <>
-                <WheelColumn
-                  data={MONTHS.map((m, i) => ({ label: m.slice(0, 3), value: i }))}
-                  selected={month}
-                  onSelect={setMonth}
-                />
-                <WheelColumn
-                  data={DAYS.map((d) => ({ label: String(d), value: d }))}
-                  selected={day}
-                  onSelect={setDay}
-                />
-                <WheelColumn
-                  data={YEARS.map((y) => ({ label: String(y), value: y }))}
-                  selected={year}
-                  onSelect={setYear}
-                />
+                <WheelColumn data={MONTHS_FULL.map((m, i) => ({ label: m.slice(0, 3), value: i }))} selected={month} onSelect={setMonth} />
+                <WheelColumn data={DAYS.map((d) => ({ label: String(d), value: d }))} selected={day} onSelect={setDay} />
+                <WheelColumn data={YEARS.map((y) => ({ label: String(y), value: y }))} selected={year} onSelect={setYear} />
               </>
             )}
             {showTime && (
               <>
-                <WheelColumn
-                  data={HOURS.map((h) => ({ label: `${(h % 12 || 12)}${h >= 12 ? ' PM' : ' AM'}`, value: h }))}
-                  selected={hour}
-                  onSelect={setHour}
-                />
-                <WheelColumn
-                  data={MINUTES.map((m) => ({ label: m.toString().padStart(2, '0'), value: m }))}
-                  selected={minute}
-                  onSelect={setMinute}
-                />
+                <WheelColumn data={HOURS.map((h) => ({ label: `${h % 12 || 12}${h >= 12 ? ' PM' : ' AM'}`, value: h }))} selected={hour} onSelect={setHour} />
+                <WheelColumn data={MINUTES.map((m) => ({ label: m.toString().padStart(2, '0'), value: m }))} selected={minute} onSelect={setMinute} />
               </>
             )}
           </View>
         </View>
       </Modal>
-    </View>
+    </FieldShell>
   )
 }
 
@@ -252,23 +295,14 @@ export const DateField: React.FC<FieldComponentProps<ClientDateField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: { marginBottom: t.spacing.lg },
-  label: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.text, marginBottom: t.spacing.xs },
-  required: { color: t.colors.error },
-  description: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: t.spacing.xs },
-  error: { fontSize: t.fontSize.xs, color: t.colors.error, marginTop: t.spacing.xs },
-
-  // Checkbox
+  // Checkbox fallback
   checkboxRow: { flexDirection: 'row', alignItems: 'center', marginBottom: t.spacing.lg, gap: t.spacing.md },
   checkboxLabel: { flex: 1 },
 
-  // Date button
+  // Date fallback
   dateButton: {
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    borderRadius: t.borderRadius.sm,
-    paddingHorizontal: t.spacing.md,
-    paddingVertical: t.spacing.sm + 2,
+    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
+    paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm + 2,
     backgroundColor: t.colors.surface,
   },
   dateButtonError: { borderColor: t.colors.error },
@@ -278,24 +312,14 @@ const styles = StyleSheet.create({
   // Modal picker
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
   pickerSheet: {
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 16,
-    borderTopRightRadius: 16,
-    paddingBottom: 34, // safe area
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -3 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 20,
+    backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16,
+    paddingBottom: 34, shadowColor: '#000', shadowOffset: { width: 0, height: -3 },
+    shadowOpacity: 0.1, shadowRadius: 8, elevation: 20,
   },
   pickerHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: t.spacing.lg,
-    paddingVertical: t.spacing.md,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+    paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.md,
+    borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.colors.separator,
   },
   pickerCancel: { fontSize: t.fontSize.md, color: t.colors.textMuted },
   pickerTitle: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.text },

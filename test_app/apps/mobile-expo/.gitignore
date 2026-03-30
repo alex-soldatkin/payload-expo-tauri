@@ -1,0 +1,4 @@
+*.app
+*.ipa
+build-*.tar.gz
+build/
