@@ -17,6 +17,7 @@ export {
 
 // Core components
 export { BottomSheet } from './BottomSheet'
+export { DocumentActionsMenu } from './DocumentActionsMenu'
 export { DocumentForm } from './DocumentForm'
 export type { DocumentFormHandle } from './DocumentForm'
 export { DocumentList } from './DocumentList'
@@ -25,6 +26,8 @@ export { FilterBottomSheet } from './FilterBottomSheet'
 export { FilterChips } from './FilterChips'
 export { SyncStatusCard } from './SyncStatusCard'
 export { SyncStatusSection } from './SyncStatusSection'
+export { VersionDiff } from './VersionDiff'
+export { VersionsBottomSheet } from './VersionsBottomSheet'
 
 // Toast notifications
 export { ToastProvider, useToast } from './Toast'
@@ -68,7 +71,7 @@ export {
 // API client
 export { payloadApi } from './api'
 export { PayloadAPIError } from './api'
-export type { PayloadAPIConfig } from './api'
+export type { PayloadAPIConfig, VersionDoc } from './api'
 
 // Schema helpers
 export {

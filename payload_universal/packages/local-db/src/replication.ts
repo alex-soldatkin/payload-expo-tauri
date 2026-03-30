@@ -26,6 +26,8 @@ export type ReplicationConfig = {
   pullInterval?: number
   /** Enable live push (react to local writes). Defaults to true. */
   livePush?: boolean
+  /** Whether this collection has drafts enabled. When true, pulls include draft documents. */
+  hasDrafts?: boolean
 }
 
 type Checkpoint = {
@@ -50,6 +52,7 @@ export const startReplication = (
     batchSize = 50,
     pullInterval = 30_000,
     livePush = true,
+    hasDrafts = false,
   } = config
 
   /** Always get the latest token (supports re-auth after logout/login). */
@@ -69,6 +72,12 @@ export const startReplication = (
         params.set('limit', String(size || batchSize))
         params.set('sort', 'updatedAt')
         params.set('depth', '0')
+
+        // Include draft documents in pull results so the mobile app
+        // shows both draft and published content.
+        if (hasDrafts) {
+          params.set('draft', 'true')
+        }
 
         if (checkpoint) {
           // Fetch docs updated after the checkpoint
@@ -186,6 +195,10 @@ export const startReplication = (
           // Strip RxDB internal fields before sending to Payload REST API
           const { _deleted, _rev, _meta, _attachments, _locallyModified, ...payloadBody } = doc as any
 
+          // When the document is a draft, append ?draft=true so Payload
+          // skips required-field validation on the server side.
+          const isDraft = payloadBody._status === 'draft'
+
           try {
             if (doc._deleted) {
               // Delete
@@ -197,7 +210,8 @@ export const startReplication = (
               // Create — include the client-generated id in the body.
               // Payload's MongoDB adapter accepts it as _id if it's a valid ObjectId
               // (24-char hex string). This ensures server and local IDs match.
-              const res = await fetch(`${baseURL}/api/${slug}`, {
+              const createURL = isDraft ? `${baseURL}/api/${slug}?draft=true` : `${baseURL}/api/${slug}`
+              const res = await fetch(createURL, {
                 method: 'POST',
                 headers: buildHeaders(getToken()),
                 body: JSON.stringify(payloadBody),
@@ -228,7 +242,8 @@ export const startReplication = (
                 }
               }
 
-              const res = await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
+              const updateURL = isDraft ? `${baseURL}/api/${slug}/${doc.id}?draft=true` : `${baseURL}/api/${slug}/${doc.id}`
+              const res = await fetch(updateURL, {
                 method: 'PATCH',
                 headers: buildHeaders(getToken()),
                 body: JSON.stringify(payloadBody),

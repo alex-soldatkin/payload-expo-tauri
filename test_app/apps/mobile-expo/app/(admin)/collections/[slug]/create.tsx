@@ -4,6 +4,10 @@
  * Inserts the new document into local RxDB immediately (instant),
  * then navigates to the edit screen. The sync engine pushes to the
  * server in the background.
+ *
+ * For collections with drafts enabled, the document is created as a
+ * draft by default (user can choose to publish immediately via the
+ * dual Save Draft / Publish buttons).
  */
 import React from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
@@ -26,11 +30,19 @@ export default function DocumentCreateScreen() {
   const { isReady } = useLocalDBStatus()
   const { create } = useLocalMutations(localDB, slug)
 
+  const collectionMeta = menuModel?.collections.find((c) => c.slug === slug)
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
+  const hasDrafts = collectionMeta?.drafts ?? false
 
-  const handleSubmit = async (data: Record<string, unknown>) => {
-    const id = await create(data)
+  const handleSubmit = async (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => {
+    // Merge status into the data for the local DB write
+    const writeData = options?.status
+      ? { ...data, _status: options.status }
+      : hasDrafts
+        ? { ...data, _status: 'draft' }  // Default to draft for draft-enabled collections
+        : data
+    const id = await create(writeData)
     router.replace(`/(admin)/collections/${slug}/${id}`)
   }
 
@@ -67,7 +79,8 @@ export default function DocumentCreateScreen() {
         slug={slug}
         initialData={{}}
         onSubmit={handleSubmit}
-        submitLabel="Create"
+        submitLabel={hasDrafts ? undefined : 'Create'}
+        draftStatus={hasDrafts ? 'draft' : undefined}
       />
     </View>
   )

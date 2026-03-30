@@ -25,6 +25,10 @@ import { PayloadAPIError } from './api'
 
 export type DocumentFormHandle = {
   submit: () => void
+  /** Submit with explicit _status override (for draft/publish flows). */
+  submitWithStatus: (status: 'draft' | 'published') => void
+  /** Get current form data without submitting. */
+  getFormData: () => Record<string, unknown>
 }
 
 type Props = {
@@ -34,8 +38,8 @@ type Props = {
   slug: string
   /** Initial document data (empty object for create) */
   initialData?: Record<string, unknown>
-  /** Called when the user taps Save */
-  onSubmit: (data: Record<string, unknown>) => Promise<void>
+  /** Called when the user taps Save. Receives optional status for draft/publish. */
+  onSubmit: (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => Promise<void>
   /** Called when the user taps Delete (rendered at bottom of form) */
   onDelete?: () => void
   /** External validation errors (e.g. from the API) */
@@ -46,6 +50,8 @@ type Props = {
   submitLabel?: string
   /** Extra top padding (e.g. for transparent headers) */
   contentInsetTop?: number
+  /** Current draft/publish status. When set, renders dual Save Draft / Publish buttons. */
+  draftStatus?: 'draft' | 'published'
 }
 
 /**
@@ -83,6 +89,7 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
   disabled,
   submitLabel = 'Save',
   contentInsetTop = 0,
+  draftStatus,
 }, ref) => {
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData)
   const [saving, setSaving] = useState(false)
@@ -139,13 +146,15 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
     [formData, mergedErrors, serverErrors, disabled, saving],
   )
 
-  const handleSubmit = async () => {
+  const handleSubmit = async (statusOverride?: 'draft' | 'published') => {
     setSaving(true)
     setSaveError(null)
     setServerErrors({})
     try {
-      await onSubmit(formData)
-      toast.showToast('Saved successfully', { type: 'success' })
+      const opts = statusOverride ? { status: statusOverride } : undefined
+      await onSubmit(formData, opts)
+      const label = statusOverride === 'draft' ? 'Draft saved' : statusOverride === 'published' ? 'Published' : 'Saved successfully'
+      toast.showToast(label, { type: 'success' })
     } catch (err) {
       // Parse Payload's validation error response
       const body = err instanceof PayloadAPIError ? err.body : null
@@ -170,7 +179,11 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
   }
 
   // Expose submit to parent via ref (for header save button)
-  useImperativeHandle(ref, () => ({ submit: handleSubmit }), [handleSubmit])
+  useImperativeHandle(ref, () => ({
+    submit: () => handleSubmit(),
+    submitWithStatus: (status: 'draft' | 'published') => handleSubmit(status),
+    getFormData: () => formData,
+  }), [handleSubmit, formData])
 
   // Auto-scroll to the error banner at the top when validation errors arrive
   useEffect(() => {
@@ -201,6 +214,17 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
       >
+        {/* Draft / Published status pill */}
+        {draftStatus && (
+          <View style={styles.statusRow}>
+            <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
+              <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
+                {draftStatus === 'draft' ? 'Draft' : 'Published'}
+              </Text>
+            </View>
+          </View>
+        )}
+
         {/* Validation error summary banner */}
         {errorCount > 0 && (
           <View style={styles.validationBanner}>
@@ -232,17 +256,44 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
           </View>
         )}
 
-        <Pressable
-          style={[styles.submitBtn, (disabled || saving) && styles.submitDisabled]}
-          onPress={handleSubmit}
-          disabled={disabled || saving}
-        >
-          {saving ? (
-            <ActivityIndicator color={t.colors.primaryText} />
-          ) : (
-            <Text style={styles.submitText}>{submitLabel}</Text>
-          )}
-        </Pressable>
+        {draftStatus ? (
+          <View style={styles.dualButtonRow}>
+            <Pressable
+              style={[styles.draftBtn, (disabled || saving) && styles.submitDisabled]}
+              onPress={() => handleSubmit('draft')}
+              disabled={disabled || saving}
+            >
+              {saving ? (
+                <ActivityIndicator color={t.colors.text} />
+              ) : (
+                <Text style={styles.draftBtnText}>Save Draft</Text>
+              )}
+            </Pressable>
+            <Pressable
+              style={[styles.submitBtn, styles.publishBtn, (disabled || saving) && styles.submitDisabled]}
+              onPress={() => handleSubmit('published')}
+              disabled={disabled || saving}
+            >
+              {saving ? (
+                <ActivityIndicator color={t.colors.primaryText} />
+              ) : (
+                <Text style={styles.submitText}>Publish</Text>
+              )}
+            </Pressable>
+          </View>
+        ) : (
+          <Pressable
+            style={[styles.submitBtn, (disabled || saving) && styles.submitDisabled]}
+            onPress={() => handleSubmit()}
+            disabled={disabled || saving}
+          >
+            {saving ? (
+              <ActivityIndicator color={t.colors.primaryText} />
+            ) : (
+              <Text style={styles.submitText}>{submitLabel}</Text>
+            )}
+          </Pressable>
+        )}
 
         {onDelete && (
           <Pressable style={styles.deleteBtn} onPress={onDelete}>
@@ -335,4 +386,31 @@ const styles = StyleSheet.create({
     marginTop: t.spacing.xl,
   },
   deleteText: { color: t.colors.destructive, fontSize: t.fontSize.md, fontWeight: '600' },
+
+  // Status pill
+  statusRow: { flexDirection: 'row', marginBottom: t.spacing.md },
+  statusPill: {
+    paddingHorizontal: t.spacing.md,
+    paddingVertical: t.spacing.xs,
+    borderRadius: t.borderRadius.sm,
+  },
+  statusDraft: { backgroundColor: '#fefce8' },
+  statusPublished: { backgroundColor: '#f0fdf4' },
+  statusPillText: { fontSize: t.fontSize.xs, fontWeight: '700', textTransform: 'uppercase', letterSpacing: 0.5 },
+  statusDraftText: { color: t.colors.warning },
+  statusPublishedText: { color: t.colors.success },
+
+  // Dual draft / publish buttons
+  dualButtonRow: { flexDirection: 'row', gap: t.spacing.sm, marginTop: t.spacing.md },
+  draftBtn: {
+    flex: 1,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.borderRadius.sm,
+    borderWidth: 1,
+    borderColor: t.colors.border,
+    paddingVertical: t.spacing.md,
+    alignItems: 'center',
+  },
+  draftBtnText: { color: t.colors.text, fontSize: t.fontSize.md, fontWeight: '600' },
+  publishBtn: { flex: 1 },
 })

@@ -181,6 +181,14 @@ export const createLocalDB = async ({
     }
   }
 
+  // Build a lookup for collections with drafts enabled (from the menu model).
+  // When drafts are enabled, the replication pull must include draft documents.
+  const draftSlugs = new Set<string>(
+    schema.menuModel?.collections
+      ?.filter((c: { drafts?: boolean }) => c.drafts)
+      .map((c: { slug: string }) => c.slug) ?? []
+  )
+
   // Always start polling replication for initial pull + background sync.
   // This handles the bulk data transfer efficiently (batched REST queries).
   for (const [slug, col] of Object.entries(collections)) {
@@ -191,6 +199,7 @@ export const createLocalDB = async ({
       slug,
       pullInterval: pullInterval || 30_000, // always poll for changes (including deletions)
       livePush: true, // Push enabled — ID reconciliation no longer upserts (no loop)
+      hasDrafts: draftSlugs.has(slug),
     })
   }
 

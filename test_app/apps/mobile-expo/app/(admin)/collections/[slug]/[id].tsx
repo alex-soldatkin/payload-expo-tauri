@@ -3,19 +3,30 @@
  *
  * Reads from local RxDB (reactive — updates instantly when data changes).
  * Writes go to local DB first (instant), sync pushes to server in background.
+ *
+ * Supports:
+ *  - Draft / Publish: when the collection has `versions.drafts` enabled,
+ *    shows dual Save Draft / Publish buttons and a status pill.
+ *  - Versions: when the collection has `versions` enabled, shows a versions
+ *    option under the (...) menu. Versions are fetched from the server
+ *    directly (not local-first) and can be compared and restored.
  */
-import React, { useRef } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
-import { Save } from 'lucide-react-native'
+import { MoreHorizontal, Save } from 'lucide-react-native'
 
 import {
+  DocumentActionsMenu,
   DocumentForm,
   getCollectionLabel,
   getDocumentTitle,
   useAdminSchema,
+  useBaseURL,
+  useAuth,
   useMenuModel,
+  VersionsBottomSheet,
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalDocument, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
 
@@ -27,19 +38,38 @@ export default function DocumentEditScreen() {
   const menuModel = useMenuModel()
   const localDB = useLocalDB()
   const { isReady } = useLocalDBStatus()
+  const baseURL = useBaseURL()
+  const { token } = useAuth()
 
-  const formRef = useRef<{ submit: () => void }>(null)
+  const formRef = useRef<{ submit: () => void; submitWithStatus: (s: 'draft' | 'published') => void }>(null)
 
   // Reactive local document — updates instantly when RxDB data changes
   const { doc, loading, error } = useLocalDocument(localDB, slug, id)
   const { update, remove } = useLocalMutations(localDB, slug)
 
+  // Collection metadata from the menu model
+  const collectionMeta = menuModel?.collections.find((c) => c.slug === slug)
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
-  const useAsTitle = menuModel?.collections.find((c) => c.slug === slug)?.useAsTitle
+  const useAsTitle = collectionMeta?.useAsTitle
 
-  const handleSubmit = async (data: Record<string, unknown>) => {
-    await update(id, data)
+  // Feature flags from collection config
+  const hasDrafts = collectionMeta?.drafts ?? false
+  const hasVersions = collectionMeta?.versions ?? false
+
+  // Bottom sheet state
+  const [actionsMenuVisible, setActionsMenuVisible] = useState(false)
+  const [versionsVisible, setVersionsVisible] = useState(false)
+
+  // API config for direct server calls (versions are server-side only)
+  const apiConfig = useMemo(() => ({ baseURL, token }), [baseURL, token])
+
+  const handleSubmit = async (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => {
+    // Merge status into the data for the local DB write
+    const writeData = options?.status
+      ? { ...data, _status: options.status }
+      : data
+    await update(id, writeData)
   }
 
   const handleDelete = () => {
@@ -64,7 +94,14 @@ export default function DocumentEditScreen() {
     )
   }
 
+  // After a version restore, trigger an immediate pull to pick up the
+  // restored data from the server into the local DB.
+  const handleVersionRestore = () => {
+    localDB?.pullNow(slug)
+  }
+
   const title = doc ? getDocumentTitle(doc as Record<string, unknown>, useAsTitle) : 'Loading...'
+  const docStatus = (doc as Record<string, unknown> | null)?._status as string | undefined
 
   if (!isReady || loading) {
     return (
@@ -93,12 +130,33 @@ export default function DocumentEditScreen() {
         options={{
           title: title,
           headerRight: () => (
-            <Pressable onPress={() => formRef.current?.submit()} style={{ marginRight: 4 }}>
-              <Save size={22} color="#1f1f1f" />
-            </Pressable>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
+              {/* Actions menu (versions, draft/publish actions) */}
+              {(hasVersions || hasDrafts) && (
+                <Pressable onPress={() => setActionsMenuVisible(true)} hitSlop={8}>
+                  <MoreHorizontal size={22} color="#1f1f1f" />
+                </Pressable>
+              )}
+              {/* Save button */}
+              <Pressable
+                onPress={() => {
+                  if (hasDrafts) {
+                    // Default save action: preserve current status
+                    const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
+                    formRef.current?.submitWithStatus(status)
+                  } else {
+                    formRef.current?.submit()
+                  }
+                }}
+                hitSlop={8}
+              >
+                <Save size={22} color="#1f1f1f" />
+              </Pressable>
+            </View>
           ),
         }}
       />
+
       <DocumentForm
         ref={formRef}
         schemaMap={schemaMap}
@@ -106,9 +164,49 @@ export default function DocumentEditScreen() {
         initialData={(doc as Record<string, unknown>) ?? {}}
         onSubmit={handleSubmit}
         onDelete={handleDelete}
-        submitLabel="Update"
+        submitLabel={hasDrafts ? undefined : 'Update'}
+        draftStatus={hasDrafts ? ((docStatus as 'draft' | 'published') ?? 'draft') : undefined}
         contentInsetTop={headerHeight}
       />
+
+      {/* Actions menu bottom sheet */}
+      <DocumentActionsMenu
+        visible={actionsMenuVisible}
+        onClose={() => setActionsMenuVisible(false)}
+        hasVersions={hasVersions}
+        hasDrafts={hasDrafts}
+        currentStatus={docStatus}
+        onViewVersions={() => {
+          setActionsMenuVisible(false)
+          // Small delay to let the actions menu dismiss before opening versions
+          setTimeout(() => setVersionsVisible(true), 300)
+        }}
+        onSaveDraft={() => {
+          formRef.current?.submitWithStatus('draft')
+          setActionsMenuVisible(false)
+        }}
+        onPublish={() => {
+          formRef.current?.submitWithStatus('published')
+          setActionsMenuVisible(false)
+        }}
+        onUnpublish={() => {
+          formRef.current?.submitWithStatus('draft')
+          setActionsMenuVisible(false)
+        }}
+      />
+
+      {/* Versions bottom sheet */}
+      {hasVersions && (
+        <VersionsBottomSheet
+          visible={versionsVisible}
+          onClose={() => setVersionsVisible(false)}
+          slug={slug}
+          documentId={id}
+          apiConfig={apiConfig}
+          schemaMap={schemaMap}
+          onRestore={handleVersionRestore}
+        />
+      )}
     </View>
   )
 }

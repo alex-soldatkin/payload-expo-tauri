@@ -47,6 +47,8 @@ export const buildRxSchema = (slug: string, fields: PayloadFieldDef[]): RxJsonSc
     updatedAt: { type: 'string', maxLength: 50 },
     _deleted: { type: 'boolean' },
     _locallyModified: { type: 'boolean' },
+    /** Payload draft/publish status — present on collections with versions.drafts enabled. */
+    _status: { type: 'string', maxLength: 20 },
   }
 
   const required: string[] = ['id', 'updatedAt', 'createdAt', '_deleted']

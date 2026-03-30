@@ -5,6 +5,19 @@ export type PayloadAPIConfig = {
   token: string | null
 }
 
+/** A version entry returned by Payload's versions REST API. */
+export type VersionDoc<T = Record<string, unknown>> = {
+  id: string
+  parent: string | { id: string }
+  version: T
+  createdAt: string
+  updatedAt: string
+  autosave?: boolean
+  snapshot?: boolean
+  latest?: boolean
+  publishedLocale?: string
+}
+
 /**
  * Error thrown by the API client that preserves the full Payload response body.
  * The `body` property contains the parsed JSON with validation error details.
@@ -118,6 +131,58 @@ export const payloadApi = {
       headers: buildHeaders(config.token),
     })
     if (!res.ok) throw new Error(`Failed to delete ${collection}/${id} (${res.status})`)
+  },
+
+  // --------------- Versions ---------------
+
+  /** Fetch paginated versions for a document. */
+  async findVersions<T = Record<string, unknown>>(
+    config: PayloadAPIConfig,
+    collection: string,
+    parentId: string,
+    params?: {
+      page?: number
+      limit?: number
+      sort?: string
+    },
+  ): Promise<PaginatedDocs<VersionDoc<T>>> {
+    const url = new URL(`${config.baseURL}/api/${collection}/versions`)
+    url.searchParams.set('where', JSON.stringify({ parent: { equals: parentId } }))
+    url.searchParams.set('sort', params?.sort ?? '-updatedAt')
+    if (params?.page) url.searchParams.set('page', String(params.page))
+    if (params?.limit) url.searchParams.set('limit', String(params.limit))
+    url.searchParams.set('depth', '0')
+
+    const res = await fetch(url.toString(), { headers: buildHeaders(config.token) })
+    if (!res.ok) throw new Error(`Failed to fetch versions for ${collection}/${parentId} (${res.status})`)
+    return res.json()
+  },
+
+  /** Fetch a single version by ID. */
+  async findVersionByID<T = Record<string, unknown>>(
+    config: PayloadAPIConfig,
+    collection: string,
+    versionId: string,
+  ): Promise<VersionDoc<T>> {
+    const res = await fetch(`${config.baseURL}/api/${collection}/versions/${versionId}`, {
+      headers: buildHeaders(config.token),
+    })
+    if (!res.ok) throw new Error(`Failed to fetch version ${versionId} (${res.status})`)
+    return res.json()
+  },
+
+  /** Restore a document to a specific version. */
+  async restoreVersion<T = Record<string, unknown>>(
+    config: PayloadAPIConfig,
+    collection: string,
+    versionId: string,
+  ): Promise<T> {
+    const res = await fetch(`${config.baseURL}/api/${collection}/versions/${versionId}`, {
+      method: 'POST',
+      headers: buildHeaders(config.token),
+    })
+    if (!res.ok) await throwAPIError(res, `Failed to restore version ${versionId} (${res.status})`)
+    return (await res.json()).doc
   },
 
   // --------------- Globals ---------------
