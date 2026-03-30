@@ -11,10 +11,13 @@ const config = getDefaultConfig(projectRoot)
 // Watch both the test_app workspace and the payload_universal packages
 config.watchFolders = [workspaceRoot, path.resolve(monoRoot, 'payload_universal/packages')]
 
-// The single copies of react and react-native that everything must use
+// The single copies of react, react-native, and @expo/ui that everything must use.
+// @expo/ui must resolve to the canary version matching the native binary — the
+// workspace may also contain a stable version (55.0.6) with incompatible native views.
 const singletonModules = {
   react: path.resolve(projectRoot, 'node_modules/react'),
   'react-native': path.resolve(projectRoot, 'node_modules/react-native'),
+  '@expo/ui': path.resolve(projectRoot, 'node_modules/@expo/ui'),
 }
 
 config.resolver = {

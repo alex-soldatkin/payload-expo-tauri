@@ -128,6 +128,10 @@ This log captures what has been implemented so far and the current state of the 
 - Added `pnpm.onlyBuiltDependencies` to test_app/package.json for native build scripts.
 - **Fixed critical push duplication bug**: client-generated IDs differ from Payload's MongoDB ObjectIds. Push handler now removes local doc and re-inserts with server-assigned ID after successful POST. Strips client `id` from body.
 - Used legacy `Swipeable` instead of `ReanimatedSwipeable` — Reanimated worklets crash when combined with expo-router `Link` in the component tree.
+- **Fixed "Language en not supported"** in admin-schema endpoint — used `req.payload.config` (already sanitized) instead of raw config closure that failed to re-resolve translations in compiled server chunks.
+- **Fixed GestureHandlerRootView** early return in `_layout.tsx` that bypassed the wrapper during loading state.
+- **Replaced Swipeable with Link.Menu** — both legacy Swipeable and ReanimatedSwipeable crash on iOS 26 with PanGestureHandler errors. Delete now uses native context menu.
+- **Fixed CocoaPods UTF-8 crash** with Ruby 4.0 — added `LANG=en_US.UTF-8` to `~/.zshrc`.
 
 ### Phase 5 — Sync duplication fix + swipe-to-delete (2026-03-30)
 - **Fixed critical duplication bug** (65,000+ duplicate posts created):
@@ -150,6 +154,50 @@ This log captures what has been implemented so far and the current state of the 
 - **Root `node_modules` symlink** (`payload_expo_tauri/node_modules → test_app/node_modules`) is **required** for Turbopack. The `turbopack.root` is set to the monorepo root, and Turbopack resolves `@floating-ui/react`, `clsx`, and other transitive deps of `payload-main` through this symlink. **Do not delete it during cleanup.**
 - **`.next` cache**: If Turbopack fails after config changes, delete `test_app/apps/server/.next` and restart.
 
+### Phase 6 — @expo/ui native components + modular architecture (2026-03-30)
+- **@expo/ui integration** with cross-platform native component registry:
+  - Metro platform file resolution: `native.ios.ts` / `native.android.ts` / `native.ts` (no runtime `Platform.OS` checks for component loading)
+  - iOS: SwiftUI components (Toggle, DatePicker, Picker, DisclosureGroup, Text, Host)
+  - Android: Jetpack Compose components (Switch, DatePicker, SegmentedButton, Text, Host)
+  - Registry type extracted to `types.ts` (avoids circular imports from Metro platform resolution)
+  - Runtime check for ExpoUI native module presence (`NativeModulesProxy.ExpoUI`) — gracefully falls back if dev client hasn't been rebuilt with @expo/ui
+- **Field component upgrades** (6 field types → native):
+  - CheckboxField: SwiftUI Toggle / JC Switch / RN Switch
+  - DateField: SwiftUI DatePicker / JC DatePicker / custom wheel modal
+  - SelectField: SwiftUI Picker (menu) / JC SegmentedButton / RNCPicker / SimpleOptionList
+  - RadioField: SwiftUI Picker (segmented ≤5, menu >5) / JC SegmentedButton / same
+  - CollapsibleField: SwiftUI DisclosureGroup / LayoutAnimation accordion
+  - TabsField: SwiftUI Picker (segmented ≤5 tabs) / JC SegmentedButton / custom tab bar
+- **Modular architecture refactor**:
+  - Extracted shared `FieldShell.tsx` (was duplicated in inputs.tsx and pickers.tsx)
+  - Created `fields/shared/` directory with barrel exports: FieldShell, nativeComponents, types
+  - Removed all scattered `try { require('@expo/ui/...') } catch {}` from individual field files
+  - All field files now import from `./shared` — single source of truth for native components
+  - `NativeHost.tsx` simplified to use centralized registry
+- **Expo Go compatibility**:
+  - `@react-native-picker/picker` import wrapped in try/catch (native module not in Expo Go)
+  - Added `SimpleOptionList` pure-JS chip-based fallback for select/radio fields
+  - Three-tier fallback chain: @expo/ui native → RN native → pure JS
+- **Admin schema endpoint fix** ("Language en not supported"):
+  - Root cause: endpoint called `buildConfig()` on raw config inside handler; translations module couldn't resolve `en` language in compiled server chunk context
+  - Fix: use `req.payload.config` (already-sanitized config from running Payload instance) instead of `getConfig()` raw closure
+  - `buildAdminSchema` now detects already-sanitized configs via `i18n.supportedLanguages` check
+- **GestureHandler fix**:
+  - Root layout early return (`!ready`) bypassed `GestureHandlerRootView` — moved it to always wrap entire tree
+  - Replaced legacy `Swipeable` (crashes on iOS 26 with PanGestureHandler error) with `Link.Menu` context menu delete action
+  - Delete action now in iOS native context menu alongside "Open" (long-press peek/pop preserved)
+- **EAS Build configuration**:
+  - Created `eas.json` with profiles: development (device .ipa), development-simulator (.app), preview, production
+  - Installed `expo-dev-client` for dev client builds
+  - Enabled `NSAllowsArbitraryLoads` in Info.plist for dev builds (allows http:// to local server)
+  - Added build artifacts to `.gitignore` (*.app, *.ipa, build-*.tar.gz, build/)
+  - `requireCommit: true` in eas.json CLI config
+  - Successfully built simulator .app and device .ipa via `eas build --local`
+- **iOS 26 compatibility**:
+  - Downloaded iOS 26.2 simulator runtime (was 26.0, Xcode 26.3 requires 26.2)
+  - Fixed CocoaPods UTF-8 encoding crash with Ruby 4.0 (`export LANG=en_US.UTF-8`)
+  - Added locale exports to `~/.zshrc` for persistence
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.
@@ -160,5 +208,9 @@ This log captures what has been implemented so far and the current state of the 
 - Start everything: `pnpm -C test_app dev:all`
 - Server only: `pnpm -C test_app dev:server`
 - Tauri desktop: `pnpm -C test_app dev:desktop`
-- Mobile: `pnpm -C test_app dev:mobile`
+- Mobile (Expo Go): `pnpm -C test_app dev:mobile`
+- Mobile (dev client): `cd test_app/apps/mobile-expo && npx expo start --dev-client`
 - Install deps: `cd test_app && pnpm install`
+- EAS build (simulator): `cd test_app/apps/mobile-expo && eas build --platform ios --profile development-simulator --local`
+- EAS build (device .ipa): `cd test_app/apps/mobile-expo && eas build --platform ios --profile development --local`
+- Install sim build: `xcrun simctl install booted PayloadUniversalMobile.app`

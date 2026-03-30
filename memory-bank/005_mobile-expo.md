@@ -12,7 +12,7 @@ Expo UI components
 - The docs label Jetpack Compose as alpha and SwiftUI as beta.
 - Use Expo UI only for targeted components where native platform UI is a must. Keep the main admin UI on React Native plus NativeWind for consistency across platforms.
 
-Status (2026-03-29)
+Status (2026-03-30)
 - apps/mobile-expo has auth gate, admin tab navigation, and local-first data layer.
 - NativeWind configured; admin-native provides DocumentList, DocumentForm, FieldRenderer.
 - Local-first architecture via RxDB + custom SQLite storage (no trial limits):
@@ -22,11 +22,33 @@ Status (2026-03-29)
   - Upload queue with retry logic via `UploadQueueManager`.
 - PayloadNativeProvider handles auth (JWT), schema fetching, token persistence via SecureStore.
 - Sync progress shown on splash screen (progress bar + collection counter); toasts on sync complete/error.
-- Select/Radio fields use native @react-native-picker/picker; multi-select uses toggle chips.
 - Collection cards have configurable summary fields (gear icon → field picker → persisted in AsyncStorage).
 - Link.Preview (iOS peek/pop) on document list rows and relationship field selected values.
+- Link.Menu context menu on collection cards with "Open" and "Delete" actions.
 - App no longer blocks on DB init — auth gate shows UI immediately, screens show own loading states.
 - Polyfill `globalThis.crypto` with expo-crypto for RxDB compatibility on Hermes.
+
+@expo/ui native component integration (2026-03-30)
+- Installed `@expo/ui` (55.0.0-canary) and `expo-dev-client` for dev client builds.
+- Created centralized native component registry using Metro platform resolution:
+  - `fields/shared/native.ios.ts` — loads SwiftUI components from `@expo/ui/swift-ui`
+  - `fields/shared/native.android.ts` — loads Jetpack Compose components from `@expo/ui/jetpack-compose`
+  - `fields/shared/native.ts` — default empty registry (web/unsupported platforms)
+  - `fields/shared/types.ts` — `NativeComponentRegistry` type (separate file to avoid circular imports)
+- Field components upgraded to use native @expo/ui with three-tier fallback:
+  - CheckboxField: SwiftUI Toggle (iOS) / JC Switch (Android) / RN Switch (fallback)
+  - DateField: SwiftUI DatePicker / JC DatePicker / custom wheel modal (fallback)
+  - SelectField: SwiftUI Picker / JC SegmentedButton / @react-native-picker or SimpleOptionList (fallback)
+  - RadioField: SwiftUI Picker segmented / JC SegmentedButton / same fallback
+  - CollapsibleField: SwiftUI DisclosureGroup (iOS only) / LayoutAnimation accordion (fallback)
+  - TabsField: SwiftUI Picker segmented / JC SegmentedButton / custom tab bar (fallback)
+- `NativeHost.tsx` wrapper bridges @expo/ui Host for both platforms.
+- Extracted shared `FieldShell.tsx` (was duplicated in inputs.tsx and pickers.tsx).
+- `@react-native-picker/picker` import made safe (try/catch) for Expo Go compatibility.
+- Added `SimpleOptionList` pure-JS fallback for select/radio when no native picker available.
+- `native.ios.ts` checks for `ExpoUI` native module presence before enabling (graceful fallback if dev client not rebuilt).
+- EAS build configured: `eas.json` with development, development-simulator, preview, production profiles.
+- Dev client `.app` (simulator) and `.ipa` (device) builds working via `eas build --local`.
 
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.

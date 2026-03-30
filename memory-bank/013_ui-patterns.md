@@ -70,33 +70,69 @@ try { Link = require('expo-router').Link } catch {}
 
 ## Select / Radio Fields
 
-### Single-select
-Use `@react-native-picker/picker` — native iOS wheel / Android dropdown:
+### Three-tier fallback (2026-03-30)
+1. **@expo/ui native** (preferred): SwiftUI Picker / JC SegmentedButton — loaded via `nativeComponents` registry
+2. **@react-native-picker/picker** (fallback): Native iOS wheel / Android dropdown — loaded via try/catch dynamic import (not available in Expo Go)
+3. **SimpleOptionList** (pure JS): Chip-based option selector — always works, no native deps
+
+### Single-select (native)
 ```tsx
-<Picker selectedValue={value} onValueChange={onChange}>
-  <Picker.Item label="Select..." value="" />
-  {options.map(opt => <Picker.Item key={opt.value} label={opt.label} value={opt.value} />)}
-</Picker>
+// Uses nativeComponents.Picker + nativeComponents.Text from shared registry
+<NativeHost>
+  <NativePicker selection={value} onSelectionChange={onChange}>
+    <NativeText modifiers={[{ tag: '' }]}>Select...</NativeText>
+    {options.map(opt => <NativeText key={opt.value} modifiers={[{ tag: opt.value }]}>{opt.label}</NativeText>)}
+  </NativePicker>
+</NativeHost>
+```
+
+### Radio (segmented for ≤5 options)
+```tsx
+<NativePicker selection={value} onSelectionChange={onChange} modifiers={[{ pickerStyle: 'segmented' }]}>
+  {options.map(opt => <NativeText modifiers={[{ tag: opt.value }]}>{opt.label}</NativeText>)}
+</NativePicker>
 ```
 
 ### Multi-select (`hasMany: true`)
-Use toggle chips — all options inline as rounded buttons:
-```tsx
-<View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-  {options.map(opt => (
-    <Pressable
-      key={opt.value}
-      style={[styles.chip, selected.includes(opt.value) && styles.chipSelected]}
-      onPress={() => toggle(opt.value)}
-    >
-      <Text>{opt.label}</Text>
-    </Pressable>
-  ))}
-</View>
-```
+Uses toggle chips on all platforms (no native multi-select equivalent).
 
 ### Relationship fields
 Use searchable BottomSheet (NOT native picker) — relationships query across a collection with potentially many documents and need search + scroll.
+
+---
+
+## @expo/ui Native Component Registry (2026-03-30)
+
+### Architecture
+Metro platform file resolution — no runtime `Platform.OS` checks for component loading:
+```
+fields/shared/
+├── types.ts           # NativeComponentRegistry type + emptyRegistry (no platform variants)
+├── native.ios.ts      # Loads from @expo/ui/swift-ui
+├── native.android.ts  # Loads from @expo/ui/jetpack-compose
+├── native.ts          # Default: emptyRegistry (web/unsupported)
+├── FieldShell.tsx     # Shared label/desc/error wrapper
+└── index.ts           # Barrel export
+```
+
+### Usage in field components
+```tsx
+import { nativeComponents } from './shared'
+import { NativeHost } from './NativeHost'
+
+// Check availability, render native or fallback
+export const CheckboxField = (props) =>
+  nativeComponents.Toggle
+    ? <CheckboxFieldNative {...props} />
+    : <CheckboxFieldFallback {...props} />
+```
+
+### Key rules
+1. **Never import `@expo/ui` directly in field files** — always go through `nativeComponents` registry
+2. **Types go in `types.ts`** (no `.ios.ts`/`.android.ts` variants) to avoid circular imports from Metro resolution
+3. **`native.ios.ts` checks native module presence** before enabling (handles case where JS package is installed but dev client hasn't been rebuilt)
+4. **`@react-native-picker/picker` uses dynamic require** (try/catch) since it's not available in Expo Go
+5. **Three-tier fallback**: @expo/ui → RN native → pure JS (always works)
 
 ---
 
@@ -204,33 +240,42 @@ if (INTERNAL_SLUGS.has(slug) || slug.startsWith('payload-')) continue
 
 ---
 
-## Swipe-to-Delete
+## Delete Actions (2026-03-30)
 
-### Use legacy `Swipeable`, NOT `ReanimatedSwipeable`
-`ReanimatedSwipeable` uses Reanimated worklets that crash with a native SIGABRT when combined with expo-router's `Link` component in the same tree. Use the legacy `Swipeable` from `react-native-gesture-handler/Swipeable` instead.
+### Context menu delete (current approach)
+On iOS 26, both legacy `Swipeable` and `ReanimatedSwipeable` cause `PanGestureHandler` crashes. Delete is now handled via the native `Link.Menu` context menu alongside "Open":
 
 ```tsx
-import Swipeable from 'react-native-gesture-handler/Swipeable'
-
-<Swipeable
-  friction={1.5}
-  rightThreshold={40}
-  renderRightActions={() => <DeleteButton />}
-  onSwipeableOpen={(dir) => { if (dir === 'right') confirmDelete() }}
-  overshootRight
->
-  {cardContent}
-</Swipeable>
+// In screen file (inside Expo Router tree)
+const renderRow = useCallback(({ item, rowContent, onPress }) => (
+  <Link href={href} push>
+    <Link.Trigger>{rowContent}</Link.Trigger>
+    <Link.Preview />
+    <Link.Menu>
+      <Link.MenuAction icon="doc.text" onPress={onPress}>Open</Link.MenuAction>
+      <Link.MenuAction icon="trash" destructive onPress={() => confirmDelete(item)}>Delete</Link.MenuAction>
+    </Link.Menu>
+  </Link>
+), [slug, handleDelete])
 ```
 
-### Full card height
-Use `alignSelf: 'stretch'` on the action container + `flex: 1` on the button inside.
-
-### Full swipe = confirmation dialog
-`onSwipeableOpen` fires when user swipes all the way. Show `Alert.alert()` — never delete without confirmation.
+### Shake-to-undo (still works)
+Uses `expo-sensors` DeviceMotion to detect shake → re-inserts deleted doc.
 
 ### `GestureHandlerRootView` required
-Must wrap the entire app tree (in root `_layout.tsx`) for any gesture handler components to work.
+Must wrap the **entire** app tree including loading states. The root `_layout.tsx` must never return early without `GestureHandlerRootView`:
+```tsx
+// WRONG — loading state bypasses GestureHandlerRootView
+if (!ready) return <ActivityIndicator />
+return <GestureHandlerRootView>...</GestureHandlerRootView>
+
+// CORRECT — always wrapped
+return (
+  <GestureHandlerRootView style={{ flex: 1 }}>
+    {!ready ? <ActivityIndicator /> : <App />}
+  </GestureHandlerRootView>
+)
+```
 
 ---
 
