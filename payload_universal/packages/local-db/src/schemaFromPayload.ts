@@ -59,7 +59,7 @@ export const buildRxSchema = (slug: string, fields: PayloadFieldDef[]): RxJsonSc
   }
 
   return {
-    version: 1,
+    version: 0,
     primaryKey: 'id',
     type: 'object',
     properties: properties as any,

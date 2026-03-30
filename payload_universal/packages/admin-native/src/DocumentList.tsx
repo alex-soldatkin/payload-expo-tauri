@@ -8,7 +8,7 @@
  *  - Active filter chip indicators
  *  - Pull-to-refresh and infinite scroll
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -18,8 +18,9 @@ import {
   StyleSheet,
   Text,
   View,
+  Alert,
 } from 'react-native'
-import { Link } from 'expo-router'
+import Swipeable from 'react-native-gesture-handler/Swipeable'
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
@@ -38,6 +39,8 @@ type Props = {
   onPress: (doc: Record<string, unknown>) => void
   /** Called when "Create" is tapped */
   onCreate?: () => void
+  /** Called when a document is swiped to delete. If provided, enables swipe-to-delete. */
+  onDelete?: (doc: Record<string, unknown>) => void
   /** Number of docs per page */
   limit?: number
   /** Field name used as the display title for each row */
@@ -53,10 +56,18 @@ type Props = {
   /** Fields to search across for text search */
   searchFields?: string[]
   /**
-   * Build an href for a document row — enables Link.Preview on long-press (iOS).
-   * Example: `(doc) => \`/(admin)/collections/posts/\${doc.id}\``
+   * Build an href for a document row (informational — used by renderRow if provided).
    */
   docHref?: (doc: Record<string, unknown>) => string
+  /**
+   * Custom row renderer — allows the parent to wrap rows with Link.Preview etc.
+   * Receives the default row content, the doc, and onPress handler.
+   */
+  renderRow?: (props: {
+    item: Record<string, unknown>
+    rowContent: React.ReactElement
+    onPress: () => void
+  }) => React.ReactElement
   /**
    * Optional external data source (e.g. from local-db).
    * When provided, the component skips its own REST API calls
@@ -76,12 +87,43 @@ type Props = {
   summaryFields?: string[]
   /** Called when the user changes the summary field selection via the gear icon. */
   onSummaryFieldsChange?: (fields: string[]) => void
+  /** Externally controlled: whether the summary picker bottom sheet is open. */
+  summaryPickerOpen?: boolean
+  /** Called when the summary picker should close. */
+  onSummaryPickerClose?: () => void
+  /** Externally controlled: whether the filter bottom sheet is open. */
+  filterSheetOpen?: boolean
+  /** Called when the filter sheet should close. */
+  onFilterSheetClose?: () => void
+}
+
+/** Swipe-to-delete right action. */
+function renderDeleteAction(
+  item: Record<string, unknown>,
+  onConfirmDelete: (doc: Record<string, unknown>) => void,
+) {
+  return (
+    <View style={swipeStyles.actionContainer}>
+      <Pressable
+        style={swipeStyles.deleteBtn}
+        onPress={() => {
+          Alert.alert('Delete', 'Are you sure you want to delete this item?', [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Delete', style: 'destructive', onPress: () => onConfirmDelete(item) },
+          ])
+        }}
+      >
+        <Text style={swipeStyles.deleteText}>Delete</Text>
+      </Pressable>
+    </View>
+  )
 }
 
 export const DocumentList: React.FC<Props> = ({
   collection,
   onPress,
   onCreate,
+  onDelete,
   limit = 20,
   titleField,
   renderSubtitle,
@@ -90,9 +132,14 @@ export const DocumentList: React.FC<Props> = ({
   searchText: externalSearchText,
   searchFields,
   docHref,
+  renderRow,
   localData,
   summaryFields = [],
   onSummaryFieldsChange,
+  summaryPickerOpen: externalPickerOpen,
+  onSummaryPickerClose,
+  filterSheetOpen: externalFilterOpen,
+  onFilterSheetClose,
 }) => {
   const { baseURL, auth } = usePayloadNative()
   const [data, setData] = useState<PaginatedDocs | null>(null)
@@ -100,8 +147,12 @@ export const DocumentList: React.FC<Props> = ({
   const [refreshing, setRefreshing] = useState(false)
   const [page, setPage] = useState(1)
   const [error, setError] = useState<string | null>(null)
-  const [filterSheetOpen, setFilterSheetOpen] = useState(false)
-  const [summaryPickerOpen, setSummaryPickerOpen] = useState(false)
+  const [internalFilterOpen, setInternalFilterOpen] = useState(false)
+  const filterSheetOpen = externalFilterOpen ?? internalFilterOpen
+  const closeFilterSheet = onFilterSheetClose ?? (() => setInternalFilterOpen(false))
+  const [internalPickerOpen, setInternalPickerOpen] = useState(false)
+  const summaryPickerOpen = externalPickerOpen ?? internalPickerOpen
+  const closeSummaryPicker = onSummaryPickerClose ?? (() => setInternalPickerOpen(false))
 
   // When local data is provided, use it as the primary data source
   const effectiveDocs = localData?.docs ?? data?.docs ?? []
@@ -270,70 +321,62 @@ export const DocumentList: React.FC<Props> = ({
       </View>
     )
 
-    // When docHref is provided, wrap in Link with long-press preview (iOS)
-    if (docHref) {
-      const href = docHref(item)
-      return (
-        <Link href={href as any} push style={{ marginBottom: t.spacing.sm }}>
-          <Link.Trigger>{rowContent}</Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction icon="doc.text" onPress={() => onPress(item)}>
-              Open
-            </Link.MenuAction>
-          </Link.Menu>
-        </Link>
+    // Determine the inner content (custom renderRow or default Pressable)
+    let inner: React.ReactElement
+    if (renderRow) {
+      inner = renderRow({ item, rowContent, onPress: () => onPress(item) })
+    } else {
+      inner = (
+        <Pressable style={styles.row} onPress={() => onPress(item)}>
+          <View style={styles.rowContent}>
+            <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
+            {subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>}
+          </View>
+          <Text style={styles.rowChevron}>›</Text>
+        </Pressable>
       )
     }
 
-    return (
-      <Pressable style={styles.row} onPress={() => onPress(item)}>
-        <View style={styles.rowContent}>
-          <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
-          {subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>}
-        </View>
-        <Text style={styles.rowChevron}>›</Text>
-      </Pressable>
-    )
+    // Wrap with swipe-to-delete when onDelete is provided
+    if (onDelete) {
+      return (
+        <Swipeable
+          friction={1.5}
+          rightThreshold={40}
+          renderRightActions={() => renderDeleteAction(item, onDelete)}
+          onSwipeableOpen={(direction) => {
+            if (direction === 'right') {
+              Alert.alert('Delete', 'Are you sure you want to delete this item?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => onDelete(item) },
+              ])
+            }
+          }}
+          overshootRight
+        >
+          {inner}
+        </Swipeable>
+      )
+    }
+
+    return inner
   }
 
   // --- Header component rendered above the list ---
   const ListHeader = () => (
     <View>
-      {/* Top row: Create button + gear icon */}
-      <View style={styles.headerTopRow}>
-        {onCreate && (
-          <Pressable style={[styles.createBtn, { flex: 1 }]} onPress={onCreate}>
-            <Text style={styles.createText}>+ Create new</Text>
-          </Pressable>
-        )}
-        {onSummaryFieldsChange && (
-          <Pressable
-            style={styles.gearBtn}
-            onPress={() => setSummaryPickerOpen(true)}
-            hitSlop={8}
-          >
-            <Text style={styles.gearIcon}>⚙</Text>
-          </Pressable>
-        )}
-      </View>
-
-      {/* Filter chips / add filter */}
-      <View style={styles.filterRow}>
-        {hasActiveFilters ? (
+      {/* Active filter chips (only shown when filters are applied) */}
+      {hasActiveFilters && (
+        <View style={styles.filterRow}>
           <FilterChips
             filters={filters}
             searchText={searchText}
             onRemove={removeFilter}
             onClearAll={clearAllFilters}
-            onAddFilter={() => setFilterSheetOpen(true)}
+            onAddFilter={closeFilterSheet}
           />
-        ) : filterableFields.length > 0 ? (
-          <Pressable style={styles.filterBtn} onPress={() => setFilterSheetOpen(true)}>
-            <Text style={styles.filterBtnText}>Filters</Text>
-          </Pressable>
-        ) : null}
-      </View>
+        </View>
+      )}
 
       {/* Result count when filters active */}
       {hasActiveFilters && effectiveTotalDocs > 0 && (
@@ -369,6 +412,7 @@ export const DocumentList: React.FC<Props> = ({
         data={effectiveDocs}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
+        extraData={summaryFields}
         ListHeaderComponent={ListHeader}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.4}
@@ -376,10 +420,7 @@ export const DocumentList: React.FC<Props> = ({
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        contentContainerStyle={[
-          styles.listContent,
-          contentInsetTop > 0 && { paddingTop: contentInsetTop },
-        ]}
+        contentContainerStyle={styles.listContent}
         ListEmptyComponent={
           <View style={styles.emptyCenter}>
             <Text style={styles.emptyText}>
@@ -400,14 +441,14 @@ export const DocumentList: React.FC<Props> = ({
       {/* Filter bottom sheet */}
       <FilterBottomSheet
         visible={filterSheetOpen}
-        onClose={() => setFilterSheetOpen(false)}
+        onClose={closeFilterSheet}
         fields={filterableFields}
-        onApply={(f) => { addFilter(f); setFilterSheetOpen(false) }}
+        onApply={(f) => { addFilter(f); closeFilterSheet() }}
       />
 
       {/* Summary fields picker bottom sheet */}
       {onSummaryFieldsChange && (
-        <BottomSheet visible={summaryPickerOpen} onClose={() => setSummaryPickerOpen(false)} height={0.55}>
+        <BottomSheet visible={summaryPickerOpen} onClose={closeSummaryPicker} height={0.55}>
           <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
           <Text style={sfStyles.sheetHint}>Select fields to show on each card below the title.</Text>
           <FlatList
@@ -456,7 +497,7 @@ export const DocumentList: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: t.colors.background },
-  listContent: { paddingHorizontal: t.spacing.lg, paddingBottom: 100 },
+  listContent: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.md, paddingBottom: 100, gap: t.spacing.md },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: t.spacing.xl },
 
   // Create button
@@ -468,17 +509,8 @@ const styles = StyleSheet.create({
   },
   createText: { color: t.colors.primaryText, fontSize: t.fontSize.md, fontWeight: '600' },
 
-  // Filter row
+  // Filter row (only visible when filters are active)
   filterRow: { marginVertical: t.spacing.xs },
-  filterBtn: {
-    alignSelf: 'flex-start',
-    borderWidth: 1,
-    borderColor: t.colors.border,
-    borderRadius: 20,
-    paddingHorizontal: t.spacing.md,
-    paddingVertical: t.spacing.xs + 2,
-  },
-  filterBtnText: { fontSize: t.fontSize.sm, color: t.colors.text, fontWeight: '500' },
 
   resultCount: {
     fontSize: t.fontSize.xs,
@@ -515,7 +547,6 @@ const styles = StyleSheet.create({
     backgroundColor: t.colors.surface,
     borderRadius: t.borderRadius.md,
     padding: t.spacing.lg,
-    marginBottom: t.spacing.sm,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -556,6 +587,26 @@ const styles = StyleSheet.create({
   emptyText: { color: t.colors.textMuted, fontSize: t.fontSize.md },
   clearFiltersBtn: { marginTop: t.spacing.md },
   clearFiltersText: { color: t.colors.primary, fontSize: t.fontSize.sm, fontWeight: '600' },
+})
+
+// Swipe-to-delete styles
+const swipeStyles = StyleSheet.create({
+  actionContainer: {
+    width: 80,
+    marginLeft: t.spacing.xs,
+  },
+  deleteBtn: {
+    flex: 1,
+    backgroundColor: t.colors.destructive ?? '#dc2626',
+    borderRadius: t.borderRadius.md,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  deleteText: {
+    color: '#fff',
+    fontSize: t.fontSize.sm,
+    fontWeight: '700',
+  },
 })
 
 // Summary field picker styles

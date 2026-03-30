@@ -54,6 +54,7 @@ import {
 } from 'rxdb'
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory'
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder'
+import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema'
 
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { buildRxSchema, extractFieldDefs, type PayloadDoc } from './schemaFromPayload'
@@ -69,6 +70,7 @@ import {
 // Add plugins (dev-mode plugin omitted — it requires a storage validator wrapper
 // which adds overhead and provides little value with our permissive JSON schemas)
 addRxPlugin(RxDBQueryBuilderPlugin)
+addRxPlugin(RxDBMigrationSchemaPlugin)
 
 /** Track the singleton database instance to avoid DB9 (duplicate database) errors. */
 let _existingDB: PayloadLocalDB | null = null
@@ -131,16 +133,32 @@ export const createLocalDB = async ({
   const collections: Record<string, RxCollection<PayloadDoc>> = {}
   const replications: Record<string, RxReplicationState<PayloadDoc, any>> = {}
 
-  // Create an RxDB collection for each Payload collection.
+  // Skip Payload's internal collections — they don't need local-first sync
+  // and often return 403/501 when queried with a regular user token.
+  const INTERNAL_SLUGS = new Set([
+    'payload-preferences',
+    'payload-migrations',
+    'payload-locked-documents',
+    'payload-kv',
+    '_sync_tombstones',
+  ])
+
+  // Create an RxDB collection for each user-facing Payload collection.
   // If schema version changed (e.g. after an app update), the old collection
   // is silently removed and re-created with the new schema.
   for (const [slug, serializedMap] of Object.entries(schema.collections)) {
+    if (INTERNAL_SLUGS.has(slug) || slug.startsWith('payload-')) continue
     const fieldDefs = extractFieldDefs(serializedMap as Array<[string, unknown]>, slug)
     const rxSchema = buildRxSchema(slug, fieldDefs)
 
     try {
       const created = await db.addCollections({
-        [slug]: { schema: rxSchema },
+        [slug]: {
+          schema: rxSchema,
+          // If schema version changed, drop old data and repull from server
+          migrationStrategies: {},
+          autoMigrate: true,
+        },
       })
       collections[slug] = created[slug]
     } catch (err) {
@@ -150,7 +168,11 @@ export const createLocalDB = async ({
           await db.collections[slug].remove()
         }
         const created = await db.addCollections({
-          [slug]: { schema: rxSchema },
+          [slug]: {
+            schema: rxSchema,
+            migrationStrategies: {},
+            autoMigrate: true,
+          },
         })
         collections[slug] = created[slug]
       } catch (retryErr) {
@@ -159,33 +181,34 @@ export const createLocalDB = async ({
     }
   }
 
-  // Start replication: WebSocket (real-time) or polling (fallback)
+  // Always start polling replication for initial pull + background sync.
+  // This handles the bulk data transfer efficiently (batched REST queries).
+  for (const [slug, col] of Object.entries(collections)) {
+    replications[slug] = startReplication({
+      baseURL,
+      token,
+      collection: col,
+      slug,
+      pullInterval: wsURL ? 0 : pullInterval, // disable polling interval if WS handles real-time
+    })
+  }
+
+  // If WebSocket URL is provided, also start WS sync for real-time push notifications.
+  // WS handles instant change events; polling handles the initial bulk pull + push.
   let syncState: SyncReplicationState | null = null
 
   if (wsURL) {
-    // WebSocket-driven sync — real-time push, field-level merge
     syncState = startSyncReplication({
       baseURL,
       wsURL,
       token,
       collections,
     })
-  } else {
-    // Polling-based replication (legacy fallback)
-    for (const [slug, col] of Object.entries(collections)) {
-      replications[slug] = startReplication({
-        baseURL,
-        token,
-        collection: col,
-        slug,
-        pullInterval,
-      })
-    }
   }
 
   // Create the local-only upload queue collection (NOT replicated)
   const uploadCollections = await db.addCollections({
-    [UPLOAD_QUEUE_COLLECTION]: { schema: uploadQueueSchema },
+    [UPLOAD_QUEUE_COLLECTION]: { schema: uploadQueueSchema, migrationStrategies: {}, autoMigrate: true },
   })
   const uploadCollection = uploadCollections[UPLOAD_QUEUE_COLLECTION] as RxCollection<PendingUploadItem>
 

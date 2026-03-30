@@ -16,6 +16,8 @@ import * as SecureStore from 'expo-secure-store'
 import * as Notifications from 'expo-notifications'
 import { StatusBar } from 'expo-status-bar'
 import { SafeAreaProvider } from 'react-native-safe-area-context'
+import { GestureHandlerRootView } from 'react-native-gesture-handler'
+
 
 import {
   PayloadNativeProvider,
@@ -205,6 +207,7 @@ export default function RootLayout() {
   }
 
   return (
+    <GestureHandlerRootView style={{ flex: 1 }}>
     <SafeAreaProvider>
       <PayloadNativeProvider
         baseURL={baseURL}
@@ -219,5 +222,6 @@ export default function RootLayout() {
         </LocalDBGate>
       </PayloadNativeProvider>
     </SafeAreaProvider>
+    </GestureHandlerRootView>
   )
 }

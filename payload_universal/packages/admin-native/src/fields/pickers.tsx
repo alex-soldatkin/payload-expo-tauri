@@ -13,7 +13,9 @@ import {
   View,
 } from 'react-native'
 import { Picker } from '@react-native-picker/picker'
-import { Link } from 'expo-router'
+// Dynamic import — expo-router is a peer dep, may resolve differently in workspace
+let Link: any = null
+try { Link = require('expo-router').Link } catch { /* previews disabled */ }
 
 import type {
   ClientRadioField,
@@ -320,7 +322,7 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled || field.admin?.readOnly}
       >
-        {selectedHref && displayValue ? (
+        {selectedHref && displayValue && Link?.Trigger ? (
           <Link href={selectedHref as any} push style={{ flex: 1 }}>
             <Link.Trigger>
               <Text style={styles.pickerText} numberOfLines={1}>{String(displayValue)}</Text>
@@ -338,6 +340,8 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
               </Link.MenuAction>
             </Link.Menu>
           </Link>
+        ) : displayValue ? (
+          <Text style={styles.pickerText} numberOfLines={1}>{String(displayValue)}</Text>
         ) : (
           <Text style={[styles.pickerText, styles.pickerPlaceholder]}>
             {`Select ${relationTo}...`}
