@@ -18,7 +18,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#f6f4f1"
-      }
+      },
+      "package": "com.alexsoldatkin.payloaduniversalmobile"
     },
     "plugins": [
       "expo-router",
