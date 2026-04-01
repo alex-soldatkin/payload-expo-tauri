@@ -342,9 +342,7 @@ const TabsFieldFallback: React.FC<FieldComponentProps<ClientTabsField>> = ({
 }
 
 export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = (props) =>
-  nativeComponents.Picker && nativeComponents.Text
-    ? <TabsFieldNative {...props} />
-    : <TabsFieldFallback {...props} />
+  <TabsFieldFallback {...props} />
 
 // ---------------------------------------------------------------------------
 // Array

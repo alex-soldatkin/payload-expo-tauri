@@ -59,6 +59,12 @@ export type NativeComponentRegistry = {
     children?: React.ReactNode
     modifiers?: any[]
   }> | null
+
+  /** Modifier factory: creates a `tag` modifier for Picker options. */
+  tag: ((value: string | number) => { $type: string; tag: string | number }) | null
+
+  /** Modifier factory: creates a `pickerStyle` modifier. */
+  pickerStyle: ((style: string) => { $type: string; style: string }) | null
 }
 
 /** Empty registry — all components null, nothing available. */
@@ -70,4 +76,6 @@ export const emptyRegistry: NativeComponentRegistry = {
   Picker: null,
   DisclosureGroup: null,
   Text: null,
+  tag: null,
+  pickerStyle: null,
 }

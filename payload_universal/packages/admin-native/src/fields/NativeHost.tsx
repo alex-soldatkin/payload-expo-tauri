@@ -18,7 +18,12 @@ export const isNativeUIAvailable = nativeComponents.isAvailable
 
 type NativeHostProps = {
   children: React.ReactNode
-  /** Match native content size to React Native layout. Defaults to true. */
+  /**
+   * Match native content size to React Native layout.
+   * - true: match both width and height (default for inline components like Toggle)
+   * - { width: false, height: true }: stretch width to RN parent, match height to content
+   *   (used for Picker/Select to fill available width)
+   */
   matchContents?: boolean | { width?: boolean; height?: boolean }
   style?: StyleProp<ViewStyle>
 }

@@ -46,9 +46,11 @@ Status (2026-03-30)
 - Extracted shared `FieldShell.tsx` (was duplicated in inputs.tsx and pickers.tsx).
 - `@react-native-picker/picker` import made safe (try/catch) for Expo Go compatibility.
 - Added `SimpleOptionList` pure-JS fallback for select/radio when no native picker available.
-- `native.ios.ts` checks for `ExpoUI` native module presence before enabling (graceful fallback if dev client not rebuilt).
+- Metro resolver pins `@expo/ui` (and all subpaths like `@expo/ui/swift-ui`) to the app's own canary version via custom `resolveRequest` in `metro.config.js`. Critical in pnpm monorepos where multiple versions may coexist.
 - EAS build configured: `eas.json` with development, development-simulator, preview, production profiles.
 - Dev client `.app` (simulator) and `.ipa` (device) builds working via `eas build --local`.
+- `NSAllowsArbitraryLoads: true` in Info.plist for dev builds (http:// access to local server from physical devices).
+- CocoaPods requires `LANG=en_US.UTF-8` (Ruby 4.0 encoding fix, added to `~/.zshrc`).
 
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.

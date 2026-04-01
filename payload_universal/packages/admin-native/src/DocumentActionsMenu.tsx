@@ -10,40 +10,12 @@
  *  - "Save as Draft" / "Publish" / "Unpublish" (when drafts are enabled)
  */
 import React, { useCallback, useMemo, useState } from 'react'
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native'
+import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { BottomSheet } from './BottomSheet'
-import { isNativeUIAvailable, NativeHost } from './fields/NativeHost'
+import { NativeHost } from './fields/NativeHost'
+import { nativeComponents } from './fields/shared'
 import { defaultTheme as t } from './theme'
-
-// ---------------------------------------------------------------------------
-// Dynamic imports for @expo/ui Picker (same pattern as pickers.tsx)
-// ---------------------------------------------------------------------------
-
-let NativePicker: React.ComponentType<{
-  selection?: string | null
-  onSelectionChange?: (selection: string | null) => void
-  label?: string
-  systemImage?: string
-  children?: React.ReactNode
-  modifiers?: any[]
-}> | null = null
-
-let NativeText: React.ComponentType<{
-  children?: React.ReactNode
-  modifiers?: any[]
-}> | null = null
-
-if (Platform.OS === 'ios') {
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const swiftUI = require('@expo/ui/swift-ui')
-    NativePicker = swiftUI.Picker
-    NativeText = swiftUI.Text
-  } catch {
-    // @expo/ui SwiftUI not available
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Action item type
@@ -108,6 +80,11 @@ const useActions = (props: Props): ActionItem[] => {
 
 const NativeMenuPicker: React.FC<Props> = (props) => {
   const actions = useActions(props)
+  const NativePicker = nativeComponents.Picker!
+  const NativeText = nativeComponents.Text!
+  const tag = nativeComponents.tag!
+  const psModifier = nativeComponents.pickerStyle!
+
   // Use an empty/sentinel value so no item appears "selected"
   const [selection, setSelection] = useState<string | null>('__none__')
 
@@ -130,12 +107,12 @@ const NativeMenuPicker: React.FC<Props> = (props) => {
         onSelectionChange={handleSelectionChange}
         systemImage="ellipsis"
         label=""
-        modifiers={[{ pickerStyle: 'menu' }]}
+        modifiers={[psModifier('menu')]}
       >
         {/* Hidden sentinel so no visible item is pre-selected */}
-        <NativeText modifiers={[{ tag: '__none__' }]}>{' '}</NativeText>
+        <NativeText modifiers={[tag('__none__')]}>{' '}</NativeText>
         {actions.map((action) => (
-          <NativeText key={action.key} modifiers={[{ tag: action.key }]}>
+          <NativeText key={action.key} modifiers={[tag(action.key)]}>
             {action.label}
           </NativeText>
         ))}
@@ -189,7 +166,7 @@ export const DocumentActionsMenu: React.FC<Props> = (props) => {
   const actions = useActions(props)
   if (actions.length === 0) return null
 
-  if (isNativeUIAvailable && NativePicker && NativeText) {
+  if (nativeComponents.Picker && nativeComponents.Text && nativeComponents.tag && nativeComponents.pickerStyle) {
     return <NativeMenuPicker {...props} />
   }
   return <FallbackMenu {...props} />

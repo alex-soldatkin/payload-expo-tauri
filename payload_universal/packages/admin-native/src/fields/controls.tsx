@@ -127,7 +127,6 @@ const DateFieldNative: React.FC<FieldComponentProps<ClientDateField>> = ({
     <FieldShell label={label} description={description} required={field.required} error={error}>
       <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
         <DatePicker
-          title={label}
           selection={validDate}
           displayedComponents={getDisplayedComponents(field.admin?.date?.pickerAppearance)}
           onDateChange={handleDateChange}

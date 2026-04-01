@@ -130,9 +130,9 @@ export const CheckboxField = (props) =>
 ### Key rules
 1. **Never import `@expo/ui` directly in field files** — always go through `nativeComponents` registry
 2. **Types go in `types.ts`** (no `.ios.ts`/`.android.ts` variants) to avoid circular imports from Metro resolution
-3. **`native.ios.ts` checks native module presence** before enabling (handles case where JS package is installed but dev client hasn't been rebuilt)
-4. **`@react-native-picker/picker` uses dynamic require** (try/catch) since it's not available in Expo Go
-5. **Three-tier fallback**: @expo/ui → RN native → pure JS (always works)
+3. **`@react-native-picker/picker` uses dynamic require** (try/catch) since it's not available in Expo Go
+4. **Three-tier fallback**: @expo/ui → RN native → pure JS (always works)
+5. **Metro must pin `@expo/ui` as singleton** — see Metro resolver section below
 
 ---
 
@@ -293,6 +293,55 @@ After successful POST in push handler:
 
 ### Also strip from push payload
 `_deleted`, `_rev`, `_meta`, `_attachments`, `_locallyModified`, and `id` (for creates only)
+
+---
+
+## Metro Resolver: @expo/ui Version Pinning (2026-04-01)
+
+### The Problem
+pnpm workspace had two versions of `@expo/ui`:
+- `55.0.0-canary-20260128` — installed in the mobile app, compiled into the native binary
+- `55.0.6` — resolved as a transitive dep from another workspace package
+
+Metro resolved `@expo/ui/swift-ui` from the **wrong version** (55.0.6), which used `SlotView` — a native view that doesn't exist in the canary binary. Error: `ViewManagerAdapter_ExpoUI_SlotView must be a function (received undefined)`.
+
+### The Fix
+Custom `resolveRequest` in `metro.config.js` that pins ALL `@expo/ui` imports:
+
+```js
+const fs = require('fs')
+const expoUIReal = fs.realpathSync(
+  path.resolve(projectRoot, 'node_modules/@expo/ui')
+)
+
+resolveRequest: (context, moduleName, platform) => {
+  // Pin ALL @expo/ui imports including subpaths
+  if (moduleName === '@expo/ui' || moduleName.startsWith('@expo/ui/')) {
+    const subpath = moduleName === '@expo/ui'
+      ? ''
+      : moduleName.slice('@expo/ui/'.length)
+
+    if (subpath) {
+      const pkg = require(path.join(expoUIReal, 'package.json'))
+      const exportEntry = pkg.exports?.['./' + subpath]
+      if (exportEntry) {
+        const entryFile = typeof exportEntry === 'string'
+          ? exportEntry
+          : exportEntry.default || Object.values(exportEntry)[0]
+        return { filePath: path.resolve(expoUIReal, entryFile), type: 'sourceFile' }
+      }
+    }
+    // ...
+  }
+}
+```
+
+### Key lessons
+1. **`extraNodeModules` alone is insufficient** — it only maps the root package name, not subpath imports like `@expo/ui/swift-ui`
+2. **Must use `fs.realpathSync`** — pnpm uses symlinks, and `require.resolve` may not follow them correctly
+3. **Must read `package.json` exports** — `@expo/ui` uses conditional exports (`./swift-ui`, `./jetpack-compose`), so the resolver must map subpaths through the exports field
+4. **Always clear Metro cache after changing resolver** — `npx expo start --dev-client -c`
+5. **The native binary version must match the JS version** — if they diverge, native views will be missing and components will crash at render time
 
 ---
 

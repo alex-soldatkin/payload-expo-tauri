@@ -2,8 +2,7 @@
  * Native component registry — Android.
  *
  * Loads Jetpack Compose components from @expo/ui/jetpack-compose.
- * Always attempts to load in dev client / standalone builds.
- * Falls back to emptyRegistry only if @expo/ui JS package is missing.
+ * Falls back to emptyRegistry if @expo/ui JS package is missing.
  */
 import type { NativeComponentRegistry } from './types'
 import { emptyRegistry } from './types'
@@ -22,6 +21,8 @@ try {
     Picker: jc.SingleChoiceSegmentedButtonRow ?? jc.SegmentedButton ?? null,
     DisclosureGroup: null,
     Text: jc.Text,
+    tag: null,         // Android Picker uses different API
+    pickerStyle: null,
   }
 } catch {
   registry = emptyRegistry

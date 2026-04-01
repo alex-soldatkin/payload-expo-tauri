@@ -79,19 +79,20 @@ const SelectFieldNative: React.FC<FieldComponentProps<ClientSelectField>> = ({
 
   const NativePicker = nativeComponents.Picker!
   const NativeText = nativeComponents.Text!
+  const tag = nativeComponents.tag!
   const options = (field.options ?? []).map(normalizeOption)
   const isDisabled = disabled || field.admin?.readOnly
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
+      <NativeHost matchContents={{ width: false, height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
           selection={value as string ?? ''}
           onSelectionChange={(s) => { if (!isDisabled) onChange(s === '' ? null : s) }}
         >
-          <NativeText modifiers={[{ tag: '' }]}>Select...</NativeText>
+          <NativeText modifiers={[tag('')]}>Select...</NativeText>
           {options.map((opt) => (
-            <NativeText key={opt.value} modifiers={[{ tag: opt.value }]}>{opt.label}</NativeText>
+            <NativeText key={opt.value} modifiers={[tag(opt.value)]}>{opt.label}</NativeText>
           ))}
         </NativePicker>
       </NativeHost>
@@ -151,7 +152,7 @@ const SelectFieldFallback: React.FC<FieldComponentProps<ClientSelectField>> = ({
 }
 
 export const SelectField: React.FC<FieldComponentProps<ClientSelectField>> = (props) =>
-  nativeComponents.Picker && nativeComponents.Text
+  nativeComponents.Picker && nativeComponents.Text && nativeComponents.tag
     ? <SelectFieldNative {...props} />
     : <SelectFieldFallback {...props} />
 
@@ -166,21 +167,23 @@ const RadioFieldNative: React.FC<FieldComponentProps<ClientRadioField>> = ({
 }) => {
   const NativePicker = nativeComponents.Picker!
   const NativeText = nativeComponents.Text!
+  const tag = nativeComponents.tag!
+  const psModifier = nativeComponents.pickerStyle!
   const options = (field.options ?? []).map(normalizeOption)
   const isDisabled = disabled || field.admin?.readOnly
   const useSegmented = options.length <= SEGMENTED_THRESHOLD
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
+      <NativeHost matchContents={{ width: false, height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
           selection={value as string ?? ''}
           onSelectionChange={(s) => { if (!isDisabled) onChange(s === '' ? null : s) }}
-          modifiers={useSegmented ? [{ pickerStyle: 'segmented' }] : undefined}
+          modifiers={useSegmented ? [psModifier('segmented')] : undefined}
         >
-          {!useSegmented && <NativeText modifiers={[{ tag: '' }]}>Select...</NativeText>}
+          {!useSegmented && <NativeText modifiers={[tag('')]}>Select...</NativeText>}
           {options.map((opt) => (
-            <NativeText key={opt.value} modifiers={[{ tag: opt.value }]}>{opt.label}</NativeText>
+            <NativeText key={opt.value} modifiers={[tag(opt.value)]}>{opt.label}</NativeText>
           ))}
         </NativePicker>
       </NativeHost>
@@ -218,7 +221,7 @@ const RadioFieldFallback: React.FC<FieldComponentProps<ClientRadioField>> = ({
 }
 
 export const RadioField: React.FC<FieldComponentProps<ClientRadioField>> = (props) =>
-  nativeComponents.Picker && nativeComponents.Text
+  nativeComponents.Picker && nativeComponents.Text && nativeComponents.tag
     ? <RadioFieldNative {...props} />
     : <RadioFieldFallback {...props} />
 
@@ -560,6 +563,10 @@ const pickerStyles = StyleSheet.create({
   wrapperError: { borderColor: t.colors.error },
   picker: Platform.select({ ios: { marginHorizontal: -8 }, android: { marginHorizontal: 4 } }) as any,
   item: { fontSize: t.fontSize.md, color: t.colors.text },
+})
+
+const nativePickerStyles = StyleSheet.create({
+  hostFullWidth: { alignSelf: 'stretch' },
 })
 
 const chipStyles = StyleSheet.create({

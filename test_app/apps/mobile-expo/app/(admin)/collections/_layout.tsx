@@ -1,19 +1,47 @@
 /**
  * Collections stack navigator.
  * Provides push/pop navigation: Collections list → Document list → Document edit.
- * Uses GlassView for translucent frosted-glass navigation headers.
+ * Uses translucent frosted-glass navigation headers:
+ *   - iOS 26+: GlassView (liquid glass) from expo-glass-effect
+ *   - iOS < 26: BlurView from expo-blur
  */
 import React from 'react'
-import { StyleSheet } from 'react-native'
+import { Platform, StyleSheet } from 'react-native'
 import { Stack } from 'expo-router'
-import { GlassView } from 'expo-glass-effect'
+import { BlurView } from 'expo-blur'
 
-function GlassHeaderBackground() {
+// GlassView is iOS 26+ only — optional import
+let GlassView: React.ComponentType<{
+  style?: any
+  glassEffectStyle?: string
+  tintColor?: string
+}> | null = null
+
+try {
+  const mod = require('expo-glass-effect')
+  GlassView = mod.GlassView
+} catch {
+  // expo-glass-effect not available
+}
+
+function HeaderBackground() {
+  // iOS 26+ liquid glass
+  if (GlassView && Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 26) {
+    return (
+      <GlassView
+        style={StyleSheet.absoluteFill}
+        glassEffectStyle="regular"
+        tintColor="rgba(246, 244, 241, 0.7)"
+      />
+    )
+  }
+
+  // Fallback: translucent blur (iOS < 26 and all platforms)
   return (
-    <GlassView
+    <BlurView
       style={StyleSheet.absoluteFill}
-      glassEffectStyle="regular"
-      tintColor="rgba(246, 244, 241, 0.7)"
+      intensity={80}
+      tint="systemChromeMaterialLight"
     />
   )
 }
@@ -23,7 +51,7 @@ export default function CollectionsLayout() {
     <Stack
       screenOptions={{
         headerTransparent: true,
-        headerBackground: () => <GlassHeaderBackground />,
+        headerBackground: () => <HeaderBackground />,
         headerTintColor: '#1f1f1f',
         headerTitleStyle: { fontWeight: '700', fontSize: 17 },
         headerBackTitleVisible: false,

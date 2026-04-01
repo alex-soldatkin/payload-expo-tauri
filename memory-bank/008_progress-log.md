@@ -132,6 +132,8 @@ This log captures what has been implemented so far and the current state of the 
 - **Fixed GestureHandlerRootView** early return in `_layout.tsx` that bypassed the wrapper during loading state.
 - **Replaced Swipeable with Link.Menu** — both legacy Swipeable and ReanimatedSwipeable crash on iOS 26 with PanGestureHandler errors. Delete now uses native context menu.
 - **Fixed CocoaPods UTF-8 crash** with Ruby 4.0 — added `LANG=en_US.UTF-8` to `~/.zshrc`.
+- **Fixed `@expo/ui` SlotView crash** — pnpm workspace resolved `@expo/ui/swift-ui` from wrong version (55.0.6 instead of canary). Custom Metro `resolveRequest` pins all `@expo/ui/*` subpaths through `package.json` exports with `fs.realpathSync` for pnpm symlinks.
+- **Fixed `@expo/ui` in Expo Go** — safe try/catch around `@expo/ui` imports in native registry; `SimpleOptionList` pure-JS fallback for select/radio when no native picker available.
 
 ### Phase 5 — Sync duplication fix + swipe-to-delete (2026-03-30)
 - **Fixed critical duplication bug** (65,000+ duplicate posts created):
@@ -154,13 +156,12 @@ This log captures what has been implemented so far and the current state of the 
 - **Root `node_modules` symlink** (`payload_expo_tauri/node_modules → test_app/node_modules`) is **required** for Turbopack. The `turbopack.root` is set to the monorepo root, and Turbopack resolves `@floating-ui/react`, `clsx`, and other transitive deps of `payload-main` through this symlink. **Do not delete it during cleanup.**
 - **`.next` cache**: If Turbopack fails after config changes, delete `test_app/apps/server/.next` and restart.
 
-### Phase 6 — @expo/ui native components + modular architecture (2026-03-30)
+### Phase 6 — @expo/ui native components + modular architecture (2026-03-30 → 2026-04-01)
 - **@expo/ui integration** with cross-platform native component registry:
   - Metro platform file resolution: `native.ios.ts` / `native.android.ts` / `native.ts` (no runtime `Platform.OS` checks for component loading)
   - iOS: SwiftUI components (Toggle, DatePicker, Picker, DisclosureGroup, Text, Host)
   - Android: Jetpack Compose components (Switch, DatePicker, SegmentedButton, Text, Host)
   - Registry type extracted to `types.ts` (avoids circular imports from Metro platform resolution)
-  - Runtime check for ExpoUI native module presence (`NativeModulesProxy.ExpoUI`) — gracefully falls back if dev client hasn't been rebuilt with @expo/ui
 - **Field component upgrades** (6 field types → native):
   - CheckboxField: SwiftUI Toggle / JC Switch / RN Switch
   - DateField: SwiftUI DatePicker / JC DatePicker / custom wheel modal
@@ -178,6 +179,11 @@ This log captures what has been implemented so far and the current state of the 
   - `@react-native-picker/picker` import wrapped in try/catch (native module not in Expo Go)
   - Added `SimpleOptionList` pure-JS chip-based fallback for select/radio fields
   - Three-tier fallback chain: @expo/ui native → RN native → pure JS
+- **Critical Metro resolver fix** (`@expo/ui` version mismatch):
+  - **Root cause**: pnpm workspace had two versions of `@expo/ui` — v55.0.0-canary (app's version, matching native binary) and v55.0.6 (from another workspace package). Metro resolved subpath imports like `@expo/ui/swift-ui` from the wrong version (55.0.6), which used `SlotView` — a native view that doesn't exist in the canary binary.
+  - **Error**: `View config getter callback for component ViewManagerAdapter_ExpoUI_SlotView must be a function (received undefined)`
+  - **Fix**: Custom `resolveRequest` in `metro.config.js` that intercepts ALL `@expo/ui` and `@expo/ui/*` imports, resolves them through the app's own `node_modules/@expo/ui` (using `fs.realpathSync` to follow pnpm symlinks), and reads `package.json` exports to map subpaths correctly.
+  - **Key lesson**: In pnpm monorepos with multiple versions of the same package, Metro's default resolution can pick the wrong one. Singleton pinning must handle subpath exports, not just the root package name.
 - **Admin schema endpoint fix** ("Language en not supported"):
   - Root cause: endpoint called `buildConfig()` on raw config inside handler; translations module couldn't resolve `en` language in compiled server chunk context
   - Fix: use `req.payload.config` (already-sanitized config from running Payload instance) instead of `getConfig()` raw closure
@@ -189,12 +195,12 @@ This log captures what has been implemented so far and the current state of the 
 - **EAS Build configuration**:
   - Created `eas.json` with profiles: development (device .ipa), development-simulator (.app), preview, production
   - Installed `expo-dev-client` for dev client builds
-  - Enabled `NSAllowsArbitraryLoads` in Info.plist for dev builds (allows http:// to local server)
+  - Enabled `NSAllowsArbitraryLoads` in Info.plist for dev builds (allows http:// to local server from physical devices)
   - Added build artifacts to `.gitignore` (*.app, *.ipa, build-*.tar.gz, build/)
-  - `requireCommit: true` in eas.json CLI config
-  - Successfully built simulator .app and device .ipa via `eas build --local`
+  - `requireCommit: true` in eas.json CLI config to avoid casing check failures with uncommitted files
+  - Successfully built and tested simulator .app and device .ipa via `eas build --local`
 - **iOS 26 compatibility**:
-  - Downloaded iOS 26.2 simulator runtime (was 26.0, Xcode 26.3 requires 26.2)
+  - Downloaded iOS 26.2/26.3 simulator runtimes (Xcode 26.3 requires matching SDK)
   - Fixed CocoaPods UTF-8 encoding crash with Ruby 4.0 (`export LANG=en_US.UTF-8`)
   - Added locale exports to `~/.zshrc` for persistence
 
