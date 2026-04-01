@@ -176,8 +176,10 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
 
   return (
     <View style={styles.collapsibleContainer}>
-      <Pressable style={styles.collapsibleHeader} onPress={toggle}>
-        <Animated.Text style={[styles.collapsibleChevron, { transform: [{ rotate: rotation }] }]}>›</Animated.Text>
+      <Pressable
+        style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.collapsibleHeaderPressed]}
+        onPress={toggle}
+      >
         <View style={styles.collapsibleHeaderContent}>
           <Text style={styles.collapsibleTitle}>{getFieldLabel(field)}</Text>
           {!expanded && description && <Text style={styles.collapsibleHint} numberOfLines={1}>{description}</Text>}
@@ -185,6 +187,9 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
         {errorCount > 0 && (
           <View style={styles.errorBadge}><Text style={styles.errorBadgeText}>{errorCount}</Text></View>
         )}
+        <Animated.Text style={[styles.collapsibleChevron, { transform: [{ rotate: rotation }] }]}>
+          ‹
+        </Animated.Text>
       </Pressable>
       {expanded && (
         <View style={styles.collapsibleBody}>
@@ -467,22 +472,78 @@ const styles = StyleSheet.create({
   required: { color: t.colors.error },
   error: { fontSize: t.fontSize.xs, color: t.colors.error, marginTop: t.spacing.xs },
 
-  // Group
-  groupCard: { marginBottom: t.spacing.lg, backgroundColor: t.colors.surface, borderRadius: t.borderRadius.md, borderWidth: 1, borderColor: t.colors.border, overflow: 'hidden' },
+  // Group — iOS Settings-style card
+  groupCard: {
+    marginBottom: t.spacing.lg,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.borderRadius.md,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
   groupGutter: { borderLeftWidth: 3, borderLeftColor: t.colors.primary },
-  groupHeader: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.md, paddingBottom: t.spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.colors.separator, backgroundColor: '#fafafa' },
-  groupLabel: { fontSize: t.fontSize.md, fontWeight: '700', color: t.colors.text },
+  groupHeader: {
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: 12,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.separator,
+  },
+  groupLabel: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
   groupDesc: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 2, marginBottom: t.spacing.sm },
   groupBody: { padding: t.spacing.lg },
 
-  // Collapsible
-  collapsibleContainer: { marginBottom: t.spacing.lg, backgroundColor: t.colors.surface, borderRadius: t.borderRadius.md, borderWidth: 1, borderColor: t.colors.border, overflow: 'hidden' },
-  collapsibleHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.md },
-  collapsibleChevron: { fontSize: 22, color: t.colors.textMuted, fontWeight: '600', width: 20, textAlign: 'center' },
-  collapsibleHeaderContent: { flex: 1, marginLeft: t.spacing.sm },
-  collapsibleTitle: { fontSize: t.fontSize.md, fontWeight: '700', color: t.colors.text },
-  collapsibleHint: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 1 },
-  collapsibleBody: { paddingHorizontal: t.spacing.lg, paddingBottom: t.spacing.lg, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.separator },
+  // Collapsible — iOS Settings-style grouped section
+  collapsibleContainer: {
+    marginBottom: t.spacing.lg,
+    backgroundColor: t.colors.surface,
+    borderRadius: t.borderRadius.md,
+    overflow: 'hidden',
+    // Subtle shadow instead of border for native feel
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  collapsibleHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: t.spacing.lg,
+    paddingVertical: 14,
+    minHeight: 48,
+  },
+  collapsibleHeaderPressed: {
+    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+  },
+  collapsibleChevron: {
+    fontSize: 18,
+    color: t.colors.textMuted,
+    fontWeight: '600',
+    marginLeft: t.spacing.sm,
+  },
+  collapsibleHeaderContent: {
+    flex: 1,
+  },
+  collapsibleTitle: {
+    fontSize: t.fontSize.md,
+    fontWeight: '600',
+    color: t.colors.text,
+  },
+  collapsibleHint: {
+    fontSize: t.fontSize.xs,
+    color: t.colors.textMuted,
+    marginTop: 2,
+  },
+  collapsibleBody: {
+    paddingHorizontal: t.spacing.lg,
+    paddingTop: t.spacing.sm,
+    paddingBottom: t.spacing.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.separator,
+  },
 
   // Error badge (reused by collapsible + tabs)
   errorBadge: { backgroundColor: t.colors.error, borderRadius: 9, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, marginLeft: t.spacing.sm },
