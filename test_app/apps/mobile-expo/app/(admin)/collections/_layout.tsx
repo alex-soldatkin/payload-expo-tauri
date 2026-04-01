@@ -1,16 +1,16 @@
 /**
  * Collections stack navigator.
  * Provides push/pop navigation: Collections list → Document list → Document edit.
- * Uses translucent frosted-glass navigation headers:
+ * Uses translucent frosted navigation headers:
  *   - iOS 26+: GlassView (liquid glass) from expo-glass-effect
- *   - iOS < 26: BlurView from expo-blur
+ *   - iOS < 26 / fallback: Semi-transparent background (no native blur module needed)
+ *   - After dev client rebuild with expo-blur: BlurView for proper blur
  */
 import React from 'react'
-import { Platform, StyleSheet } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
-import { BlurView } from 'expo-blur'
 
-// GlassView is iOS 26+ only — optional import
+// GlassView (iOS 26+ liquid glass) — optional
 let GlassView: React.ComponentType<{
   style?: any
   glassEffectStyle?: string
@@ -20,9 +20,20 @@ let GlassView: React.ComponentType<{
 try {
   const mod = require('expo-glass-effect')
   GlassView = mod.GlassView
-} catch {
-  // expo-glass-effect not available
-}
+} catch { /* not available */ }
+
+// BlurView (expo-blur) — optional, needs native rebuild after install
+let BlurView: React.ComponentType<{
+  style?: any
+  intensity?: number
+  tint?: string
+}> | null = null
+
+try {
+  const mod = require('expo-blur')
+  // Test if the native view is actually registered
+  if (mod.BlurView) BlurView = mod.BlurView
+} catch { /* not available */ }
 
 function HeaderBackground() {
   // iOS 26+ liquid glass
@@ -36,13 +47,22 @@ function HeaderBackground() {
     )
   }
 
-  // Fallback: translucent blur (iOS < 26 and all platforms)
+  // expo-blur available (dev client rebuilt with it)
+  if (BlurView) {
+    try {
+      return (
+        <BlurView
+          style={StyleSheet.absoluteFill}
+          intensity={80}
+          tint="systemChromeMaterialLight"
+        />
+      )
+    } catch { /* native view not registered — fall through */ }
+  }
+
+  // Pure RN fallback — translucent background, no native blur needed
   return (
-    <BlurView
-      style={StyleSheet.absoluteFill}
-      intensity={80}
-      tint="systemChromeMaterialLight"
-    />
+    <View style={[StyleSheet.absoluteFill, styles.translucentHeader]} />
   )
 }
 
@@ -68,3 +88,11 @@ export default function CollectionsLayout() {
     </Stack>
   )
 }
+
+const styles = StyleSheet.create({
+  translucentHeader: {
+    backgroundColor: 'rgba(246, 244, 241, 0.92)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+})

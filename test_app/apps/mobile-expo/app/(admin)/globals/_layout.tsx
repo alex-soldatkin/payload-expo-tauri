@@ -1,14 +1,10 @@
 /**
  * Globals stack navigator.
- * Provides push/pop navigation: Globals list → Global edit.
- * Uses translucent frosted-glass navigation headers:
- *   - iOS 26+: GlassView (liquid glass) from expo-glass-effect
- *   - iOS < 26: BlurView from expo-blur
+ * Uses translucent frosted navigation headers with graceful fallbacks.
  */
 import React from 'react'
-import { Platform, StyleSheet } from 'react-native'
+import { Platform, StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
-import { BlurView } from 'expo-blur'
 
 let GlassView: React.ComponentType<{
   style?: any
@@ -19,9 +15,18 @@ let GlassView: React.ComponentType<{
 try {
   const mod = require('expo-glass-effect')
   GlassView = mod.GlassView
-} catch {
-  // expo-glass-effect not available
-}
+} catch { /* not available */ }
+
+let BlurView: React.ComponentType<{
+  style?: any
+  intensity?: number
+  tint?: string
+}> | null = null
+
+try {
+  const mod = require('expo-blur')
+  if (mod.BlurView) BlurView = mod.BlurView
+} catch { /* not available */ }
 
 function HeaderBackground() {
   if (GlassView && Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 26) {
@@ -34,12 +39,20 @@ function HeaderBackground() {
     )
   }
 
+  if (BlurView) {
+    try {
+      return (
+        <BlurView
+          style={StyleSheet.absoluteFill}
+          intensity={80}
+          tint="systemChromeMaterialLight"
+        />
+      )
+    } catch { /* fall through */ }
+  }
+
   return (
-    <BlurView
-      style={StyleSheet.absoluteFill}
-      intensity={80}
-      tint="systemChromeMaterialLight"
-    />
+    <View style={[StyleSheet.absoluteFill, styles.translucentHeader]} />
   )
 }
 
@@ -60,3 +73,11 @@ export default function GlobalsLayout() {
     </Stack>
   )
 }
+
+const styles = StyleSheet.create({
+  translucentHeader: {
+    backgroundColor: 'rgba(246, 244, 241, 0.92)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+})
