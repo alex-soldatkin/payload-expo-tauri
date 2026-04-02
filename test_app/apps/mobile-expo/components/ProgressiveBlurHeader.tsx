@@ -1,21 +1,19 @@
 /**
- * Progressive blur header overlay.
+ * Progressive blur header overlay + headerBackground fallback.
  *
- * Creates an Apple-style progressive blur at the top of the screen that fades
- * from full blur intensity behind the navigation bar to fully transparent below
- * it. Renders as an absolute-positioned overlay with pointerEvents="none" so
- * touches pass through to underlying content and native header controls.
- *
- * Fallback tiers:
- *   1. iOS 26+ liquid glass (GlassView) — Apple's native glass material
- *   2. Progressive blur (MaskedView + LinearGradient + BlurView)
- *   3. Gradient tint fallback (no native blur module)
+ * Exports:
+ *   - `ProgressiveBlurHeader` — overlay that fades in as the user scrolls.
+ *     Driven by an `Animated.Value` (scrollY) shared via `HeaderScrollContext`.
+ *     Uses MaskedView + BlurView for progressive fade, or GlassView on iOS 26+.
+ *   - `HeaderBackgroundFallback` — headerBackground for the Stack when the
+ *     progressive blur overlay can't render.
+ *   - `hasProgressiveBlur` — static boolean for layout config.
  */
 import React from 'react'
-import { Platform, StyleSheet, UIManager, View } from 'react-native'
+import { Animated, Platform, StyleSheet, UIManager, View } from 'react-native'
 
 // ---------------------------------------------------------------------------
-// Optional native modules — loaded dynamically so the app never hard-crashes
+// Optional native modules
 // ---------------------------------------------------------------------------
 
 let GlassView: React.ComponentType<{
@@ -53,9 +51,6 @@ let MaskedView: React.ComponentType<{
 try {
   const mod = require('@react-native-masked-view/masked-view')
   const Component = mod.default ?? mod.MaskedView ?? null
-  // Verify the native view is actually registered in this binary —
-  // the JS package may be installed but the native module missing
-  // (e.g. running in Expo Go or a dev client that hasn't been rebuilt).
   if (Component && UIManager.getViewManagerConfig?.('RNCMaskedView')) {
     MaskedView = Component
   }
@@ -80,9 +75,17 @@ try {
 }
 
 // ---------------------------------------------------------------------------
-// Pre-computed eased gradient stops for the blur mask.
-// Uses react-native-easing-gradient when available for natural fall-off,
-// otherwise uses hand-tuned ease-out stops.
+// Capability flags
+// ---------------------------------------------------------------------------
+
+const isIOS26 =
+  Platform.OS === 'ios' && parseInt(Platform.Version as string, 10) >= 26
+
+export const hasProgressiveBlur =
+  !!(GlassView && isIOS26) || !!(BlurView && MaskedView && LinearGradient)
+
+// ---------------------------------------------------------------------------
+// Eased gradient stops for the blur mask
 // ---------------------------------------------------------------------------
 
 let gradientColors: string[] = [
@@ -115,22 +118,21 @@ try {
   /* use hand-tuned stops */
 }
 
-// Same stops but for the tint gradient (paper color) used in the fallback and
-// as a subtle tint layer behind the blur.
 const PAPER = { r: 246, g: 244, b: 241 }
 
+// Light tint behind the blur — lowered opacity for more translucency
 const tintColors = [
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.85)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.75)`,
   `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.55)`,
+  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.45)`,
   `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.3)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.1)`,
+  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.15)`,
+  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.05)`,
   `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0)`,
 ]
 const tintLocations = [0, 0.25, 0.5, 0.7, 0.88, 1]
 
 // ---------------------------------------------------------------------------
-// Component
+// ProgressiveBlurHeader
 // ---------------------------------------------------------------------------
 
 interface ProgressiveBlurHeaderProps {
@@ -138,31 +140,46 @@ interface ProgressiveBlurHeaderProps {
   headerHeight: number
   /** Extra pixels below the header where the blur fades out. Default 30. */
   blurExtension?: number
-  /** expo-blur intensity. Default 50. */
+  /** expo-blur intensity. Default 35. */
   blurIntensity?: number
+  /**
+   * Scroll offset `Animated.Value` — drives the overlay opacity.
+   * At scrollY=0 the header is nearly transparent; at scrollY≥60
+   * it reaches full blur. When omitted the overlay is always visible.
+   */
+  scrollY?: Animated.Value
 }
 
 export function ProgressiveBlurHeader({
   headerHeight,
   blurExtension = 30,
-  blurIntensity = 50,
+  blurIntensity = 35,
+  scrollY,
 }: ProgressiveBlurHeaderProps) {
   const totalHeight = headerHeight + blurExtension
 
+  // Scroll-driven opacity (transparent at top, fully blurred when scrolled)
+  const opacity = scrollY
+    ? scrollY.interpolate({
+        inputRange: [0, 60],
+        outputRange: [0, 1],
+        extrapolate: 'clamp',
+      })
+    : 1
+
   // ------ Tier 1: iOS 26+ liquid glass ------
-  if (
-    GlassView &&
-    Platform.OS === 'ios' &&
-    parseInt(Platform.Version as string, 10) >= 26
-  ) {
+  if (GlassView && isIOS26) {
     return (
-      <View pointerEvents="none" style={[styles.overlay, { height: headerHeight }]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.overlay, { height: headerHeight, opacity }]}
+      >
         <GlassView
           style={StyleSheet.absoluteFill}
           glassEffectStyle="regular"
-          tintColor="rgba(246, 244, 241, 0.7)"
+          tintColor="rgba(246, 244, 241, 0.5)"
         />
-      </View>
+      </Animated.View>
     )
   }
 
@@ -173,7 +190,10 @@ export function ProgressiveBlurHeader({
     const Blur = BlurView
 
     return (
-      <View pointerEvents="none" style={[styles.overlay, { height: totalHeight }]}>
+      <Animated.View
+        pointerEvents="none"
+        style={[styles.overlay, { height: totalHeight, opacity }]}
+      >
         {/* Subtle paper tint behind the blur for readability */}
         <Gradient
           colors={tintColors}
@@ -193,53 +213,38 @@ export function ProgressiveBlurHeader({
         >
           <Blur
             intensity={blurIntensity}
-            tint="systemChromeMaterialLight"
+            tint="systemUltraThinMaterial"
             style={StyleSheet.absoluteFill}
           />
         </Mask>
-      </View>
+      </Animated.View>
     )
   }
 
-  // ------ Tier 3: BlurView without progressive mask ------
+  // No progressive blur available
+  return null
+}
+
+// ---------------------------------------------------------------------------
+// HeaderBackgroundFallback
+// ---------------------------------------------------------------------------
+
+export function HeaderBackgroundFallback() {
   if (BlurView) {
     const Blur = BlurView
-    return (
-      <View pointerEvents="none" style={[styles.overlay, { height: headerHeight }]}>
+    try {
+      return (
         <Blur
-          intensity={blurIntensity}
-          tint="systemChromeMaterialLight"
           style={StyleSheet.absoluteFill}
+          intensity={35}
+          tint="systemUltraThinMaterial"
         />
-      </View>
-    )
+      )
+    } catch {
+      /* fall through */
+    }
   }
-
-  // ------ Tier 4: Pure RN fallback — gradient tint (no native blur) ------
-  if (LinearGradient) {
-    const Gradient = LinearGradient
-    return (
-      <View pointerEvents="none" style={[styles.overlay, { height: totalHeight }]}>
-        <Gradient
-          colors={[
-            `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.95)`,
-            `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.8)`,
-            `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.4)`,
-            `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0)`,
-          ]}
-          locations={[0, 0.45, 0.75, 1]}
-          style={StyleSheet.absoluteFill}
-        />
-      </View>
-    )
-  }
-
-  // ------ Tier 5: Absolute fallback — solid translucent bar ------
-  return (
-    <View pointerEvents="none" style={[styles.overlay, { height: headerHeight }]}>
-      <View style={[StyleSheet.absoluteFill, styles.translucentHeader]} />
-    </View>
-  )
+  return <View style={[StyleSheet.absoluteFill, styles.translucentHeader]} />
 }
 
 // ---------------------------------------------------------------------------
@@ -255,8 +260,8 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   translucentHeader: {
-    backgroundColor: 'rgba(246, 244, 241, 0.92)',
+    backgroundColor: 'rgba(246, 244, 241, 0.65)',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+    borderBottomColor: 'rgba(0, 0, 0, 0.08)',
   },
 })

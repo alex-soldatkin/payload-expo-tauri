@@ -204,6 +204,49 @@ This log captures what has been implemented so far and the current state of the 
   - Fixed CocoaPods UTF-8 encoding crash with Ruby 4.0 (`export LANG=en_US.UTF-8`)
   - Added locale exports to `~/.zshrc` for persistence
 
+### Phase 7 — Custom tab bar + long-press collection menu + dynamic icons (2026-04-02)
+- **Custom tab bar** replacing `NativeTabs`:
+  - Switched from `expo-router/unstable-native-tabs` (NativeTabs) to standard `Tabs` from `expo-router` with a custom `tabBar` component
+  - Custom tab bar has BlurView background (`systemChromeMaterial`), proper safe area padding, hairline top border — matches native iOS tab bar look
+  - Tab items: Home, Collections (with long-press menu), Globals (conditionally hidden), Account
+  - Lucide icons for tab items (Home, LayoutList, Globe, User)
+- **Long-press collection menu (iOS)** — Telegram-style folder picker:
+  - Uses `@expo/ui/swift-ui` `Menu` component with `onPrimaryAction` for dual behaviour:
+    - Single tap → switch to Collections tab (overview)
+    - Long press → native iOS dropdown with all collections
+  - Menu items use SF Symbol icons resolved dynamically from the schema
+  - Ungrouped collections rendered as top-level `Button` items
+  - `Divider` separates ungrouped from grouped
+  - Grouped collections rendered as nested `Menu` submenus (collapsible/expandable)
+  - Menu trigger label is a custom ReactNode (icon + text) wrapped in `Host` for SwiftUI rendering
+  - Tapping a collection in the menu navigates directly to its document list via `router.navigate()`
+  - Falls back to a plain Pressable on Android / when `@expo/ui` is unavailable
+- **Dynamic collection icons** — full-stack icon system:
+  - **Schema layer** (`admin-schema/src/index.ts`):
+    - Added `icon?: string` to `MenuModel` collection and global types
+    - `buildMenuModel()` reads `admin.icon` safely from Payload config via `(admin as Record<string, unknown>)?.icon`
+    - Icon flows through `/api/admin-schema` JSON endpoint
+  - **Server config**: Collections set `icon` in `admin` (with `@ts-expect-error` for Payload type compat):
+    - Users → `'users'`, Media → `'image'`, Posts → `'file-text'`
+  - **Icon registry** (`admin-native/src/iconRegistry.ts`):
+    - 150+ lucide name → SF Symbol mappings covering people, files, commerce, data, maps, navigation, security, etc.
+    - Lazy component registry: loads lucide-react-native components on first access by iterating known names and converting kebab-case to PascalCase
+    - `getSFSymbol(name)` → returns SF Symbol string (default: `'doc'`)
+    - `getIconComponent(name)` → returns React Native component (default: `null`)
+    - `registerIcon(name, component, sfSymbol?)` → runtime extension point for app-specific icons
+    - `isRawSVG(icon)` → detects raw SVG strings (starts with `<`)
+  - **CollectionIcon component** (`admin-native/src/CollectionIcon.tsx`):
+    - Accepts `icon?: string`, `size`, `color`
+    - Renders raw SVG via `SvgXml` (react-native-svg) if icon starts with `<`
+    - Renders lucide component by name lookup if found in registry
+    - Falls back to lucide `File` icon
+  - **Mobile app integration**:
+    - Tab layout long-press menu uses `getSFSymbol(col.icon)` for native SF Symbol icons
+    - Collections index cards show `CollectionIcon` alongside label
+    - Dashboard collection cards show `CollectionIcon` alongside label
+  - **Dynamic behaviour**: Change `icon` in Payload config → restart server → app refreshes schema → icons update. No app rebuild needed.
+  - Exported from `admin-native`: `CollectionIcon`, `getSFSymbol`, `getIconComponent`, `isRawSVG`, `registerIcon`, `IconComponent` type
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.

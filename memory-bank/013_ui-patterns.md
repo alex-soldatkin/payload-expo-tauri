@@ -397,6 +397,93 @@ const headerHeight = insets.top + 44 // safe area + standard nav bar
 
 ---
 
+## Custom Tab Bar + Long-Press Collection Menu (2026-04-02)
+
+### Architecture
+Switched from `NativeTabs` (fully native, no customization) to standard `Tabs` from `expo-router` with a custom `tabBar` component. This enables JS-level control of tab items while maintaining native iOS look.
+
+### Long-press menu pattern
+Uses `@expo/ui/swift-ui` `Menu` component directly in the tab bar:
+
+```tsx
+// Menu wraps the tab item visual content
+<SHost matchContents colorScheme="light">
+  <SMenu label={tabContent} onPrimaryAction={onPress}>
+    {/* Ungrouped collections */}
+    {ungrouped.map(col => (
+      <SButton label={label} systemImage={getSFSymbol(col.icon)} onPress={...} />
+    ))}
+    <SDivider />
+    {/* Grouped collections as collapsible submenus */}
+    {grouped.map(group => (
+      <SMenu label={group.name} systemImage="folder">
+        {group.items.map(col => (
+          <SButton label={label} systemImage={getSFSymbol(col.icon)} onPress={...} />
+        ))}
+      </SMenu>
+    ))}
+  </SMenu>
+</SHost>
+```
+
+### Key details
+- `onPrimaryAction` → fires on single tap (switch to tab)
+- No `onPrimaryAction` set → long press shows the menu
+- When `onPrimaryAction` IS set → single tap fires it, long press shows menu
+- Nested `Menu` creates collapsible submenus (iOS native submenu behaviour)
+- `Host` with `matchContents` sizes to the SwiftUI content (tab icon + label)
+- `Divider` separates ungrouped from grouped collections
+- Menu items use `systemImage` (SF Symbol) resolved from the schema via `getSFSymbol(col.icon)`
+- Menu `label` accepts a ReactNode (our icon + text View) which renders as the trigger visual
+
+### Fallback (Android / no @expo/ui)
+Falls back to a plain `Pressable` with `onPress` only — no long-press menu.
+
+---
+
+## Dynamic Collection Icons (2026-04-02)
+
+### Config
+Define icons in Payload collection config:
+```typescript
+export const Posts: CollectionConfig = {
+  slug: 'posts',
+  admin: {
+    icon: 'file-text',  // lucide icon name
+    // Can also be raw SVG: icon: '<svg viewBox="0 0 24 24">...</svg>'
+  },
+}
+```
+
+### Data flow
+```
+Payload config (admin.icon) → buildMenuModel() → MenuModel JSON → /api/admin-schema
+  → mobile app schema refresh → iconRegistry lookup → CollectionIcon render
+```
+
+### Icon registry (`iconRegistry.ts`)
+- 150+ lucide name → SF Symbol mappings in `sfSymbolMap`
+- Lazy component registry: converts kebab-case names to PascalCase and looks up in `lucide-react-native`
+- `getSFSymbol(name)` → SF Symbol string for SwiftUI menus (default: `'doc'`)
+- `getIconComponent(name)` → React Native component (default: `null`)
+- `isRawSVG(icon)` → checks if icon string is raw SVG (starts with `<`)
+- `registerIcon(name, component, sfSymbol?)` → extend at runtime
+
+### CollectionIcon component
+```tsx
+<CollectionIcon icon={col.icon} size={22} color="#555" />
+```
+Render priority: raw SVG (SvgXml) → lucide component by name → fallback File icon.
+
+### Key rules
+1. Icon names use lucide kebab-case convention: `'file-text'`, `'shopping-cart'`, `'users'`
+2. Access `admin.icon` safely: `(collection.admin as Record<string, unknown>)?.icon`
+3. Use `@ts-expect-error` in collection configs since Payload's types don't include `icon`
+4. Icons update dynamically on schema refresh — no app rebuild needed
+5. Bundle size impact: ~1MB from imported lucide icons (acceptable for admin app)
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink

@@ -12,6 +12,7 @@ import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
 
 import {
+  CollectionIcon,
   getCollectionLabel,
   getGlobalLabel,
   useAdminSchema,
@@ -70,6 +71,7 @@ export default function DashboardScreen() {
               slug={col.slug}
               label={getCollectionLabel(menuModel!, col.slug)}
               drafts={col.drafts}
+              icon={col.icon}
               onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
             />
           ))}
@@ -90,6 +92,7 @@ export default function DashboardScreen() {
                   slug={col.slug}
                   label={getCollectionLabel(menuModel!, col.slug)}
                   drafts={col.drafts}
+                  icon={col.icon}
                   onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
                 />
               ))}
@@ -140,23 +143,31 @@ function CollectionCard({
   slug,
   label,
   drafts,
+  icon,
   onPress,
 }: {
   slug: string
   label: string
   drafts?: boolean
+  icon?: string
   onPress: () => void
 }) {
   return (
-    <Pressable className="mb-2 rounded-2xl bg-surface p-4" onPress={onPress}>
-      <Text className="text-base font-semibold text-ink">{label}</Text>
-      <View className="mt-1 flex-row gap-2">
-        <Text className="text-xs text-ink-muted">{slug}</Text>
-        {drafts && (
-          <View className="rounded bg-yellow-100 px-1.5 py-0.5">
-            <Text className="text-[10px] font-semibold text-yellow-800">DRAFTS</Text>
-          </View>
-        )}
+    <Pressable
+      className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
+      onPress={onPress}
+    >
+      <CollectionIcon icon={icon} size={22} color="#555" />
+      <View className="flex-1">
+        <Text className="text-base font-semibold text-ink">{label}</Text>
+        <View className="mt-1 flex-row gap-2">
+          <Text className="text-xs text-ink-muted">{slug}</Text>
+          {drafts && (
+            <View className="rounded bg-yellow-100 px-1.5 py-0.5">
+              <Text className="text-[10px] font-semibold text-yellow-800">DRAFTS</Text>
+            </View>
+          )}
+        </View>
       </View>
     </Pressable>
   )

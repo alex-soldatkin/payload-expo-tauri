@@ -101,10 +101,10 @@ function SyncToastBridge() {
 
   useEffect(() => {
     if (prevStatus.current === 'syncing' && syncStatus === 'idle') {
-      toast.showToast('Sync complete', { type: 'success', duration: 2000 })
+      toast.showToast('Sync complete', { type: 'success', icon: 'sync', duration: 2000 })
     }
     if (syncStatus === 'error' && prevStatus.current !== 'error') {
-      toast.showToast('Sync error — using local data', { type: 'error' })
+      toast.showToast('Sync error — using local data', { type: 'error', icon: 'syncError' })
     }
     prevStatus.current = syncStatus
   }, [syncStatus, toast])

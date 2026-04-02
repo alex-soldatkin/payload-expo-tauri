@@ -6,15 +6,16 @@
  * - Shake to undo the last delete
  * - Link.Preview (long-press peek) rendered inside Expo Router tree
  */
-import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { Alert, Pressable, View } from 'react-native'
-import { Link, Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Alert, Animated, Dimensions, Pressable, View } from 'react-native'
+import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Filter, Plus, Settings } from 'lucide-react-native'
 import { DeviceMotion } from 'expo-sensors'
 
 import {
+  DocumentForm,
   DocumentList,
   getCollectionLabel,
   useAdminSchema,
@@ -22,12 +23,23 @@ import {
   useToast,
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalCollection, useLocalDBStatus, useLocalMutations } from '@payload-universal/local-db'
+import { useHeaderScrollY } from '@/components/HeaderScrollContext'
+import * as ScrollablePreview from '@/modules/scrollable-preview'
 
 const SUMMARY_FIELDS_KEY_PREFIX = 'card_summary_fields:'
 const SHAKE_THRESHOLD = 1.5 // acceleration magnitude to trigger undo
 
 export default function CollectionDocumentsScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>()
+  const headerScrollY = useHeaderScrollY()
+  const scrollHandler = useMemo(
+    () =>
+      Animated.event(
+        [{ nativeEvent: { contentOffset: { y: headerScrollY } } }],
+        { useNativeDriver: true },
+      ),
+    [headerScrollY],
+  )
   const router = useRouter()
   const menuModel = useMenuModel()
   const schema = useAdminSchema()
@@ -77,7 +89,7 @@ export default function CollectionDocumentsScreen() {
       // Stash the doc data for undo
       lastDeletedRef.current = { id, data: { ...doc } }
       await remove(id)
-      toast.showToast('Deleted — shake to undo', { type: 'info', duration: 4000 })
+      toast.showToast('Deleted — shake to undo', { type: 'info', icon: 'delete', duration: 4000 })
     },
     [remove, toast],
   )
@@ -111,9 +123,9 @@ export default function CollectionDocumentsScreen() {
               _locallyModified: true,
               updatedAt: new Date().toISOString(),
             } as any).then(() => {
-              toast.showToast('Undo successful', { type: 'success', duration: 2000 })
+              toast.showToast('Undo successful', { type: 'success', icon: 'undo', duration: 2000 })
             }).catch(() => {
-              toast.showToast('Undo failed', { type: 'error' })
+              toast.showToast('Undo failed', { type: 'error', icon: 'undo' })
             })
           }
         }
@@ -125,35 +137,60 @@ export default function CollectionDocumentsScreen() {
     return () => sub.remove()
   }, [isPreview, localDB, slug, toast])
 
-  // Link.Preview row renderer
+  // Preview dimensions
+  const PREVIEW_W = Math.round(Dimensions.get('window').width * 0.92)
+  const PREVIEW_H = Math.round(Dimensions.get('window').height * 0.65)
+
+  // No-op submit for the read-only preview form
+  const noopSubmit = useCallback(async () => {}, [])
+
+  // Scrollable preview row renderer (Telegram-style).
+  // Long press → custom overlay with a live, scrollable DocumentForm.
+  // Tap → navigate to full edit screen.
   const renderRow = useCallback(
     ({ item, rowContent, onPress }: { item: Record<string, unknown>; rowContent: React.ReactElement; onPress: () => void }) => {
-      const href = `/(admin)/collections/${slug}/${item.id as string}`
       return (
-        <Link href={href as any} push>
-          <Link.Trigger>{rowContent}</Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction icon="doc.text" onPress={onPress}>
-              Open
-            </Link.MenuAction>
-            <Link.MenuAction
-              icon="trash"
-              destructive
-              onPress={() => {
-                Alert.alert('Delete', 'Are you sure you want to delete this item?', [
-                  { text: 'Cancel', style: 'cancel' },
-                  { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item) },
-                ])
-              }}
-            >
-              Delete
-            </Link.MenuAction>
-          </Link.Menu>
-        </Link>
+        <ScrollablePreview.Trigger
+          previewWidth={PREVIEW_W}
+          previewHeight={PREVIEW_H}
+          onPrimaryAction={() => {
+            if (!isPreview) router.push(`/(admin)/collections/${slug}/${item.id as string}`)
+          }}
+        >
+          {rowContent}
+          <ScrollablePreview.Content>
+            {schemaMap && (
+              <DocumentForm
+                schemaMap={schemaMap}
+                slug={slug}
+                initialData={item}
+                onSubmit={noopSubmit}
+                disabled
+              />
+            )}
+          </ScrollablePreview.Content>
+          <ScrollablePreview.Action
+            title="Open"
+            icon="doc.text"
+            onActionPress={() => {
+              if (!isPreview) router.push(`/(admin)/collections/${slug}/${item.id as string}`)
+            }}
+          />
+          <ScrollablePreview.Action
+            title="Delete"
+            icon="trash"
+            destructive
+            onActionPress={() => {
+              Alert.alert('Delete', 'Are you sure you want to delete this item?', [
+                { text: 'Cancel', style: 'cancel' },
+                { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item) },
+              ])
+            }}
+          />
+        </ScrollablePreview.Trigger>
       )
     },
-    [slug, handleDelete],
+    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H],
   )
 
   return (
@@ -177,7 +214,7 @@ export default function CollectionDocumentsScreen() {
             ),
             headerSearchBarOptions: {
               placeholder: `Search ${label}...`,
-              hideWhenScrolling: false,
+              hideWhenScrolling: true,
               autoCapitalize: 'none',
               onChangeText: (e) => setSearchText(e.nativeEvent.text),
               onCancelButtonPress: () => setSearchText(''),
@@ -208,6 +245,8 @@ export default function CollectionDocumentsScreen() {
           loading: localResult.loading || !isReady,
           refetch: localResult.refetch,
         }}
+        onScroll={scrollHandler}
+        scrollEventThrottle={16}
       />
     </View>
   )

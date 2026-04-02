@@ -15,6 +15,11 @@ export {
   usePayloadNative,
 } from './PayloadNativeProvider'
 
+// Icons
+export { CollectionIcon } from './CollectionIcon'
+export { getIconComponent, getSFSymbol, isRawSVG, registerIcon } from './iconRegistry'
+export type { IconComponent } from './iconRegistry'
+
 // Core components
 export { BottomSheet } from './BottomSheet'
 export { DocumentActionsMenu } from './DocumentActionsMenu'

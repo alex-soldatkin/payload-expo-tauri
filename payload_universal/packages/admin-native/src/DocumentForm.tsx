@@ -13,7 +13,7 @@
  * Exposes a ref with { submit() } so the parent can trigger save from a header button.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
@@ -52,6 +52,10 @@ type Props = {
   contentInsetTop?: number
   /** Current draft/publish status. When set, renders dual Save Draft / Publish buttons. */
   draftStatus?: 'draft' | 'published'
+  /** Scroll event handler forwarded to the inner ScrollView (e.g. for scroll-driven header blur). */
+  onScroll?: (event: any) => void
+  /** Scroll event throttle in ms (default 16). Only used when onScroll is provided. */
+  scrollEventThrottle?: number
 }
 
 /**
@@ -90,6 +94,8 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
   submitLabel = 'Save',
   contentInsetTop = 0,
   draftStatus,
+  onScroll,
+  scrollEventThrottle = 16,
 }, ref) => {
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData)
   const [saving, setSaving] = useState(false)
@@ -154,7 +160,8 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
       const opts = statusOverride ? { status: statusOverride } : undefined
       await onSubmit(formData, opts)
       const label = statusOverride === 'draft' ? 'Draft saved' : statusOverride === 'published' ? 'Published' : 'Saved successfully'
-      toast.showToast(label, { type: 'success' })
+      const icon = statusOverride === 'published' ? 'publish' as const : 'save' as const
+      toast.showToast(label, { type: 'success', icon })
     } catch (err) {
       // Parse Payload's validation error response
       const body = err instanceof PayloadAPIError ? err.body : null
@@ -207,12 +214,14 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
   return (
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <ScrollView
-        ref={scrollViewRef}
+      <Animated.ScrollView
+        ref={scrollViewRef as any}
         style={styles.scroll}
         contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
         keyboardShouldPersistTaps="handled"
         contentInsetAdjustmentBehavior="automatic"
+        onScroll={onScroll}
+        scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
       >
         {/* Draft / Published status pill */}
         {draftStatus && (
@@ -300,7 +309,7 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
             <Text style={styles.deleteText}>Delete</Text>
           </Pressable>
         )}
-      </ScrollView>
+      </Animated.ScrollView>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
   )

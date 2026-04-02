@@ -25,6 +25,9 @@ PODS:
     - ExpoModulesCore
   - EXConstants (55.0.3-canary-20260128-67ce8d5):
     - ExpoModulesCore
+  - EXJSONUtils (55.0.1-canary-20260128-67ce8d5)
+  - EXManifests (55.0.4-canary-20260128-67ce8d5):
+    - ExpoModulesCore
   - Expo (55.0.0-canary-20260128-67ce8d5):
     - ExpoModulesCore
     - hermes-engine
@@ -50,7 +53,157 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
+  - expo-dev-client (55.0.4-canary-20260128-67ce8d5):
+    - EXManifests
+    - expo-dev-launcher
+    - expo-dev-menu
+    - expo-dev-menu-interface
+    - EXUpdatesInterface
+  - expo-dev-launcher (55.0.5-canary-20260128-67ce8d5):
+    - EXManifests
+    - expo-dev-launcher/Main (= 55.0.5-canary-20260128-67ce8d5)
+    - expo-dev-menu
+    - expo-dev-menu-interface
+    - ExpoModulesCore
+    - EXUpdatesInterface
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-jsinspector
+    - React-NativeModulesApple
+    - React-RCTAppDelegate
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactAppDependencyProvider
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - expo-dev-launcher/Main (55.0.5-canary-20260128-67ce8d5):
+    - EXManifests
+    - expo-dev-launcher/Unsafe
+    - expo-dev-menu
+    - expo-dev-menu-interface
+    - ExpoModulesCore
+    - EXUpdatesInterface
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-jsinspector
+    - React-NativeModulesApple
+    - React-RCTAppDelegate
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactAppDependencyProvider
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - expo-dev-launcher/Unsafe (55.0.5-canary-20260128-67ce8d5):
+    - EXManifests
+    - expo-dev-menu
+    - expo-dev-menu-interface
+    - ExpoModulesCore
+    - EXUpdatesInterface
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-jsinspector
+    - React-NativeModulesApple
+    - React-RCTAppDelegate
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactAppDependencyProvider
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - expo-dev-menu (55.0.4-canary-20260128-67ce8d5):
+    - expo-dev-menu/Main (= 55.0.4-canary-20260128-67ce8d5)
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
+  - expo-dev-menu-interface (55.0.2-canary-20260128-67ce8d5)
+  - expo-dev-menu/Main (55.0.4-canary-20260128-67ce8d5):
+    - EXManifests
+    - expo-dev-menu-interface
+    - ExpoModulesCore
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-jsinspector
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - ExpoAsset (55.0.3-canary-20260128-67ce8d5):
+    - ExpoModulesCore
+  - ExpoBlur (55.0.4-canary-20260128-67ce8d5):
     - ExpoModulesCore
   - ExpoCrypto (55.0.10):
     - ExpoModulesCore
@@ -74,6 +227,8 @@ PODS:
   - ExpoImagePicker (55.0.4-canary-20260128-67ce8d5):
     - ExpoModulesCore
   - ExpoKeepAwake (55.0.3-canary-20260128-67ce8d5):
+    - ExpoModulesCore
+  - ExpoLinearGradient (55.0.4-canary-20260128-67ce8d5):
     - ExpoModulesCore
   - ExpoLinking (55.0.4-canary-20260128-67ce8d5):
     - ExpoModulesCore
@@ -124,6 +279,8 @@ PODS:
   - ExpoSystemUI (55.0.4-canary-20260128-67ce8d5):
     - ExpoModulesCore
   - ExpoUI (55.0.0-canary-20260128-67ce8d5):
+    - ExpoModulesCore
+  - EXUpdatesInterface (55.1.2-canary-20260128-67ce8d5):
     - ExpoModulesCore
   - FBLazyVector (0.83.1)
   - hermes-engine (0.14.0):
@@ -1992,6 +2149,28 @@ PODS:
     - React-utils (= 0.83.1)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.83.1)
+  - RNCMaskedView (0.3.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNCPicker (2.11.4):
     - hermes-engine
     - RCTRequired
@@ -2312,8 +2491,15 @@ DEPENDENCIES:
   - "AsyncStorage (from `../../../node_modules/.pnpm/@react-native-async-storage+async-storage@3.0.2_react-native@0.83.1_@babel+core@7.27.3__9f9edd01b81cf2144f88c3fefe03d6fb/node_modules/@react-native-async-storage/async-storage`)"
   - "EXApplication (from `../../../node_modules/.pnpm/expo-application@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-application/ios`)"
   - "EXConstants (from `../../../node_modules/.pnpm/expo-constants@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react_a48b1afe60e56329af3cbe61734688d0/node_modules/expo-constants/ios`)"
+  - "EXJSONUtils (from `../../../node_modules/.pnpm/expo-json-utils@55.0.1-canary-20260128-67ce8d5/node_modules/expo-json-utils/ios`)"
+  - "EXManifests (from `../../../node_modules/.pnpm/expo-manifests@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-manifests/ios`)"
   - "Expo (from `../../../node_modules/.pnpm/expo@55.0.0-canary-20260128-67ce8d5_@babel+core@7.27.3_@expo+dom-webview@55.0.2_@expo+m_562bd4bca1120b281375fd3f233fd05e/node_modules/expo`)"
+  - "expo-dev-client (from `../../../node_modules/.pnpm/expo-dev-client@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-client/ios`)"
+  - "expo-dev-launcher (from `../../../node_modules/.pnpm/expo-dev-launcher@55.0.5-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-launcher`)"
+  - "expo-dev-menu (from `../../../node_modules/.pnpm/expo-dev-menu@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-menu`)"
+  - "expo-dev-menu-interface (from `../../../node_modules/.pnpm/expo-dev-menu-interface@55.0.2-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-menu-interface/ios`)"
   - "ExpoAsset (from `../../../node_modules/.pnpm/expo-asset@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nat_44238f2a5b7de35ad3703cd65f906a89/node_modules/expo-asset/ios`)"
+  - "ExpoBlur (from `../../../node_modules/.pnpm/expo-blur@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nati_96463afbf0026f8cc215c65e1aa6a12b/node_modules/expo-blur/ios`)"
   - "ExpoCrypto (from `../../../node_modules/.pnpm/expo-crypto@55.0.10_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-crypto/ios`)"
   - "ExpoDocumentPicker (from `../../../node_modules/.pnpm/expo-document-picker@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-document-picker/ios`)"
   - "ExpoDomWebView (from `../../../node_modules/.pnpm/@expo+dom-webview@55.0.2_expo@55.0.0-canary-20260128-67ce8d5_react-native@0.83.1_@babel_b0442f89f0092575633fa7bc03b6c1b4/node_modules/@expo/dom-webview/ios`)"
@@ -2323,18 +2509,20 @@ DEPENDENCIES:
   - "ExpoImage (from `../../../node_modules/.pnpm/expo-image@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nat_53c851ce3985777e4a9469ed51a1cec5/node_modules/expo-image/ios`)"
   - "ExpoImagePicker (from `../../../node_modules/.pnpm/expo-image-picker@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-image-picker/ios`)"
   - "ExpoKeepAwake (from `../../../node_modules/.pnpm/expo-keep-awake@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react@19.2.0/node_modules/expo-keep-awake/ios`)"
+  - "ExpoLinearGradient (from `../../../node_modules/.pnpm/expo-linear-gradient@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_cd87cef8498bb749b3ccc05707001a61/node_modules/expo-linear-gradient/ios`)"
   - "ExpoLinking (from `../../../node_modules/.pnpm/expo-linking@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-n_6ef26dc06c7fa8531d29bcd8fcbb452b/node_modules/expo-linking/ios`)"
   - "ExpoLogBox (from `../../../node_modules/.pnpm/@expo+log-box@55.0.4-canary-20260128-67ce8d5_@expo+dom-webview@55.0.2_expo@55.0.0-canar_3b0b12dc6050f69c667f6e0144fb179e/node_modules/@expo/log-box`)"
   - "ExpoModulesCore (from `../../../node_modules/.pnpm/expo-modules-core@56.0.0-canary-20260128-67ce8d5_react-native@0.83.1_@babel+core@7.27.3_9d019e8ae27fcdd147127a6d0a986439/node_modules/expo-modules-core`)"
   - "ExpoModulesJSI (from `../../../node_modules/.pnpm/expo-modules-core@56.0.0-canary-20260128-67ce8d5_react-native@0.83.1_@babel+core@7.27.3_9d019e8ae27fcdd147127a6d0a986439/node_modules/expo-modules-core`)"
   - "ExpoNotifications (from `../../../node_modules/.pnpm/expo-notifications@55.0.5-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_r_74c0a9fff717373bafcfe271843cb88d/node_modules/expo-notifications/ios`)"
-  - "ExpoRouter (from `../../../node_modules/.pnpm/expo-router@55.0.0-canary-20260128-67ce8d5_52f344f5dc177fa943a84ee2609ad1d7/node_modules/expo-router/ios`)"
+  - "ExpoRouter (from `../../../node_modules/.pnpm/expo-router@55.0.0-canary-20260128-67ce8d5_5a6631444d069095443e06be6b761a71/node_modules/expo-router/ios`)"
   - "ExpoSecureStore (from `../../../node_modules/.pnpm/expo-secure-store@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-secure-store/ios`)"
   - "ExpoSensors (from `../../../node_modules/.pnpm/expo-sensors@55.0.9_expo@55.0.0-canary-20260128-67ce8d5_react-native@0.83.1_@babel+core_36d64aa25b1c0f5c14583e67e8202806/node_modules/expo-sensors/ios`)"
   - "ExpoSQLite (from `../../../node_modules/.pnpm/expo-sqlite@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-na_7a850c9acd686f596896b3b4117bf4ba/node_modules/expo-sqlite/ios`)"
   - "ExpoSymbols (from `../../../node_modules/.pnpm/expo-symbols@55.0.4-canary-20260128-67ce8d5_expo-font@55.0.4-canary-20260128-67ce8d5_ex_e0b6e95ae841e521d911071a1f3d219b/node_modules/expo-symbols/ios`)"
   - "ExpoSystemUI (from `../../../node_modules/.pnpm/expo-system-ui@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react_f661ef6731419a408b4ce6182de84351/node_modules/expo-system-ui/ios`)"
   - "ExpoUI (from `../../../node_modules/.pnpm/@expo+ui@55.0.0-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nativ_6d8bdc8bba258f764b657d3220f1895b/node_modules/@expo/ui/ios`)"
+  - "EXUpdatesInterface (from `../../../node_modules/.pnpm/expo-updates-interface@55.1.2-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-updates-interface/ios`)"
   - "FBLazyVector (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/Libraries/FBLazyVector`)"
   - "hermes-engine (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/sdks/hermes-engine/hermes-engine.podspec`)"
   - "RCTDeprecation (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/ReactApple/Libraries/RCTFoundation/RCTDeprecation`)"
@@ -2409,6 +2597,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - "ReactCommon/turbomodule/core (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/ReactCommon`)"
   - "ReactNativeDependencies (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)"
+  - "RNCMaskedView (from `../../../node_modules/.pnpm/@react-native-masked-view+masked-view@0.3.2_react-native@0.83.1_@babel+core@7.27.3_@typ_923ab9d3b216c8fb1d834103ded2c819/node_modules/@react-native-masked-view/masked-view`)"
   - "RNCPicker (from `../../../node_modules/.pnpm/@react-native-picker+picker@2.11.4_react-native@0.83.1_@babel+core@7.27.3_@types+react@_e47490d0f746dbe9bb5e6adf268a4b39/node_modules/@react-native-picker/picker`)"
   - "RNDateTimePicker (from `../../../node_modules/.pnpm/@react-native-community+datetimepicker@8.6.0_expo@55.0.0-canary-20260128-67ce8d5_react-_edff7e83f8e508e35dc42c42c52a1595/node_modules/@react-native-community/datetimepicker`)"
   - "RNGestureHandler (from `../../../node_modules/.pnpm/react-native-gesture-handler@2.30.1_react-native@0.83.1_@babel+core@7.27.3_@types+react_adee53bf4be25c343e32f4f179e01fbe/node_modules/react-native-gesture-handler`)"
@@ -2435,10 +2624,24 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-application@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-application/ios"
   EXConstants:
     :path: "../../../node_modules/.pnpm/expo-constants@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react_a48b1afe60e56329af3cbe61734688d0/node_modules/expo-constants/ios"
+  EXJSONUtils:
+    :path: "../../../node_modules/.pnpm/expo-json-utils@55.0.1-canary-20260128-67ce8d5/node_modules/expo-json-utils/ios"
+  EXManifests:
+    :path: "../../../node_modules/.pnpm/expo-manifests@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-manifests/ios"
   Expo:
     :path: "../../../node_modules/.pnpm/expo@55.0.0-canary-20260128-67ce8d5_@babel+core@7.27.3_@expo+dom-webview@55.0.2_@expo+m_562bd4bca1120b281375fd3f233fd05e/node_modules/expo"
+  expo-dev-client:
+    :path: "../../../node_modules/.pnpm/expo-dev-client@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-client/ios"
+  expo-dev-launcher:
+    :path: "../../../node_modules/.pnpm/expo-dev-launcher@55.0.5-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-launcher"
+  expo-dev-menu:
+    :path: "../../../node_modules/.pnpm/expo-dev-menu@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-menu"
+  expo-dev-menu-interface:
+    :path: "../../../node_modules/.pnpm/expo-dev-menu-interface@55.0.2-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-dev-menu-interface/ios"
   ExpoAsset:
     :path: "../../../node_modules/.pnpm/expo-asset@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nat_44238f2a5b7de35ad3703cd65f906a89/node_modules/expo-asset/ios"
+  ExpoBlur:
+    :path: "../../../node_modules/.pnpm/expo-blur@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nati_96463afbf0026f8cc215c65e1aa6a12b/node_modules/expo-blur/ios"
   ExpoCrypto:
     :path: "../../../node_modules/.pnpm/expo-crypto@55.0.10_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-crypto/ios"
   ExpoDocumentPicker:
@@ -2457,6 +2660,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-image-picker@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-image-picker/ios"
   ExpoKeepAwake:
     :path: "../../../node_modules/.pnpm/expo-keep-awake@55.0.3-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react@19.2.0/node_modules/expo-keep-awake/ios"
+  ExpoLinearGradient:
+    :path: "../../../node_modules/.pnpm/expo-linear-gradient@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_cd87cef8498bb749b3ccc05707001a61/node_modules/expo-linear-gradient/ios"
   ExpoLinking:
     :path: "../../../node_modules/.pnpm/expo-linking@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-n_6ef26dc06c7fa8531d29bcd8fcbb452b/node_modules/expo-linking/ios"
   ExpoLogBox:
@@ -2468,7 +2673,7 @@ EXTERNAL SOURCES:
   ExpoNotifications:
     :path: "../../../node_modules/.pnpm/expo-notifications@55.0.5-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_r_74c0a9fff717373bafcfe271843cb88d/node_modules/expo-notifications/ios"
   ExpoRouter:
-    :path: "../../../node_modules/.pnpm/expo-router@55.0.0-canary-20260128-67ce8d5_52f344f5dc177fa943a84ee2609ad1d7/node_modules/expo-router/ios"
+    :path: "../../../node_modules/.pnpm/expo-router@55.0.0-canary-20260128-67ce8d5_5a6631444d069095443e06be6b761a71/node_modules/expo-router/ios"
   ExpoSecureStore:
     :path: "../../../node_modules/.pnpm/expo-secure-store@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-secure-store/ios"
   ExpoSensors:
@@ -2481,6 +2686,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/expo-system-ui@55.0.4-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react_f661ef6731419a408b4ce6182de84351/node_modules/expo-system-ui/ios"
   ExpoUI:
     :path: "../../../node_modules/.pnpm/@expo+ui@55.0.0-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5_react-nativ_6d8bdc8bba258f764b657d3220f1895b/node_modules/@expo/ui/ios"
+  EXUpdatesInterface:
+    :path: "../../../node_modules/.pnpm/expo-updates-interface@55.1.2-canary-20260128-67ce8d5_expo@55.0.0-canary-20260128-67ce8d5/node_modules/expo-updates-interface/ios"
   FBLazyVector:
     :path: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/Libraries/FBLazyVector"
   hermes-engine:
@@ -2628,6 +2835,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  RNCMaskedView:
+    :path: "../../../node_modules/.pnpm/@react-native-masked-view+masked-view@0.3.2_react-native@0.83.1_@babel+core@7.27.3_@typ_923ab9d3b216c8fb1d834103ded2c819/node_modules/@react-native-masked-view/masked-view"
   RNCPicker:
     :path: "../../../node_modules/.pnpm/@react-native-picker+picker@2.11.4_react-native@0.83.1_@babel+core@7.27.3_@types+react@_e47490d0f746dbe9bb5e6adf268a4b39/node_modules/@react-native-picker/picker"
   RNDateTimePicker:
@@ -2649,8 +2858,15 @@ SPEC CHECKSUMS:
   AsyncStorage: 2e1d431842588f5af845737e6435c1fcbecdab51
   EXApplication: 5cd070d81928346eb017f60e63bc3ae39681bb0f
   EXConstants: f85a895b4829f83801fb5c6a021d1a21173f30c5
+  EXJSONUtils: c8cc592b4f3ebc60429d27f37d03e739c408262a
+  EXManifests: ac6bdae5fcdd08b4350014655effa158edc801e8
   Expo: 2b7d1045ece0e4f9e1e5e1d7a294445f348a6447
+  expo-dev-client: 4d6be126495a4b324c1ef30447ea3cc83e7bc804
+  expo-dev-launcher: a9d7ef7b63c3d2f9e2e1749d62b14d169f67a9b3
+  expo-dev-menu: 1a9e2cb6c9050e9c3092a11ea9de9dc752c55348
+  expo-dev-menu-interface: aee73b5d41d7f9a6b7c4c875e8e653ce39335ebc
   ExpoAsset: cbe0adb62fb4b0371d826ca6e6afde0f858264ab
+  ExpoBlur: a350667814b422f16d76c49fc2d910f499012261
   ExpoCrypto: 33a6c4fb9ccac7a4d784954d0db6c3ba292123e9
   ExpoDocumentPicker: 67fa307c24f2643d2932f515740446fc19a3a56b
   ExpoDomWebView: c0343b93dabed758db1e14ef1d1e570a1498562a
@@ -2660,6 +2876,7 @@ SPEC CHECKSUMS:
   ExpoImage: 815a90cb9ae5af855e1ac669e5cd823056a4a22c
   ExpoImagePicker: c6f33bbfbe54ded9e7d01f29ece192786a22b250
   ExpoKeepAwake: c9278f14b8ebc65065cbcb494d37e70e32cbce51
+  ExpoLinearGradient: b8c431124642ff678fc00340a6ecd3d0bf4a3ebe
   ExpoLinking: ff23a698b4d74eb3dcf965cf249e3715e910fc51
   ExpoLogBox: 1b7613d7aaea1f1ff2ab924c6bf9e0211f975488
   ExpoModulesCore: 9ced2f0644c3738422c8848713246333cd2fefcf
@@ -2672,6 +2889,7 @@ SPEC CHECKSUMS:
   ExpoSymbols: 0ebd17eb08f637187b024e05d989f6ec590048a7
   ExpoSystemUI: f551c69199c75e7d8d3548e590c6bd407627b16c
   ExpoUI: 2f424272bf96fd60a2c80ff67f54dc24b2282820
+  EXUpdatesInterface: 93413b1b9d85c6cd5a9061bc8937e57cc789ec3d
   FBLazyVector: 3a7ea85f6009224ad89f7daeda516f189e6b5759
   hermes-engine: 12fb99f754a1a9395da352397a5ccb643e7af9fb
   libavif: 84bbb62fb232c3018d6f1bab79beea87e35de7b7
@@ -2748,6 +2966,7 @@ SPEC CHECKSUMS:
   ReactCodegen: e22ba6e0dbe03fc539333d46a44effd322454462
   ReactCommon: c24a308601d0bce5c9edf2f36afb0dbf7afaf6ef
   ReactNativeDependencies: 8251abe806f806661dc3dfcb49588fcc150100c7
+  RNCMaskedView: d2578d41c59b936db122b2798ba37e4722d21035
   RNCPicker: c8a3584b74133464ee926224463fcc54dfdaebca
   RNDateTimePicker: 9c0a849bbe1c256f0854fea255734b715f5ea876
   RNGestureHandler: 0ea8153746a92b3744d4eaadade647debedf646e

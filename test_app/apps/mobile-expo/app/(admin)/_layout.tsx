@@ -2,7 +2,8 @@
  * Admin tab layout – bottom tabs with a custom tab bar.
  *
  * Uses Expo Router's Tabs with a custom tab bar that supports:
- *   - Native blur effect on the tab bar background
+ *   - Translucent frosted-glass tab bar (matching iOS system style)
+ *   - Press-state capsule highlight on tab items (Telegram-style feedback)
  *   - Long-press menu on the Collections tab (iOS) showing
  *     collections grouped by admin.group from the Payload schema
  *   - Single tap navigates to the collections overview
@@ -19,6 +20,7 @@ import { Home, LayoutList, Globe, User } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
   getCollectionLabel,
+  getSFSymbol,
   useMenuModel,
 } from '@payload-universal/admin-native'
 
@@ -58,20 +60,8 @@ if (Platform.OS === 'ios') {
 const ACTIVE_COLOR = '#007AFF'
 const INACTIVE_COLOR = '#8E8E93'
 
-/** Map well-known collection slugs to SF Symbol names. */
-function sfIcon(slug: string): string {
-  switch (slug) {
-    case 'users':
-      return 'person.2'
-    case 'media':
-      return 'photo.on.rectangle'
-    default:
-      return 'doc.text'
-  }
-}
-
 // ---------------------------------------------------------------------------
-// Generic tab bar item
+// Generic tab bar item – with press-state capsule highlight
 // ---------------------------------------------------------------------------
 
 type TabItemProps = {
@@ -84,9 +74,16 @@ type TabItemProps = {
 function TabItem({ icon: Icon, label, isFocused, onPress }: TabItemProps) {
   const color = isFocused ? ACTIVE_COLOR : INACTIVE_COLOR
   return (
-    <Pressable onPress={onPress} style={styles.tabItem}>
-      <Icon size={22} color={color} />
-      <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+    <Pressable
+      onPress={onPress}
+      style={styles.tabItem}
+    >
+      {({ pressed }) => (
+        <View style={[styles.tabItemContent, pressed && styles.tabItemPressed]}>
+          <Icon size={22} color={color} />
+          <Text style={[styles.tabLabel, { color }]}>{label}</Text>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -138,7 +135,7 @@ function CollectionsTabItem({
               <SButton
                 key={col.slug}
                 label={getCollectionLabel(menuModel!, col.slug)}
-                systemImage={sfIcon(col.slug)}
+                systemImage={getSFSymbol(col.icon)}
                 onPress={() =>
                   router.navigate(`/(admin)/collections/${col.slug}`)
                 }
@@ -161,7 +158,7 @@ function CollectionsTabItem({
                   <SButton
                     key={col.slug}
                     label={getCollectionLabel(menuModel!, col.slug)}
-                    systemImage={sfIcon(col.slug)}
+                    systemImage={getSFSymbol(col.icon)}
                     onPress={() =>
                       router.navigate(`/(admin)/collections/${col.slug}`)
                     }
@@ -175,10 +172,15 @@ function CollectionsTabItem({
     )
   }
 
-  // ── Fallback: simple pressable ─────────────────────────────────────
+  // ── Fallback: simple pressable with press-state capsule ────────────
   return (
     <Pressable onPress={onPress} style={styles.tabItem}>
-      {inner}
+      {({ pressed }) => (
+        <View style={[styles.tabItemContent, pressed && styles.tabItemPressed]}>
+          <LayoutList size={22} color={color} />
+          <Text style={[styles.tabLabel, { color }]}>Collections</Text>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -197,12 +199,12 @@ function CustomTabBar({ state, navigation }: any) {
     <View
       style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}
     >
-      {/* Background – blur or opaque fallback */}
+      {/* Background – translucent blur or frosted fallback */}
       {BlurView ? (
         <BlurView
           style={StyleSheet.absoluteFill}
-          intensity={80}
-          tint="systemChromeMaterial"
+          intensity={35}
+          tint="systemUltraThinMaterial"
         />
       ) : (
         <View style={[StyleSheet.absoluteFill, styles.barFallback]} />
@@ -313,27 +315,46 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.2)',
+    borderTopColor: 'rgba(0,0,0,0.12)',
   },
   barFallback: {
-    backgroundColor: 'rgba(249,249,249,0.94)',
+    backgroundColor: 'rgba(249,249,249,0.65)',
   },
   barRow: {
     flexDirection: 'row',
     paddingTop: 6,
   },
 
-  // Individual tab item
+  // Outer touch target — fills equal tab width
   tabItem: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 4,
+    paddingVertical: 2,
   },
+
+  // Inner content wrapper — receives the capsule highlight
+  tabItemContent: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
+    borderRadius: 18,
+  },
+
+  // Pressed capsule — subtle gray pill (Telegram-style)
+  tabItemPressed: {
+    backgroundColor: 'rgba(0,0,0,0.06)',
+  },
+
+  // Same shape for the SwiftUI Menu label (no press state — handled natively)
   tabItemInner: {
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 4,
   },
+
   tabLabel: {
     fontSize: 10,
     fontWeight: '500',

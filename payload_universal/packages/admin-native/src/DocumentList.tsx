@@ -11,7 +11,9 @@
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import {
   ActivityIndicator,
+  Animated,
   FlatList,
+  Image,
   Platform,
   Pressable,
   RefreshControl,
@@ -33,6 +35,8 @@ import { useDocumentListFilters } from './useDocumentListFilters'
 import { FilterChips } from './FilterChips'
 import { FilterBottomSheet } from './FilterBottomSheet'
 import { BottomSheet } from './BottomSheet'
+
+const AnimatedFlatList = Animated.createAnimatedComponent(FlatList)
 
 type Props = {
   /** Collection slug */
@@ -97,6 +101,10 @@ type Props = {
   filterSheetOpen?: boolean
   /** Called when the filter sheet should close. */
   onFilterSheetClose?: () => void
+  /** Scroll event handler forwarded to the inner FlatList (e.g. for scroll-driven header blur). */
+  onScroll?: (event: any) => void
+  /** Scroll event throttle in ms (default 16). Only used when onScroll is provided. */
+  scrollEventThrottle?: number
 }
 
 
@@ -121,8 +129,11 @@ export const DocumentList: React.FC<Props> = ({
   onSummaryPickerClose,
   filterSheetOpen: externalFilterOpen,
   onFilterSheetClose,
+  onScroll,
+  scrollEventThrottle = 16,
 }) => {
   const { baseURL, auth } = usePayloadNative()
+  // baseURL is also used below for resolving upload image thumbnail URLs
   const [data, setData] = useState<PaginatedDocs | null>(null)
   const [loading, setLoading] = useState(!localData)
   const [refreshing, setRefreshing] = useState(false)
@@ -259,41 +270,69 @@ export const DocumentList: React.FC<Props> = ({
     return s
   }
 
-  /** Resolve a field's label from the schema. */
+  /** Resolve field labels and types from the schema. */
   const fieldLabelMap = new Map<string, string>()
+  const fieldTypeMap = new Map<string, string>()
   if (schemaMap) {
     for (const f of extractRootFields(schemaMap, collection)) {
-      if (f.name) fieldLabelMap.set(f.name, getFieldLabel(f))
+      if (f.name) {
+        fieldLabelMap.set(f.name, getFieldLabel(f))
+        fieldTypeMap.set(f.name, f.type)
+      }
     }
   }
 
   const renderItem = ({ item }: { item: Record<string, unknown> }) => {
     const title = getDocumentTitle(item, titleField)
-    const subtitle = renderSubtitle?.(item) ?? (item.updatedAt ? `Updated ${formatDate(item.updatedAt as string)}` : undefined)
+    const date = item.updatedAt ? formatDate(item.updatedAt as string) : undefined
 
-    // Build summary lines from selected fields
+    // ── Detect image thumbnail from upload summary fields ──────────
+    let thumbnailUrl: string | null = null
+    let thumbnailField: string | null = null
+    for (const fieldName of summaryFields) {
+      if (fieldTypeMap.get(fieldName) === 'upload') {
+        const val = item[fieldName]
+        if (val && typeof val === 'object') {
+          const obj = val as Record<string, unknown>
+          if (typeof obj.url === 'string') {
+            const raw = obj.url
+            thumbnailUrl = raw.startsWith('http') ? raw : `${baseURL}${raw}`
+            thumbnailField = fieldName
+            break
+          }
+        }
+      }
+    }
+
+    // ── Build summary lines (exclude title field and image field) ──
     const summaryLines = summaryFields
-      .filter((f) => f !== titleField) // don't duplicate the title
+      .filter((f) => f !== titleField && f !== thumbnailField)
       .map((fieldName) => ({
         label: fieldLabelMap.get(fieldName) ?? fieldName,
         value: formatFieldValue(item[fieldName]),
       }))
-      .filter((line) => line.value !== '—') // skip empty
+      .filter((line) => line.value !== '—')
 
     const rowContent = (
       <View style={styles.row}>
+        {thumbnailUrl && (
+          <Image source={{ uri: thumbnailUrl }} style={styles.thumbnail} />
+        )}
         <View style={styles.rowContent}>
-          <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
-          {subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>}
+          {/* Title + date on one line */}
+          <View style={styles.rowHeader}>
+            <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
+            {date && <Text style={styles.rowDate}>{date}</Text>}
+          </View>
+
+          {/* Two-column summary grid */}
           {summaryLines.length > 0 && (
-            <View style={styles.summaryContainer}>
-              {summaryLines.map((line, i) => (
-                <React.Fragment key={line.label}>
-                  <View style={styles.summaryRow}>
-                    <Text style={styles.summaryLabel} numberOfLines={1}>{line.label}</Text>
-                    <Text style={styles.summaryValue} numberOfLines={1}>{line.value}</Text>
-                  </View>
-                </React.Fragment>
+            <View style={styles.summaryGrid}>
+              {summaryLines.map((line) => (
+                <View key={line.label} style={styles.summaryCell}>
+                  <Text style={styles.summaryLabel} numberOfLines={1}>{line.label}</Text>
+                  <Text style={styles.summaryValue} numberOfLines={1}>{line.value}</Text>
+                </View>
               ))}
             </View>
           )}
@@ -302,23 +341,17 @@ export const DocumentList: React.FC<Props> = ({
       </View>
     )
 
-    // Determine the inner content (custom renderRow or default Pressable)
-    let inner: React.ReactElement
     if (renderRow) {
-      inner = renderRow({ item, rowContent, onPress: () => onPress(item) })
-    } else {
-      inner = (
-        <Pressable style={styles.row} onPress={() => onPress(item)}>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle} numberOfLines={1}>{title}</Text>
-            {subtitle && <Text style={styles.rowSubtitle} numberOfLines={1}>{subtitle}</Text>}
-          </View>
-          <Text style={styles.rowChevron}>›</Text>
-        </Pressable>
-      )
+      return renderRow({ item, rowContent, onPress: () => onPress(item) })
     }
-
-    return inner
+    return (
+      <Pressable
+        onPress={() => onPress(item)}
+        style={({ pressed }) => pressed ? styles.rowPressed : undefined}
+      >
+        {rowContent}
+      </Pressable>
+    )
   }
 
   // --- Header component rendered above the list ---
@@ -367,7 +400,7 @@ export const DocumentList: React.FC<Props> = ({
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <AnimatedFlatList
         data={effectiveDocs}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderItem}
@@ -376,6 +409,8 @@ export const DocumentList: React.FC<Props> = ({
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.4}
         contentInsetAdjustmentBehavior="automatic"
+        onScroll={onScroll}
+        scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
@@ -456,7 +491,7 @@ export const DocumentList: React.FC<Props> = ({
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: t.colors.background },
-  listContent: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.md, paddingBottom: 100, gap: t.spacing.md },
+  listContent: { paddingTop: t.spacing.sm, paddingBottom: 100 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: t.spacing.xl },
 
   // Create button
@@ -468,22 +503,24 @@ const styles = StyleSheet.create({
   },
   createText: { color: t.colors.primaryText, fontSize: t.fontSize.md, fontWeight: '600' },
 
-  // Filter row (only visible when filters are active)
-  filterRow: { marginVertical: t.spacing.xs },
+  // Filter row
+  filterRow: { marginVertical: t.spacing.xs, paddingHorizontal: t.spacing.lg },
 
   resultCount: {
     fontSize: t.fontSize.xs,
     color: t.colors.textMuted,
     marginBottom: t.spacing.sm,
+    paddingHorizontal: t.spacing.lg,
   },
 
-  // Header top row (create + gear)
+  // Header top row
   headerTopRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
     marginTop: t.spacing.md,
     marginBottom: t.spacing.sm,
+    paddingHorizontal: t.spacing.lg,
   },
 
   // Gear icon
@@ -499,46 +536,82 @@ const styles = StyleSheet.create({
   },
   gearIcon: { fontSize: 20, color: t.colors.textMuted },
 
-  // Row
+  // ── Row ──────────────────────────────────────────────────────
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: t.colors.surface,
-    borderRadius: t.borderRadius.md,
-    padding: t.spacing.lg,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 3,
-    elevation: 1,
+    paddingVertical: 14,
+    paddingHorizontal: t.spacing.lg,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.12)',
   },
-  rowContent: { flex: 1 },
-  rowTitle: { fontSize: t.fontSize.md, fontWeight: '600', color: t.colors.text },
-  rowSubtitle: { fontSize: t.fontSize.sm, color: t.colors.textMuted, marginTop: 2 },
-  rowChevron: { fontSize: 20, color: t.colors.textMuted, marginLeft: t.spacing.sm },
+  rowPressed: {
+    backgroundColor: 'rgba(0,0,0,0.04)',
+    borderRadius: 10,
+  },
 
-  // Summary fields on cards
-  summaryContainer: {
-    marginTop: t.spacing.xs,
-    gap: 2,
+  // Image thumbnail (when an upload summary field has a URL)
+  thumbnail: {
+    width: 48,
+    height: 48,
+    borderRadius: 10,
+    backgroundColor: t.colors.separator,
+    marginRight: 12,
   },
-  summaryRow: {
+
+  // Text content
+  rowContent: { flex: 1, minWidth: 0 },
+  rowHeader: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: t.spacing.xs,
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 8,
   },
-  summaryLabel: {
-    fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
-    fontWeight: '500',
-  },
-  summaryValue: {
-    fontSize: t.fontSize.xs,
+  rowTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: t.colors.text,
     flex: 1,
   },
+  rowDate: {
+    fontSize: 12,
+    color: t.colors.textMuted,
+    flexShrink: 0,
+  },
+  rowChevron: {
+    fontSize: 18,
+    color: 'rgba(0,0,0,0.18)',
+    marginLeft: 6,
+    fontWeight: '300',
+  },
 
-  // States
+  // ── Two-column summary grid ──────────────────────────────────
+  summaryGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  summaryCell: {
+    width: '50%' as any,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingRight: 14,
+    marginTop: 2,
+  },
+  summaryLabel: {
+    fontSize: 12,
+    color: t.colors.textMuted,
+    marginRight: 4,
+  },
+  summaryValue: {
+    fontSize: 12,
+    color: t.colors.text,
+    fontWeight: '500',
+    flexShrink: 1,
+    textAlign: 'right',
+  },
+
+  // ── States ───────────────────────────────────────────────────
   errorText: { color: t.colors.error, fontSize: t.fontSize.md, textAlign: 'center', marginBottom: t.spacing.md },
   retryBtn: { paddingHorizontal: t.spacing.xl, paddingVertical: t.spacing.sm, backgroundColor: t.colors.primary, borderRadius: t.borderRadius.sm },
   retryText: { color: t.colors.primaryText, fontSize: t.fontSize.md, fontWeight: '600' },

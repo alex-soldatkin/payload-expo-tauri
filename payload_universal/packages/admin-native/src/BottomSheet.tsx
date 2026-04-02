@@ -5,10 +5,25 @@ import {
   Keyboard,
   Modal,
   PanResponder,
+  Platform,
   Pressable,
   StyleSheet,
   View,
 } from 'react-native'
+
+// Optional: BlurView for translucent sheet background
+let BlurView: React.ComponentType<{
+  style?: any
+  intensity?: number
+  tint?: string
+}> | null = null
+
+try {
+  const mod = require('expo-blur')
+  if (mod.BlurView) BlurView = mod.BlurView
+} catch {
+  /* not available */
+}
 
 type Props = {
   visible: boolean
@@ -85,6 +100,16 @@ export const BottomSheet: React.FC<Props> = ({
         style={[styles.sheet, { height: sheetHeight, transform: [{ translateY }] }]}
         {...panResponder.panHandlers}
       >
+        {/* Translucent blur background (iOS) or solid fallback */}
+        {BlurView && Platform.OS === 'ios' ? (
+          <BlurView
+            style={StyleSheet.absoluteFill}
+            intensity={40}
+            tint="systemUltraThinMaterial"
+          />
+        ) : (
+          <View style={[StyleSheet.absoluteFill, styles.sheetFallbackBg]} />
+        )}
         <View style={styles.handleRow}>
           <View style={styles.handleBar} />
         </View>
@@ -102,16 +127,22 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    backgroundColor: '#fff',
+    backgroundColor: 'transparent',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
+    overflow: 'hidden',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -3 },
     shadowOpacity: 0.12,
     shadowRadius: 10,
     elevation: 20,
   },
+  sheetFallbackBg: {
+    backgroundColor: 'rgba(255,255,255,0.88)',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
   handleRow: { alignItems: 'center', paddingVertical: 10 },
-  handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: '#ddd' },
+  handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.18)' },
   content: { flex: 1, paddingHorizontal: 16, paddingBottom: 16 },
 })

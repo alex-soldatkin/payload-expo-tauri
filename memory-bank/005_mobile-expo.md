@@ -52,6 +52,25 @@ Status (2026-03-30)
 - `NSAllowsArbitraryLoads: true` in Info.plist for dev builds (http:// access to local server from physical devices).
 - CocoaPods requires `LANG=en_US.UTF-8` (Ruby 4.0 encoding fix, added to `~/.zshrc`).
 
+Custom tab bar + long-press collection menu (2026-04-02)
+- Replaced `NativeTabs` (expo-router/unstable-native-tabs) with standard `Tabs` from expo-router + custom `tabBar` component.
+- Custom tab bar renders BlurView background (systemChromeMaterial), safe area padding, lucide icons, active/inactive colors.
+- Collections tab uses `@expo/ui/swift-ui` `Menu` component for Telegram-style long-press behaviour:
+  - `onPrimaryAction` handles single tap → switch to collections tab
+  - Long press shows native iOS dropdown with all collections (SF Symbol icons from schema)
+  - Grouped collections render as nested `Menu` (collapsible submenus)
+  - Ungrouped collections render as top-level buttons with divider separator
+  - `Host` wrapper provides SwiftUI rendering context for the Menu trigger label (ReactNode)
+  - Falls back to plain Pressable on Android / when @expo/ui unavailable
+
+Dynamic collection icons (2026-04-02)
+- `MenuModel` type extended with `icon?: string` on collections and globals.
+- `buildMenuModel()` reads `admin.icon` from Payload collection configs (lucide icon name or raw SVG string).
+- New `iconRegistry.ts` in admin-native: 150+ lucide → SF Symbol mappings, lazy component registry, runtime extensible via `registerIcon()`.
+- New `CollectionIcon` component: renders lucide component by name, raw SVG via SvgXml, or fallback File icon.
+- Tab menu, collections index, and dashboard all use dynamic icons from the schema.
+- Icons change dynamically when Payload config is updated and schema is refreshed — no app rebuild needed.
+
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.
 - Reuse packages/admin-core for form state, validation, schema maps, and API calls.

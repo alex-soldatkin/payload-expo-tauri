@@ -12,7 +12,7 @@
  *    directly (not local-first) and can be compared and restored.
  */
 import React, { useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Animated, Pressable, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { Save } from 'lucide-react-native'
@@ -29,11 +29,21 @@ import {
   VersionsBottomSheet,
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalDocument, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
+import { useHeaderScrollY } from '@/components/HeaderScrollContext'
 
 export default function DocumentEditScreen() {
   const { slug, id } = useLocalSearchParams<{ slug: string; id: string }>()
   const router = useRouter()
   const headerHeight = useHeaderHeight()
+  const headerScrollY = useHeaderScrollY()
+  const editScrollHandler = useMemo(
+    () =>
+      Animated.event(
+        [{ nativeEvent: { contentOffset: { y: headerScrollY } } }],
+        { useNativeDriver: true },
+      ),
+    [headerScrollY],
+  )
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
   const localDB = useLocalDB()
@@ -174,6 +184,8 @@ export default function DocumentEditScreen() {
         submitLabel={hasDrafts ? undefined : 'Update'}
         draftStatus={hasDrafts ? ((docStatus as 'draft' | 'published') ?? 'draft') : undefined}
         contentInsetTop={headerHeight}
+        onScroll={editScrollHandler}
+        scrollEventThrottle={16}
       />
 
       {/* Versions bottom sheet */}

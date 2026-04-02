@@ -1,19 +1,28 @@
 /**
  * Globals stack navigator.
- * Uses a progressive blur overlay at the top of the screen that fades from
- * full blur behind the navigation bar to fully transparent below it.
+ * Uses a progressive blur overlay that fades in on scroll,
+ * otherwise falls back to a standard frosted headerBackground.
  */
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ProgressiveBlurHeader } from '../../../components/ProgressiveBlurHeader'
+import {
+  ProgressiveBlurHeader,
+  HeaderBackgroundFallback,
+  hasProgressiveBlur,
+} from '@/components/ProgressiveBlurHeader'
+import {
+  HeaderScrollProvider,
+  useHeaderScrollY,
+} from '@/components/HeaderScrollContext'
 
 const NAV_BAR_HEIGHT = 44
 
-export default function GlobalsLayout() {
+function GlobalsStack() {
   const insets = useSafeAreaInsets()
   const headerHeight = insets.top + NAV_BAR_HEIGHT
+  const scrollY = useHeaderScrollY()
 
   return (
     <View style={styles.container}>
@@ -24,13 +33,24 @@ export default function GlobalsLayout() {
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           headerBackTitleVisible: false,
           headerShadowVisible: false,
+          ...(hasProgressiveBlur
+            ? {}
+            : { headerBackground: () => <HeaderBackgroundFallback /> }),
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Globals' }} />
         <Stack.Screen name="[slug]" options={{ title: 'Edit Global' }} />
       </Stack>
-      <ProgressiveBlurHeader headerHeight={headerHeight} />
+      <ProgressiveBlurHeader headerHeight={headerHeight} scrollY={scrollY} />
     </View>
+  )
+}
+
+export default function GlobalsLayout() {
+  return (
+    <HeaderScrollProvider>
+      <GlobalsStack />
+    </HeaderScrollProvider>
   )
 }
 

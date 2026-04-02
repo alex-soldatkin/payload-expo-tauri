@@ -5,6 +5,8 @@ export const Posts: CollectionConfig = {
   admin: {
     useAsTitle: 'title',
     group: 'Content',
+    // @ts-expect-error — payload-universal icon extension
+    icon: 'file-text',
   },
   versions: {
     drafts: true,

@@ -4,6 +4,8 @@ export const Users: CollectionConfig = {
   slug: 'users',
   admin: {
     useAsTitle: 'email',
+    // @ts-expect-error — payload-universal icon extension
+    icon: 'users',
   },
   auth: true,
   fields: [

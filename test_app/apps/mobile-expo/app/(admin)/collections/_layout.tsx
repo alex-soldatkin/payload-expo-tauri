@@ -1,20 +1,31 @@
 /**
  * Collections stack navigator.
- * Provides push/pop navigation: Collections list -> Document list -> Document edit.
- * Uses a progressive blur overlay at the top of the screen that fades from
- * full blur behind the navigation bar to fully transparent below it.
+ * Provides push/pop navigation: Collections list → Document list → Document edit.
+ *
+ * Uses a progressive blur header overlay that fades in as the user scrolls.
+ * Each screen connects its scroll events to the shared HeaderScrollContext
+ * so the blur transitions smoothly from transparent → frosted.
  */
 import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
-import { ProgressiveBlurHeader } from '../../../components/ProgressiveBlurHeader'
+import {
+  ProgressiveBlurHeader,
+  HeaderBackgroundFallback,
+  hasProgressiveBlur,
+} from '@/components/ProgressiveBlurHeader'
+import {
+  HeaderScrollProvider,
+  useHeaderScrollY,
+} from '@/components/HeaderScrollContext'
 
 const NAV_BAR_HEIGHT = 44
 
-export default function CollectionsLayout() {
+function CollectionsStack() {
   const insets = useSafeAreaInsets()
   const headerHeight = insets.top + NAV_BAR_HEIGHT
+  const scrollY = useHeaderScrollY()
 
   return (
     <View style={styles.container}>
@@ -25,6 +36,9 @@ export default function CollectionsLayout() {
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
           headerBackTitleVisible: false,
           headerShadowVisible: false,
+          ...(hasProgressiveBlur
+            ? {}
+            : { headerBackground: () => <HeaderBackgroundFallback /> }),
         }}
       >
         <Stack.Screen name="index" options={{ title: 'Collections' }} />
@@ -32,11 +46,23 @@ export default function CollectionsLayout() {
         <Stack.Screen name="[slug]/[id]" options={{ title: 'Edit' }} />
         <Stack.Screen
           name="[slug]/create"
-          options={{ title: 'Create', presentation: 'modal' }}
+          options={{
+            title: 'Create',
+            presentation: 'modal',
+            headerBackground: () => <HeaderBackgroundFallback />,
+          }}
         />
       </Stack>
-      <ProgressiveBlurHeader headerHeight={headerHeight} />
+      <ProgressiveBlurHeader headerHeight={headerHeight} scrollY={scrollY} />
     </View>
+  )
+}
+
+export default function CollectionsLayout() {
+  return (
+    <HeaderScrollProvider>
+      <CollectionsStack />
+    </HeaderScrollProvider>
   )
 }
 
