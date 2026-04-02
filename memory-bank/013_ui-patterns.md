@@ -345,6 +345,58 @@ resolveRequest: (context, moduleName, platform) => {
 
 ---
 
+## Progressive Blur Header (2026-04-02)
+
+### Effect
+Apple-style translucent header where blur fades progressively from full intensity at the top of the screen to fully transparent below the navigation bar. Inspired by [expo-progressive-blur](https://github.com/rit3zh/expo-progressive-blur).
+
+### Architecture
+A shared `ProgressiveBlurHeader` component (`components/ProgressiveBlurHeader.tsx`) renders as an absolutely-positioned overlay at the top of the screen with `pointerEvents="none"`. It sits as a sibling to the `Stack` navigator inside a wrapper `View` — the native header elements (title, back button) render above it at the native level via `react-native-screens`.
+
+### Rendering tiers
+1. **iOS 26+ liquid glass** — `GlassView` from `expo-glass-effect` (Apple's native material)
+2. **Progressive blur** — `MaskedView` + `LinearGradient` (gradient mask) + `BlurView` (blur source)
+   - Gradient mask: opaque at top → transparent at bottom → blur fades out
+   - Paper-colored tint gradient layered behind blur for text readability
+   - `react-native-easing-gradient` generates natural ease-out stops; falls back to hand-tuned stops
+3. **BlurView only** — when `MaskedView` / `LinearGradient` unavailable
+4. **Gradient tint** — `LinearGradient` with paper color (no native blur)
+5. **Solid translucent** — plain `View` with `rgba(246, 244, 241, 0.92)` background
+
+### Dependencies added
+- `expo-linear-gradient` — gradient rendering (mask element + tint layer)
+- `@react-native-masked-view/masked-view` — applies gradient as alpha mask over `BlurView`
+- `react-native-easing-gradient` — generates eased color stops for natural blur fall-off
+
+### Layout integration
+```tsx
+// In _layout.tsx (collections or globals)
+const insets = useSafeAreaInsets()
+const headerHeight = insets.top + 44 // safe area + standard nav bar
+
+<View style={{ flex: 1 }}>
+  <Stack screenOptions={{ headerTransparent: true, headerShadowVisible: false }}>
+    ...
+  </Stack>
+  <ProgressiveBlurHeader headerHeight={headerHeight} />
+</View>
+```
+
+### Props
+| Prop | Default | Purpose |
+|------|---------|---------|
+| `headerHeight` | required | Safe area top + 44 (standard nav bar) |
+| `blurExtension` | `30` | Extra pixels below header where blur fades |
+| `blurIntensity` | `50` | `expo-blur` intensity value |
+
+### Key considerations
+- The overlay has `zIndex: 1` — low enough to stay below native header elements
+- `pointerEvents="none"` ensures all touches pass through to content and header buttons
+- Modal screens (e.g. `[slug]/create` with `presentation: 'modal'`) get their own native view hierarchy — the overlay does not appear over them
+- During push/pop transitions, the blur overlay stays fixed while screen content slides underneath — this is the desired behavior
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink

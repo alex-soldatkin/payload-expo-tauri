@@ -36,6 +36,8 @@ export type MenuModel = {
     drafts?: boolean
     versions?: boolean
     useAsTitle?: string
+    /** Lucide icon name (e.g. 'users', 'image', 'file-text') or raw SVG string. */
+    icon?: string
   }>
   globals: Array<{
     slug: string
@@ -43,6 +45,8 @@ export type MenuModel = {
     group?: string | null
     hidden?: boolean
     drafts?: boolean
+    /** Lucide icon name or raw SVG string. */
+    icon?: string
   }>
   capabilities: {
     adminSchemaJson: boolean
@@ -167,6 +171,11 @@ const buildMenuModel = (config: Config): MenuModel => {
       groups.add(group)
     }
 
+    // `icon` is an extension added by payload-universal — read safely.
+    const icon = (collection.admin as Record<string, unknown> | undefined)?.icon as
+      | string
+      | undefined
+
     return {
       slug: collection.slug,
       labels: collection.labels,
@@ -175,6 +184,7 @@ const buildMenuModel = (config: Config): MenuModel => {
       drafts: Boolean(collection.versions?.drafts),
       versions: Boolean(collection.versions),
       useAsTitle: collection.admin?.useAsTitle,
+      ...(icon ? { icon } : {}),
     }
   })
 
@@ -184,12 +194,17 @@ const buildMenuModel = (config: Config): MenuModel => {
       groups.add(group)
     }
 
+    const icon = (global.admin as Record<string, unknown> | undefined)?.icon as
+      | string
+      | undefined
+
     return {
       slug: global.slug,
       label: global.label,
       group,
       hidden: global.admin?.hidden,
       drafts: Boolean(global.versions?.drafts),
+      ...(icon ? { icon } : {}),
     }
   })
 
