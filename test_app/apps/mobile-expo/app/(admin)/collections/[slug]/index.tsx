@@ -59,6 +59,15 @@ export default function CollectionDocumentsScreen() {
   const localResult = useLocalCollection(localDB, slug)
   const { remove } = useLocalMutations(localDB, slug)
 
+  // Stable reference for localData — prevents DocumentList from re-rendering
+  // on every parent render. Only changes when the actual data changes.
+  const localData = useMemo(() => ({
+    docs: localResult.docs as Record<string, unknown>[],
+    totalDocs: localResult.totalDocs,
+    loading: localResult.loading || !isReady,
+    refetch: localResult.refetch,
+  }), [localResult.docs, localResult.totalDocs, localResult.loading, isReady, localResult.refetch])
+
   // Persisted summary field selection
   const [summaryFields, setSummaryFields] = useState<string[]>([])
   const [summaryPickerOpen, setSummaryPickerOpen] = useState(false)
@@ -140,26 +149,29 @@ export default function CollectionDocumentsScreen() {
   // Preview dimensions
   const PREVIEW_W = Math.round(Dimensions.get('window').width * 0.92)
   const PREVIEW_H = Math.round(Dimensions.get('window').height * 0.65)
-
-  // No-op submit for the read-only preview form
   const noopSubmit = useCallback(async () => {}, [])
 
-  // Scrollable preview row renderer (Telegram-style).
-  // Long press → custom overlay with a live, scrollable DocumentForm.
-  // Tap → navigate to full edit screen.
+  // Track which item's preview is open so only ONE DocumentForm
+  // is mounted at a time (not one per row — that was killing perf).
+  const [previewItemId, setPreviewItemId] = useState<string | null>(null)
+
   const renderRow = useCallback(
-    ({ item, rowContent, onPress }: { item: Record<string, unknown>; rowContent: React.ReactElement; onPress: () => void }) => {
+    ({ item, rowContent }: { item: Record<string, unknown>; rowContent: React.ReactElement; onPress: () => void }) => {
+      const itemId = String(item.id)
+      const isThisPreviewOpen = previewItemId === itemId
       return (
         <ScrollablePreview.Trigger
           previewWidth={PREVIEW_W}
           previewHeight={PREVIEW_H}
           onPrimaryAction={() => {
-            if (!isPreview) router.push(`/(admin)/collections/${slug}/${item.id as string}`)
+            if (!isPreview) router.push(`/(admin)/collections/${slug}/${itemId}`)
           }}
+          onPreviewOpen={() => setPreviewItemId(itemId)}
+          onPreviewClose={() => setPreviewItemId(null)}
         >
           {rowContent}
           <ScrollablePreview.Content>
-            {schemaMap && (
+            {schemaMap && isThisPreviewOpen ? (
               <DocumentForm
                 schemaMap={schemaMap}
                 slug={slug}
@@ -167,13 +179,13 @@ export default function CollectionDocumentsScreen() {
                 onSubmit={noopSubmit}
                 disabled
               />
-            )}
+            ) : null}
           </ScrollablePreview.Content>
           <ScrollablePreview.Action
             title="Open"
             icon="doc.text"
             onActionPress={() => {
-              if (!isPreview) router.push(`/(admin)/collections/${slug}/${item.id as string}`)
+              if (!isPreview) router.push(`/(admin)/collections/${slug}/${itemId}`)
             }}
           />
           <ScrollablePreview.Action
@@ -181,7 +193,7 @@ export default function CollectionDocumentsScreen() {
             icon="trash"
             destructive
             onActionPress={() => {
-              Alert.alert('Delete', 'Are you sure you want to delete this item?', [
+              Alert.alert('Delete', 'Are you sure?', [
                 { text: 'Cancel', style: 'cancel' },
                 { text: 'Delete', style: 'destructive', onPress: () => handleDelete(item) },
               ])
@@ -190,7 +202,7 @@ export default function CollectionDocumentsScreen() {
         </ScrollablePreview.Trigger>
       )
     },
-    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H],
+    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId],
   )
 
   return (
@@ -239,12 +251,7 @@ export default function CollectionDocumentsScreen() {
         onSummaryPickerClose={() => setSummaryPickerOpen(false)}
         filterSheetOpen={filterSheetOpen}
         onFilterSheetClose={() => setFilterSheetOpen(false)}
-        localData={{
-          docs: localResult.docs as Record<string, unknown>[],
-          totalDocs: localResult.totalDocs,
-          loading: localResult.loading || !isReady,
-          refetch: localResult.refetch,
-        }}
+        localData={localData}
         onScroll={scrollHandler}
         scrollEventThrottle={16}
       />

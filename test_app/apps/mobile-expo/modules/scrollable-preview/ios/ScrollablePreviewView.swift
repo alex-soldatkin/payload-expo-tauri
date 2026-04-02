@@ -145,22 +145,21 @@ class ScrollablePreviewActionView: ExpoView {
 
 // MARK: - Overlay ViewController (blur + floating content + actions)
 
-class ScrollablePreviewOverlayVC: UIViewController, UIScrollViewDelegate {
+class ScrollablePreviewOverlayVC: UIViewController {
   private let previewContentView: ScrollablePreviewContentView
   private let actionViewModels: [ScrollablePreviewActionView]
   private let previewW: CGFloat
   private let previewH: CGFloat
+  private weak var originalParent: UIView?
+  private var originalFrame: CGRect = .zero
+  private var originalHidden: Bool = true
 
   var onDismiss: (() -> Void)?
 
   // UI elements
   private let blurView = UIVisualEffectView(effect: nil)
-  private let containerView = UIView()
   private let contentWrapper = UIView()
   private let actionsWrapper = UIView()
-
-  // Outer scroll (Telegram's "hidden scroller" trick for scrolling the whole popup)
-  private let outerScroller = UIScrollView()
 
   init(
     previewContent: ScrollablePreviewContentView,
@@ -182,82 +181,116 @@ class ScrollablePreviewOverlayVC: UIViewController, UIScrollViewDelegate {
     super.viewDidLoad()
     view.backgroundColor = .clear
 
-    // ── Blur background ──
+    // ── Blur background (dismiss on tap) ──
     blurView.frame = view.bounds
     blurView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     view.addSubview(blurView)
 
-    // Dismiss on tap
     let dimTap = UITapGestureRecognizer(target: self, action: #selector(dismissPreview))
     blurView.addGestureRecognizer(dimTap)
-
-    // ── Container (holds content + actions, centered) ──
-    view.addSubview(containerView)
 
     // ── Content wrapper (rounded, clips, holds the RN view) ──
     contentWrapper.layer.cornerRadius = 14
     contentWrapper.layer.cornerCurve = .continuous
     contentWrapper.clipsToBounds = true
     contentWrapper.backgroundColor = UIColor(red: 246/255, green: 244/255, blue: 241/255, alpha: 1)
-    containerView.addSubview(contentWrapper)
+    view.addSubview(contentWrapper)
 
-    // Move the RN preview content into our wrapper
+    // Save original parent so we can return the view on dismiss
+    originalParent = previewContentView.superview
+    originalFrame = previewContentView.frame
+    originalHidden = previewContentView.isHidden
+
+    // Reparent the RN content into our wrapper
     previewContentView.isHidden = false
+    previewContentView.removeFromSuperview()
     previewContentView.frame = CGRect(x: 0, y: 0, width: previewW, height: previewH)
     contentWrapper.addSubview(previewContentView)
 
-    // ── Actions wrapper ──
+    // Force RN to relayout for the new frame
+    previewContentView.setNeedsLayout()
+    previewContentView.layoutIfNeeded()
+    // Also tell Yoga about the new size
+    for sub in previewContentView.subviews {
+      sub.frame = CGRect(x: 0, y: 0, width: previewW, height: previewH)
+      sub.setNeedsLayout()
+      sub.layoutIfNeeded()
+    }
+
+    // ── Actions wrapper (auto-sized, rounded, blur-backed) ──
     actionsWrapper.layer.cornerRadius = 14
     actionsWrapper.layer.cornerCurve = .continuous
     actionsWrapper.clipsToBounds = true
-    containerView.addSubview(actionsWrapper)
+    view.addSubview(actionsWrapper)
 
-    // Blur behind actions
     let actionsBlur = UIVisualEffectView(effect: UIBlurEffect(style: .systemMaterial))
     actionsBlur.autoresizingMask = [.flexibleWidth, .flexibleHeight]
     actionsWrapper.addSubview(actionsBlur)
 
-    // Build action buttons
+    // ── Measure action buttons to determine width ──
+    let ROW_HEIGHT: CGFloat = 46
+    let H_PAD: CGFloat = 16
+    var maxTextWidth: CGFloat = 0
+    let iconSpace: CGFloat = 32  // icon + padding
+
+    for action in actionViewModels {
+      let title = action.actionTitle ?? "Action"
+      let attrs: [NSAttributedString.Key: Any] = [
+        .font: UIFont.systemFont(ofSize: 17, weight: .regular),
+      ]
+      let size = (title as NSString).size(withAttributes: attrs)
+      maxTextWidth = max(maxTextWidth, size.width)
+    }
+
+    let actionsW = min(ceil(maxTextWidth + iconSpace + H_PAD * 2 + 16), previewW)
+    let actionsHeight = CGFloat(actionViewModels.count) * ROW_HEIGHT
+
+    // ── Build action rows ──
     var yOffset: CGFloat = 0
     for (i, action) in actionViewModels.enumerated() {
-      let btn = makeActionButton(
+      let row = makeActionRow(
         title: action.actionTitle ?? "Action",
         icon: action.iconName,
         destructive: action.isDestructive,
+        width: actionsW,
+        height: ROW_HEIGHT,
         action: { [weak self, weak action] in
           action?.onActionPress()
           self?.dismissPreview()
         }
       )
-      btn.frame = CGRect(x: 0, y: yOffset, width: previewW, height: 50)
-      actionsBlur.contentView.addSubview(btn)
+      row.frame = CGRect(x: 0, y: yOffset, width: actionsW, height: ROW_HEIGHT)
+      actionsBlur.contentView.addSubview(row)
 
+      // Separator between rows
       if i < actionViewModels.count - 1 {
         let sep = UIView()
         sep.backgroundColor = UIColor.separator
-        sep.frame = CGRect(x: 16, y: yOffset + 49.5, width: previewW - 32, height: 0.5)
+        sep.frame = CGRect(x: H_PAD, y: yOffset + ROW_HEIGHT - 0.5, width: actionsW - H_PAD * 2, height: 0.5)
         actionsBlur.contentView.addSubview(sep)
       }
-      yOffset += 50
+      yOffset += ROW_HEIGHT
     }
 
-    // Layout
-    let actionsHeight = CGFloat(actionViewModels.count) * 50
+    // ── Layout ──
     let totalHeight = previewH + 8 + actionsHeight
-    let topY = (view.bounds.height - totalHeight) / 2
+    let topY = max(60, (view.bounds.height - totalHeight) / 2)
+    let contentX = (view.bounds.width - previewW) / 2
 
-    containerView.frame = CGRect(
-      x: (view.bounds.width - previewW) / 2,
-      y: topY,
-      width: previewW,
-      height: totalHeight
+    contentWrapper.frame = CGRect(x: contentX, y: topY, width: previewW, height: previewH)
+    // Actions: right-aligned under the content (like iOS system menus)
+    actionsWrapper.frame = CGRect(
+      x: contentX + previewW - actionsW,
+      y: topY + previewH + 8,
+      width: actionsW,
+      height: actionsHeight
     )
-    contentWrapper.frame = CGRect(x: 0, y: 0, width: previewW, height: previewH)
-    actionsWrapper.frame = CGRect(x: 0, y: previewH + 8, width: previewW, height: actionsHeight)
 
     // Start invisible for animate-in
-    containerView.transform = CGAffineTransform(scaleX: 0.85, y: 0.85)
-    containerView.alpha = 0
+    contentWrapper.transform = CGAffineTransform(scaleX: 0.88, y: 0.88)
+    contentWrapper.alpha = 0
+    actionsWrapper.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
+    actionsWrapper.alpha = 0
   }
 
   // ── Animation ──
@@ -271,8 +304,20 @@ class ScrollablePreviewOverlayVC: UIViewController, UIScrollViewDelegate {
       options: [],
       animations: {
         self.blurView.effect = UIBlurEffect(style: .systemUltraThinMaterial)
-        self.containerView.transform = .identity
-        self.containerView.alpha = 1
+        self.contentWrapper.transform = .identity
+        self.contentWrapper.alpha = 1
+      }
+    )
+    // Actions spring in slightly delayed
+    UIView.animate(
+      withDuration: 0.35,
+      delay: 0.05,
+      usingSpringWithDamping: 0.72,
+      initialSpringVelocity: 0,
+      options: [],
+      animations: {
+        self.actionsWrapper.transform = .identity
+        self.actionsWrapper.alpha = 1
       }
     )
   }
@@ -280,38 +325,65 @@ class ScrollablePreviewOverlayVC: UIViewController, UIScrollViewDelegate {
   @objc private func dismissPreview() {
     UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseIn, animations: {
       self.blurView.effect = nil
-      self.containerView.alpha = 0
-      self.containerView.transform = CGAffineTransform(scaleX: 0.9, y: 0.9)
+      self.contentWrapper.alpha = 0
+      self.contentWrapper.transform = CGAffineTransform(scaleX: 0.92, y: 0.92)
+      self.actionsWrapper.alpha = 0
+      self.actionsWrapper.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
     }) { _ in
-      // Move preview content back to the trigger
+      // Return RN view to its original parent
+      self.previewContentView.removeFromSuperview()
+      self.previewContentView.frame = self.originalFrame
       self.previewContentView.isHidden = true
+      self.originalParent?.addSubview(self.previewContentView)
       self.onDismiss?()
       self.dismiss(animated: false)
     }
   }
 
-  // ── Action button factory ──
+  // ── Action row factory (text left, icon right) ──
 
-  private func makeActionButton(
+  private func makeActionRow(
     title: String,
     icon: String?,
     destructive: Bool,
+    width: CGFloat,
+    height: CGFloat,
     action: @escaping () -> Void
-  ) -> UIButton {
-    var config = UIButton.Configuration.plain()
-    config.title = title
-    config.baseForegroundColor = destructive ? .systemRed : .label
-    config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16)
+  ) -> UIView {
+    let container = UIView()
+    container.backgroundColor = .clear
 
-    if let icon = icon, let img = UIImage(systemName: icon) {
-      config.image = img
-      config.imagePlacement = .trailing
-      config.imagePadding = 8
-      config.preferredSymbolConfigurationForImage = UIImage.SymbolConfiguration(scale: .medium)
+    let color: UIColor = destructive ? .systemRed : .label
+
+    // Title label (left-aligned)
+    let label = UILabel()
+    label.text = title
+    label.font = .systemFont(ofSize: 17, weight: .regular)
+    label.textColor = color
+    label.frame = CGRect(x: 16, y: 0, width: width - 56, height: height)
+    container.addSubview(label)
+
+    // Icon (right-aligned)
+    if let iconName = icon, let img = UIImage(systemName: iconName)?.withTintColor(color, renderingMode: .alwaysOriginal) {
+      let iv = UIImageView(image: img)
+      iv.contentMode = .scaleAspectFit
+      iv.frame = CGRect(x: width - 16 - 20, y: (height - 20) / 2, width: 20, height: 20)
+      container.addSubview(iv)
     }
 
-    let btn = UIButton(configuration: config)
+    // Tap handler
+    let btn = UIButton(frame: CGRect(x: 0, y: 0, width: width, height: height))
+    btn.backgroundColor = .clear
     btn.addAction(UIAction { _ in action() }, for: .touchUpInside)
-    return btn
+    // Highlight on touch
+    btn.addAction(UIAction(identifier: .init("down")) { _ in
+      UIView.animate(withDuration: 0.1) { container.backgroundColor = UIColor.systemGray5 }
+    }, for: .touchDown)
+    btn.addAction(UIAction(identifier: .init("up")) { _ in
+      UIView.animate(withDuration: 0.15) { container.backgroundColor = .clear }
+    }, for: [.touchUpInside, .touchUpOutside, .touchCancel])
+    container.addSubview(btn)
+
+    return container
   }
 }
