@@ -66,73 +66,51 @@ type EditorRef = {
 let enrichedAvailable = false
 try {
   // react-native-enriched uses interfaceOnly: true (Fabric-only, no Paper
-  // ViewManager). The Codegen Babel plugin should generate the JS view config
-  // at bundle time, but it crashes with @babel/traverse 7.29 on RN 0.83.
+  // ViewManager). Its codegenNativeComponent() fallback calls
+  // requireNativeComponent → getNativeComponentAttributes →
+  // UIManager.getViewManagerConfig. In Bridgeless mode getViewManagerConfig
+  // returns null for interfaceOnly components, so the lazy view config
+  // callback returns null and the component crashes at render time.
   //
-  // Fix: register the view config MANUALLY before the module is loaded.
-  // This is what the Codegen plugin would generate. The config must be
-  // registered before require('react-native-enriched') runs, because that
-  // module's codegenNativeComponent() call tries to register the same name
-  // and would fail if it runs first with a broken fallback path.
-  const ViewConfigRegistry = require('react-native/Libraries/Renderer/shims/ReactNativeViewConfigRegistry')
-
-  // Only register if not already registered (prevents double-registration on HMR)
-  let alreadyRegistered = false
-  try {
-    ViewConfigRegistry.get('EnrichedTextInputView')
-    alreadyRegistered = true
-  } catch { /* not registered yet — expected */ }
-
-  if (!alreadyRegistered) {
-    ViewConfigRegistry.register('EnrichedTextInputView', () => ({
-      uiViewClassName: 'EnrichedTextInputView',
-      bubblingEventTypes: {
-        onSubmitEditing: { registrationName: 'onSubmitEditing' },
-      },
-      directEventTypes: {
-        onInputFocus: { registrationName: 'onInputFocus' },
-        onInputBlur: { registrationName: 'onInputBlur' },
-        onChangeText: { registrationName: 'onChangeText' },
-        onChangeHtml: { registrationName: 'onChangeHtml' },
-        onChangeState: { registrationName: 'onChangeState' },
-        onLinkDetected: { registrationName: 'onLinkDetected' },
-        onMentionDetected: { registrationName: 'onMentionDetected' },
-        onMention: { registrationName: 'onMention' },
-        onChangeSelection: { registrationName: 'onChangeSelection' },
-        onRequestHtmlResult: { registrationName: 'onRequestHtmlResult' },
-        onInputKeyPress: { registrationName: 'onInputKeyPress' },
-        onPasteImages: { registrationName: 'onPasteImages' },
-        onContextMenuItemPress: { registrationName: 'onContextMenuItemPress' },
-      },
-      validAttributes: {
-        autoFocus: true,
-        editable: true,
-        defaultValue: true,
-        placeholder: true,
-        placeholderTextColor: true,
-        mentionIndicators: true,
-        cursorColor: true,
-        selectionColor: true,
-        autoCapitalize: true,
-        htmlStyle: true,
-        scrollEnabled: true,
-        linkRegex: true,
-        contextMenuItems: true,
-        returnKeyType: true,
-        returnKeyLabel: true,
-        submitBehavior: true,
-        color: true,
-        fontSize: true,
-        lineHeight: true,
-        fontFamily: true,
-        fontWeight: true,
-        fontStyle: true,
-        isOnChangeHtmlSet: true,
-        isOnChangeTextSet: true,
-        androidExperimentalSynchronousEvents: true,
-        useHtmlNormalizer: true,
-      },
-    }))
+  // Fix: monkey-patch UIManager.getViewManagerConfig to return a valid
+  // config for EnrichedTextInputView BEFORE the module loads. This makes
+  // the lazy callback work when React calls it at render time.
+  const { UIManager } = require('react-native')
+  const origGetConfig = UIManager.getViewManagerConfig
+  if (origGetConfig) {
+    UIManager.getViewManagerConfig = (name: string) => {
+      if (name === 'EnrichedTextInputView') {
+        return {
+          Commands: {
+            focus: 0, blur: 1, setValue: 2, setSelection: 3,
+            toggleBold: 4, toggleItalic: 5, toggleUnderline: 6,
+            toggleStrikeThrough: 7, toggleInlineCode: 8,
+            toggleH1: 9, toggleH2: 10, toggleH3: 11,
+            toggleH4: 12, toggleH5: 13, toggleH6: 14,
+            toggleCodeBlock: 15, toggleBlockQuote: 16,
+            toggleOrderedList: 17, toggleUnorderedList: 18,
+            toggleCheckboxList: 19, addLink: 20, removeLink: 21,
+            addImage: 22, startMention: 23, addMention: 24,
+            requestHTML: 25,
+          },
+          NativeProps: {
+            autoFocus: 'boolean', editable: 'boolean', defaultValue: 'string',
+            placeholder: 'string', placeholderTextColor: 'Color',
+            mentionIndicators: 'Array', cursorColor: 'Color',
+            selectionColor: 'Color', autoCapitalize: 'string',
+            htmlStyle: 'Map', scrollEnabled: 'boolean', linkRegex: 'Map',
+            contextMenuItems: 'Array', returnKeyType: 'string',
+            returnKeyLabel: 'string', submitBehavior: 'string',
+            color: 'Color', fontSize: 'float', lineHeight: 'float',
+            fontFamily: 'string', fontWeight: 'string', fontStyle: 'string',
+            isOnChangeHtmlSet: 'boolean', isOnChangeTextSet: 'boolean',
+            androidExperimentalSynchronousEvents: 'boolean',
+            useHtmlNormalizer: 'boolean',
+          },
+        }
+      }
+      return origGetConfig.call(UIManager, name)
+    }
   }
 
   const enrichedModule = require('react-native-enriched')
