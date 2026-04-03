@@ -210,7 +210,7 @@ export default function CollectionDocumentsScreen() {
   )
 
   return (
-    <View className="flex-1 bg-paper">
+    <View style={{ flex: 1, backgroundColor: '#f6f4f1', width: '100%' }}>
       {!isPreview && (
         <Stack.Screen
           options={{

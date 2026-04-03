@@ -45,8 +45,7 @@ export default function AccountScreen() {
   return (
     <ScrollView
       className="flex-1 bg-paper"
-      contentContainerClassName="px-5 pb-10 pt-14"
-      contentContainerStyle={isTablet ? { alignItems: 'center' } : undefined}
+      contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 40, paddingTop: 56, ...(isTablet ? { alignItems: 'center' as const } : {}) }}
     >
       <View style={isTablet ? { maxWidth: 600, width: '100%' } : undefined}>
         {/* Profile card */}

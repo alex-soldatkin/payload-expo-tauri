@@ -39,8 +39,7 @@ export default function GlobalsIndexScreen() {
   return (
     <ScrollView
       className="flex-1 bg-paper"
-      contentContainerStyle={{ paddingTop: headerHeight + 8 }}
-      contentContainerClassName={`pb-10 ${columns > 1 ? 'px-8' : 'px-5'}`}
+      contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 40, paddingHorizontal: columns > 1 ? 32 : 20 }}
     >
       <View style={gridRow}>
         {ungrouped.map((g) => (

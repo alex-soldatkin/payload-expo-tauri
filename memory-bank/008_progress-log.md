@@ -280,6 +280,32 @@ This log captures what has been implemented so far and the current state of the 
 - Pre-existing TS errors in admin-native (React 19 `key`/`ref` prop changes, `expo-router` resolution from workspace) and admin-schema (Payload type mismatches) — cosmetic, do not affect runtime.
 - Could switch from MongoDB to Postgres in future (compatible with current architecture).
 
+### Phase 9 — ScrollablePreview native module + progressive blur header (2026-04-03)
+- **ScrollablePreview native module**:
+  - iOS: `ScrollablePreviewModule.swift` / `ScrollablePreviewView.swift` — custom `UIView` that blurs content as it scrolls
+  - Android: `ScrollablePreviewModule.kt` / `ScrollablePreviewView.kt` — Jetpack Compose equivalent with blur effect
+  - Exported via `expo-module-config.json` and TypeScript interfaces
+  - `ScrollablePreviewView.tsx` wraps native module for RN usage; web fallback is no-op
+- **ProgressiveBlurHeader** component:
+  - Fixed-position header that progressively blurs as user scrolls down (iOS jelly scroll effect)
+  - Integrates with native ScrollablePreview module for hardware-accelerated blur
+  - Falls back to React Native opacity/scale animation on Android
+  - Used in document detail/edit screens for visual polish
+- **HeaderScrollContext**:
+  - Provides scroll offset state to nested components
+  - Enables blur effect coordination across header + content
+- **DocumentList improvements**:
+  - Optimized for native layout (horizontal safe areas, tab navigation)
+  - Improved empty states and loading indicators
+  - Better handling of long document lists with FlatList virtualization
+- **BottomSheet improvements**:
+  - Enhanced accessibility labels and touch targets
+  - Better keyboard handling on iOS/Android
+  - Improved animations and dismiss behavior
+- **Dist build artifacts** added to version control (removed from tracking):
+  - `.gitignore` updated to exclude `test_app/apps/mobile-expo/dist/`
+  - Already-committed dist files removed via `git rm -r` to keep repo clean
+
 ## Commands
 - Start everything: `pnpm -C test_app dev:all`
 - Server only: `pnpm -C test_app dev:server`

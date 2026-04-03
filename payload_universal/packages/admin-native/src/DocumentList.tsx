@@ -490,7 +490,7 @@ export const DocumentList: React.FC<Props> = ({
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: t.colors.background },
+  container: { flex: 1, width: '100%', alignSelf: 'stretch', backgroundColor: t.colors.background },
   listContent: { paddingTop: t.spacing.sm, paddingBottom: 100 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: t.spacing.xl },
 

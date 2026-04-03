@@ -499,18 +499,18 @@ function Sidebar() {
 // ===========================================================================
 
 export default function AdminLayout() {
-  const { isTablet } = useResponsive()
+  const { showSidebar } = useResponsive()
   const menuModel = useMenuModel()
   const globalsCount =
     menuModel?.globals.filter((g) => !g.hidden).length ?? 0
 
   return (
-    <View style={[layoutStyles.root, isTablet && layoutStyles.rootTablet]}>
-      {isTablet && <Sidebar />}
+    <View style={[layoutStyles.root, showSidebar && layoutStyles.rootTablet]}>
+      {showSidebar && <Sidebar />}
       <View style={layoutStyles.content}>
         <Tabs
           tabBar={(props) =>
-            isTablet ? null : <CustomTabBar {...props} />
+            showSidebar ? null : <CustomTabBar {...props} />
           }
           screenOptions={{ headerShown: false }}
         >
@@ -547,6 +547,8 @@ const layoutStyles = StyleSheet.create({
   },
   content: {
     flex: 1,
+    // Explicit stretch prevents Tabs from constraining to content width
+    alignSelf: 'stretch',
   },
 })
 
@@ -640,11 +642,12 @@ const sidebarStyles = StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginHorizontal: 12,
-    paddingHorizontal: 12,
+    gap: 10,
+    marginHorizontal: 10,
+    paddingHorizontal: 10,
     paddingVertical: 10,
     borderRadius: 10,
+    overflow: 'hidden',
   },
   itemActive: {
     backgroundColor: 'rgba(0,122,255,0.1)',
@@ -658,6 +661,7 @@ const sidebarStyles = StyleSheet.create({
   itemLabel: {
     fontSize: 15,
     fontWeight: '500',
+    flex: 1,
     flexShrink: 1,
   },
   bottomSection: {

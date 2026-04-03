@@ -55,9 +55,8 @@ export default function CollectionsIndexScreen() {
 
   return (
     <Animated.ScrollView
-      className="flex-1 bg-paper"
-      contentContainerStyle={{ paddingTop: headerHeight + 8 }}
-      contentContainerClassName={`pb-10 ${columns > 1 ? 'px-8' : 'px-5'}`}
+      style={{ flex: 1, backgroundColor: '#f6f4f1' }}
+      contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 40, paddingHorizontal: columns > 1 ? 32 : 20, flexGrow: 1 }}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
     >

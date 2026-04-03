@@ -30,7 +30,7 @@ export default function DashboardScreen() {
   const { refreshSchema, isSchemaLoading, schemaError } = usePayloadNative()
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
-  const { columns } = useResponsive()
+  const { columns, isTablet } = useResponsive()
 
   const visibleCollections = menuModel?.collections.filter((c) => !c.hidden) ?? []
   const visibleGlobals = menuModel?.globals.filter((g) => !g.hidden) ?? []
@@ -53,8 +53,8 @@ export default function DashboardScreen() {
 
   return (
     <ScrollView
-      className="flex-1 bg-paper"
-      contentContainerClassName={`pb-10 pt-14 ${columns > 1 ? 'px-8' : 'px-5'}`}
+      style={{ flex: 1, backgroundColor: '#f6f4f1' }}
+      contentContainerStyle={{ paddingBottom: 40, paddingTop: 56, paddingHorizontal: columns > 1 ? 32 : 20, flexGrow: 1 }}
       refreshControl={
         <RefreshControl refreshing={isSchemaLoading} onRefresh={refreshSchema} />
       }

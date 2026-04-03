@@ -12,6 +12,7 @@ import {
   FlatList,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -38,7 +39,6 @@ import { payloadApi } from '../api'
 import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 
-import { useScrollablePreview } from '../ScrollablePreviewContext'
 import { PreviewContextProvider } from '../PreviewContext'
 
 // Lazy-loaded DocumentForm to avoid circular dep (pickers → DocumentForm → fields → pickers)
@@ -253,21 +253,17 @@ try {
 export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipField>> = ({
   field, value, onChange, disabled, error,
 }) => {
-  const preview = useScrollablePreview()
   const { baseURL, auth, schema } = usePayloadNative()
   const { width: windowWidth, height: windowHeight } = useWindowDimensions()
-  const previewWidth = Math.round(windowWidth * 0.88)
-  const previewHeight = Math.round(windowHeight * 0.6)
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [allDocs, setAllDocs] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(false)
   const [displayLabel, setDisplayLabel] = useState<string | null>(null)
-  const [previewItemId, setPreviewItemId] = useState<string | null>(null)
-  // Track whether we need to close the BottomSheet after the native preview
-  // finishes dismissing. This prevents the React tree from mutating while
-  // the native overlay is still animating (which crashes UIKit).
-  const pendingCloseRef = useRef(false)
+  // Pure-React preview: stores the item being peeked (long-press).
+  // Uses a React Modal instead of native ScrollablePreview to avoid
+  // the native view-reparenting crash inside BottomSheet Modals.
+  const [previewItem, setPreviewItem] = useState<Record<string, unknown> | null>(null)
   const relationTo = Array.isArray(field.relationTo) ? field.relationTo[0] : field.relationTo
 
   const useAsTitle = schema?.menuModel?.collections.find(
@@ -345,6 +341,12 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
   }, [value, baseURL, auth.token, relationTo, useAsTitle, localCollection])
 
   const displayValue = displayLabel || (selectedId ?? null)
+  const relSchemaMap = schema?.collections?.[relationTo]
+  const DocumentForm = getDocumentForm()
+  const canPreview = !!(relSchemaMap && DocumentForm)
+  console.log('[REL-PICKER] canPreview:', canPreview, 'relSchemaMap:', !!relSchemaMap, 'DocumentForm:', !!DocumentForm)
+  const previewW = Math.round(windowWidth * 0.92)
+  const previewH = Math.round(windowHeight * 0.6)
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
@@ -361,101 +363,81 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
         <Text style={styles.chevron}>›</Text>
       </Pressable>
 
-      <BottomSheet visible={open} onClose={() => setOpen(false)} height={0.6}>
-        <Text style={styles.sheetTitle}>Select {relationTo}</Text>
-        <TextInput
-          style={styles.searchInput} value={search} onChangeText={setSearch}
-          placeholder="Search..." placeholderTextColor={t.colors.textPlaceholder} autoCapitalize="none"
-        />
-        {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
-        <FlatList
-          data={filteredDocs}
-          keyExtractor={(item) => String(item.id)}
-          renderItem={({ item }) => {
-            const title = docDisplayTitle(item, useAsTitle)
-            const itemId = String(item.id)
-            const isSelected = value === item.id || (typeof value === 'object' && value !== null && (value as Record<string, unknown>).id === item.id)
-            // Wrap with ScrollablePreview for long-press peek
-            const relSchemaMap = schema?.collections?.[relationTo]
-            const DocumentForm = getDocumentForm()
-            if (preview && relSchemaMap && DocumentForm) {
-              const isThisPreviewOpen = previewItemId === itemId
-              const selectItem = () => {
-                setDisplayLabel(title)
-                onChange(item.id)
-                if (previewItemId) {
-                  // Preview is open — don't mutate the React tree yet.
-                  // Let the native dismiss animation finish first;
-                  // onPreviewClose will close the BottomSheet.
-                  pendingCloseRef.current = true
-                } else {
-                  // Simple tap (no preview) — close immediately.
-                  setOpen(false)
-                }
-              }
-              // Use a passive View (not Pressable) so the Trigger's native
-              // tap gesture is the ONLY touch handler. A Pressable here
-              // competes with the gesture recognizer and double-fires.
-              const passiveRow = (
-                <View style={[styles.optionRow, isSelected && styles.optionSelected]}>
-                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{title}</Text>
-                  {isSelected && <Text style={styles.checkMark}>✓</Text>}
-                </View>
-              )
-              return (
-                <preview.Trigger
-                  previewWidth={previewWidth}
-                  previewHeight={previewHeight}
-                  onPrimaryAction={selectItem}
-                  onPreviewOpen={() => setPreviewItemId(itemId)}
-                  onPreviewClose={() => {
-                    // Fires AFTER native dismiss animation completes
-                    // and the view has been safely reparented.
-                    setPreviewItemId(null)
-                    if (pendingCloseRef.current) {
-                      pendingCloseRef.current = false
-                      setOpen(false)
-                    }
-                  }}
-                >
-                  {passiveRow}
-                  <preview.Content>
-                    <PreviewContextProvider value={true}>
-                      {isThisPreviewOpen ? (
-                        <DocumentForm
-                          schemaMap={relSchemaMap}
-                          slug={relationTo}
-                          initialData={item}
-                          onSubmit={noopSubmit}
-                          disabled
-                        />
-                      ) : null}
-                    </PreviewContextProvider>
-                  </preview.Content>
-                  <preview.Action
-                    title="Select"
-                    icon="checkmark.circle"
-                    onActionPress={selectItem}
+      <BottomSheet visible={open} onClose={() => { setPreviewItem(null); setOpen(false) }} height={previewItem ? 0.75 : 0.6}>
+        {previewItem ? (
+          /* ── Inline preview (replaces list while peeking) ── */
+          <>
+            <View style={previewStyles.header}>
+              <Text style={styles.sheetTitle} numberOfLines={1}>
+                {docDisplayTitle(previewItem, useAsTitle)}
+              </Text>
+            </View>
+            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
+              {DocumentForm && relSchemaMap ? (
+                <PreviewContextProvider value={true}>
+                  <DocumentForm
+                    schemaMap={relSchemaMap}
+                    slug={relationTo}
+                    initialData={previewItem}
+                    onSubmit={noopSubmit}
+                    disabled
                   />
-                </preview.Trigger>
-              )
-            }
-
-            // No preview available — use interactive Pressable for selection.
-            return (
-              <Pressable style={[styles.optionRow, isSelected && styles.optionSelected]}
-                onPress={() => { setDisplayLabel(title); onChange(item.id); setOpen(false) }}>
-                <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{title}</Text>
-                {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                </PreviewContextProvider>
+              ) : null}
+            </ScrollView>
+            <View style={previewStyles.actions}>
+              <Pressable
+                style={previewStyles.selectBtn}
+                onPress={() => {
+                  const title = docDisplayTitle(previewItem, useAsTitle)
+                  setDisplayLabel(title)
+                  onChange(previewItem.id)
+                  setPreviewItem(null)
+                  setOpen(false)
+                }}
+              >
+                <Text style={previewStyles.selectText}>Select</Text>
               </Pressable>
-            )
-          }}
-          ListEmptyComponent={!loading ? <Text style={styles.emptyText}>No results</Text> : null}
-        />
-        {value != null && (
-          <Pressable style={styles.clearBtn} onPress={() => { onChange(null); setOpen(false) }}>
-            <Text style={styles.clearText}>Clear selection</Text>
-          </Pressable>
+              <Pressable style={previewStyles.closeBtn} onPress={() => setPreviewItem(null)}>
+                <Text style={previewStyles.closeText}>Back</Text>
+              </Pressable>
+            </View>
+          </>
+        ) : (
+          /* ── Normal picker list ── */
+          <>
+            <Text style={styles.sheetTitle}>Select {relationTo}</Text>
+            <TextInput
+              style={styles.searchInput} value={search} onChangeText={setSearch}
+              placeholder="Search..." placeholderTextColor={t.colors.textPlaceholder} autoCapitalize="none"
+            />
+            {loading && <ActivityIndicator style={{ marginVertical: 12 }} />}
+            <FlatList
+              data={filteredDocs}
+              keyExtractor={(item) => String(item.id)}
+              renderItem={({ item }) => {
+                const title = docDisplayTitle(item, useAsTitle)
+                const isSelected = value === item.id || (typeof value === 'object' && value !== null && (value as Record<string, unknown>).id === item.id)
+                return (
+                  <Pressable
+                    style={[styles.optionRow, isSelected && styles.optionSelected]}
+                    onPress={() => { setDisplayLabel(title); onChange(item.id); setOpen(false) }}
+                    onLongPress={canPreview ? () => setPreviewItem(item) : undefined}
+                    delayLongPress={350}
+                  >
+                    <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{title}</Text>
+                    {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                  </Pressable>
+                )
+              }}
+              ListEmptyComponent={!loading ? <Text style={styles.emptyText}>No results</Text> : null}
+            />
+            {value != null && (
+              <Pressable style={styles.clearBtn} onPress={() => { onChange(null); setOpen(false) }}>
+                <Text style={styles.clearText}>Clear selection</Text>
+              </Pressable>
+            )}
+          </>
         )}
       </BottomSheet>
     </FieldShell>
@@ -653,4 +635,40 @@ const chipStyles = StyleSheet.create({
   chipOn: { backgroundColor: t.colors.primary, borderColor: t.colors.primary },
   text: { fontSize: t.fontSize.sm, color: t.colors.text, fontWeight: '500' },
   textOn: { color: t.colors.primaryText },
+})
+
+const previewStyles = StyleSheet.create({
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: t.spacing.sm,
+  },
+  actions: {
+    flexDirection: 'row',
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.separator,
+    marginHorizontal: -16,
+    marginBottom: -16,
+  },
+  selectBtn: {
+    flex: 1,
+    paddingVertical: t.spacing.md,
+    alignItems: 'center',
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: t.colors.separator,
+  },
+  selectText: {
+    fontSize: t.fontSize.md,
+    fontWeight: '600',
+    color: t.colors.primary,
+  },
+  closeBtn: {
+    flex: 1,
+    paddingVertical: t.spacing.md,
+    alignItems: 'center',
+  },
+  closeText: {
+    fontSize: t.fontSize.md,
+    color: t.colors.textMuted,
+  },
 })

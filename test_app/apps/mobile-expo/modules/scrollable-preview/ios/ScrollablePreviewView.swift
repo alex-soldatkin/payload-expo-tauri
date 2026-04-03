@@ -68,6 +68,7 @@ class ScrollablePreviewTriggerView: ExpoView {
   // ── Gestures ──────────────────────────────────────────────────
 
   @objc private func handleTap() {
+    NSLog("[PREVIEW-NATIVE] handleTap → firing onPrimaryAction")
     onPrimaryAction()
   }
 
@@ -115,6 +116,7 @@ class ScrollablePreviewTriggerView: ExpoView {
     overlay.modalPresentationStyle = .overCurrentContext
     overlay.modalTransitionStyle = .crossDissolve
 
+    NSLog("[PREVIEW-NATIVE] presentPreview → firing onPreviewOpen, presenting overlay")
     onPreviewOpen()
     topVC.present(overlay, animated: false) {
       overlay.animateIn()
@@ -255,6 +257,7 @@ class ScrollablePreviewOverlayVC: UIViewController {
         width: actionsW,
         height: ROW_HEIGHT,
         action: { [weak self, weak action] in
+          NSLog("[PREVIEW-NATIVE] action button pressed → firing onActionPress + dismissPreview")
           action?.onActionPress()
           self?.dismissPreview()
         }
@@ -323,6 +326,7 @@ class ScrollablePreviewOverlayVC: UIViewController {
   }
 
   @objc private func dismissPreview() {
+    NSLog("[PREVIEW-NATIVE] dismissPreview → starting animation")
     UIView.animate(withDuration: 0.2, delay: 0, options: .curveEaseIn, animations: {
       self.blurView.effect = nil
       self.contentWrapper.alpha = 0
@@ -330,15 +334,16 @@ class ScrollablePreviewOverlayVC: UIViewController {
       self.actionsWrapper.alpha = 0
       self.actionsWrapper.transform = CGAffineTransform(scaleX: 0.5, y: 0.5)
     }) { _ in
+      NSLog("[PREVIEW-NATIVE] animation done → reparenting view, originalParent=\(String(describing: self.originalParent))")
       // Return RN view to its original parent
       self.previewContentView.removeFromSuperview()
       self.previewContentView.frame = self.originalFrame
       self.previewContentView.isHidden = true
       self.originalParent?.addSubview(self.previewContentView)
+      NSLog("[PREVIEW-NATIVE] reparent done → dismissing overlay VC")
       // Dismiss the overlay VC first, THEN notify JS.
-      // This ensures the overlay is fully removed from the VC stack
-      // before JS triggers the BottomSheet Modal dismiss.
       self.dismiss(animated: false) {
+        NSLog("[PREVIEW-NATIVE] overlay VC dismissed → firing onDismiss (JS onPreviewClose)")
         self.onDismiss?()
       }
     }

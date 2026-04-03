@@ -49,6 +49,7 @@ android/.gradle/
 # ========================
 .expo/
 expo-env.d.ts
+test_app/apps/mobile-expo/dist/
 
 # ========================
 # Caches

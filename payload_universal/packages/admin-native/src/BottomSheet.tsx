@@ -51,6 +51,7 @@ export const BottomSheet: React.FC<Props> = ({
   const sheetHeight = screenHeight * height
 
   useEffect(() => {
+    console.log('[BOTTOMSHEET] visible changed:', visible, 'screenHeight:', screenHeight)
     if (visible) {
       Animated.spring(translateY, {
         toValue: 0,
