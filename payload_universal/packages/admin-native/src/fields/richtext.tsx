@@ -67,7 +67,17 @@ let enrichedAvailable = false
 try {
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
-  enrichedAvailable = !!EnrichedTextInput
+  // Verify the native view is actually registered — the JS module may
+  // resolve but the native Fabric component won't exist without a dev
+  // client build that includes react-native-enriched's native code.
+  const { UIManager, Platform } = require('react-native')
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    const hasNative = UIManager.getViewManagerConfig?.('EnrichedTextInputView')
+      ?? UIManager.getViewManagerConfig?.('RCTEnrichedTextInput')
+    enrichedAvailable = !!EnrichedTextInput && !!hasNative
+  } else {
+    enrichedAvailable = !!EnrichedTextInput
+  }
 } catch {
   /* not installed — will use plain-text fallback */
 }
