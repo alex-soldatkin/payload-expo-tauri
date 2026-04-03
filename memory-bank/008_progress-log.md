@@ -430,7 +430,45 @@ This log captures what has been implemented so far and the current state of the 
 - `zod ^3.23.0` — production dependency (small, tree-shakeable)
 - `react-hook-form ^7.54.0` — optional dependency. If not installed, everything falls back gracefully.
 
-### Phase 12 — Codebase modularization (2026-04-03)
+### Phase 12 — Full native rich text editing (2026-04-03)
+
+**react-native-enriched integration** — native rich text editor replacing the plain-text fallback:
+- `fields/richtext.tsx` rewritten: uses `EnrichedTextInput` (try/catch import, graceful fallback to plain-text TextInput)
+- Bidirectional Lexical JSON ↔ HTML converters (`utils/lexicalToHtml.ts`, `utils/htmlToLexical.ts`):
+  - Lexical → HTML: text format bitfields (IS_BOLD=1, IS_ITALIC=2, IS_STRIKETHROUGH=4, IS_UNDERLINE=8, IS_CODE=16) → `<b>`, `<i>`, `<s>`, `<u>`, `<code>`
+  - Heading, paragraph, quote, list (bullet/number/check), link, autolink, upload, relationship nodes all mapped
+  - HTML → Lexical: zero-dependency regex-based HTML parser (no JSDOM/cheerio); produces valid Lexical JSON that Payload accepts
+  - `relationship` nodes ↔ `<mention indicator="@" data-payload='{"collection":"slug","id":"docId"}'>` round-trip
+- **Data flow**: mount converts Lexical JSON to HTML → `defaultValue`; on blur/save: `ref.getHTML()` → `htmlToLexical()` → `onChange()`; debounced sync (600ms) during typing
+- **Local-first**: rich text stored as Lexical JSON in RxDB, converted to/from HTML only in the editor; three-way merge on sync works at the field level (whole rich text field)
+
+**Apple Notes-style formatting toolbar** (`fields/RichTextToolbar.tsx`):
+- Two-row toolbar: inline (Bold, Italic, Underline, Strikethrough, InlineCode, Link, @Mention) + block (H1, H2, H3, Blockquote, CodeBlock, BulletList, NumberedList, CheckList)
+- Glass effect via `expo-glass-effect` GlassView with fallback to semi-transparent background
+- Each button reflects live `onChangeState` from EnrichedTextInput: `isActive` highlights, `isBlocking` dims/disables
+- `keyboardShouldPersistTaps="always"` so toolbar taps don't dismiss keyboard
+- Lucide-react-native icons (Bold, Italic, Heading1-3, List, ListOrdered, ListChecks, Quote, FileCode, Code, Link, AtSign, etc.)
+
+**Document mention system** (`fields/MentionPicker.tsx`):
+- `mentionIndicators={['@']}` on EnrichedTextInput triggers mention lifecycle
+- `onStartMention` → shows MentionPicker BottomSheet
+- `onChangeMention` → filters search results in real-time
+- Queries ALL user-facing collections from local RxDB (with REST API fallback)
+- Uses `menuModel.collections` from admin schema to discover collections, `useAsTitle` for display labels
+- Results grouped by collection with `CollectionIcon` section headers
+- `setMention('@', title, { collection: slug, id: docId })` completes the mention
+- Also accessible via native context menu item ("Mention Document")
+
+**Link support**:
+- Toolbar Link button opens `Alert.prompt` (iOS) with Insert/Update/Remove actions
+- `onLinkDetected` populates existing URL for editing; `onChangeSelection` tracks selection range
+- `setLink(start, end, text, url)` / `removeLink(start, end)` use correct enriched API
+
+**HtmlStyle theming**: headings (28/22/18pt bold), blockquote (border accent), codeblock (dark background), inline code (pink on gray), links (primary color), mentions (primary with 12% tinted background)
+
+**Dependencies**: `react-native-enriched >=0.5.0` added as optional peer dependency (New Architecture/Fabric only, requires dev client build)
+
+### Phase 13 — Codebase modularization (2026-04-03)
 
 **admin-native/src/ reorganization** (highest impact — 13 files moved):
 - `hooks/` — `useDocumentListFilters.ts`, `usePayloadForm.ts`

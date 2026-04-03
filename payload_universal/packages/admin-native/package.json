@@ -22,6 +22,7 @@
     "react-native": ">=0.72.0",
     "react-native-gesture-handler": ">=2.0.0",
     "react-native-reanimated": ">=3.0.0",
+    "react-native-enriched": ">=0.5.0",
     "react-native-webview": ">=13.0.0"
   },
   "peerDependenciesMeta": {
@@ -29,6 +30,9 @@
       "optional": true
     },
     "expo-glass-effect": {
+      "optional": true
+    },
+    "react-native-enriched": {
       "optional": true
     }
   },

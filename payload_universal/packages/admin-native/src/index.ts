@@ -119,6 +119,17 @@ export {
 } from './utils/schemaHelpers'
 export type { FieldWidthGroup } from './utils/schemaHelpers'
 
+// Lexical JSON ↔ HTML converters (for react-native-enriched integration)
+export { lexicalToHtml } from './utils/lexicalToHtml'
+export { htmlToLexical } from './utils/htmlToLexical'
+
+// Rich text toolbar
+export { RichTextToolbar } from './fields/RichTextToolbar'
+export type { StyleState, StyleStateEntry, RichTextToolbarProps } from './fields/RichTextToolbar'
+
+// Mention picker
+export { MentionPicker } from './fields/MentionPicker'
+
 // Validation (Phase 1 — Zod schema from Payload fields)
 export { payloadFieldsToZod, validateFormData } from './utils/validation'
 
