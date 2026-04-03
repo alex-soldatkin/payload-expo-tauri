@@ -41,11 +41,33 @@ config.resolver = {
     '@payload-universal/ui': path.resolve(monoRoot, 'payload_universal/packages/payload-universal-ui'),
   },
   resolveRequest: (context, moduleName, platform) => {
-    // Pin react / react-native singletons
-    if (singletonModules[moduleName]) {
-      return {
-        filePath: require.resolve(moduleName, { paths: [projectRoot] }),
-        type: 'sourceFile',
+    // Pin react / react-native singletons — including DEEP imports like
+    // 'react-native/Libraries/Utilities/codegenNativeComponent'. Without
+    // this, pnpm resolves deep imports from workspace packages to different
+    // physical copies of react-native, causing separate module instances
+    // (e.g. ReactNativeViewConfigRegistry has separate Maps → register()
+    // and get() operate on different instances → invariant violation).
+    for (const [pkg, pkgPath] of Object.entries(singletonModules)) {
+      if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {
+        const subpath = moduleName === pkg ? '' : moduleName.slice(pkg.length)
+        const resolved = path.join(
+          fs.realpathSync(pkgPath),
+          subpath,
+        )
+        // Try with common extensions
+        for (const ext of ['', '.js', '.ts', '.tsx', '.jsx', '.json']) {
+          const candidate = resolved + ext
+          if (fs.existsSync(candidate)) {
+            return { filePath: candidate, type: 'sourceFile' }
+          }
+        }
+        // Fall back to Node resolution from the app's copy
+        try {
+          return {
+            filePath: require.resolve(moduleName, { paths: [projectRoot] }),
+            type: 'sourceFile',
+          }
+        } catch { /* let default resolver handle it */ }
       }
     }
 

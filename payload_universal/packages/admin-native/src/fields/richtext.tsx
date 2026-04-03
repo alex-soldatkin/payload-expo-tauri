@@ -65,54 +65,13 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
-  // react-native-enriched uses interfaceOnly: true (Fabric-only, no Paper
-  // ViewManager). Its codegenNativeComponent() fallback calls
-  // requireNativeComponent → getNativeComponentAttributes →
-  // UIManager.getViewManagerConfig. In Bridgeless mode getViewManagerConfig
-  // returns null for interfaceOnly components, so the lazy view config
-  // callback returns null and the component crashes at render time.
-  //
-  // Fix: monkey-patch UIManager.getViewManagerConfig to return a valid
-  // config for EnrichedTextInputView BEFORE the module loads. This makes
-  // the lazy callback work when React calls it at render time.
-  const { UIManager } = require('react-native')
-  const origGetConfig = UIManager.getViewManagerConfig
-  if (origGetConfig) {
-    UIManager.getViewManagerConfig = (name: string) => {
-      if (name === 'EnrichedTextInputView') {
-        return {
-          Commands: {
-            focus: 0, blur: 1, setValue: 2, setSelection: 3,
-            toggleBold: 4, toggleItalic: 5, toggleUnderline: 6,
-            toggleStrikeThrough: 7, toggleInlineCode: 8,
-            toggleH1: 9, toggleH2: 10, toggleH3: 11,
-            toggleH4: 12, toggleH5: 13, toggleH6: 14,
-            toggleCodeBlock: 15, toggleBlockQuote: 16,
-            toggleOrderedList: 17, toggleUnorderedList: 18,
-            toggleCheckboxList: 19, addLink: 20, removeLink: 21,
-            addImage: 22, startMention: 23, addMention: 24,
-            requestHTML: 25,
-          },
-          NativeProps: {
-            autoFocus: 'boolean', editable: 'boolean', defaultValue: 'string',
-            placeholder: 'string', placeholderTextColor: 'Color',
-            mentionIndicators: 'Array', cursorColor: 'Color',
-            selectionColor: 'Color', autoCapitalize: 'string',
-            htmlStyle: 'Map', scrollEnabled: 'boolean', linkRegex: 'Map',
-            contextMenuItems: 'Array', returnKeyType: 'string',
-            returnKeyLabel: 'string', submitBehavior: 'string',
-            color: 'Color', fontSize: 'float', lineHeight: 'float',
-            fontFamily: 'string', fontWeight: 'string', fontStyle: 'string',
-            isOnChangeHtmlSet: 'boolean', isOnChangeTextSet: 'boolean',
-            androidExperimentalSynchronousEvents: 'boolean',
-            useHtmlNormalizer: 'boolean',
-          },
-        }
-      }
-      return origGetConfig.call(UIManager, name)
-    }
-  }
-
+  // react-native-enriched uses codegenNativeComponent('EnrichedTextInputView',
+  // { interfaceOnly: true }). The Codegen Babel plugin should transform this
+  // into an inline JS view config, but it crashes on RN 0.83 + @babel/traverse
+  // 7.29. The fallback codegenNativeComponent function works IF all react-native
+  // deep imports (codegenNativeComponent, requireNativeComponent, ViewConfigRegistry)
+  // resolve to the SAME physical copy. Metro's singleton resolver in metro.config.js
+  // ensures this by pinning 'react-native' and 'react-native/*' to the app's copy.
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
   enrichedAvailable = !!EnrichedTextInput
