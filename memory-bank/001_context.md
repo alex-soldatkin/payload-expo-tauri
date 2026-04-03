@@ -57,6 +57,8 @@ Local workspace references
 - payload_universal/packages/admin-native/src/types/index.ts for shared TypeScript types.
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.
 - test_app/apps/mobile-expo/app/_layout.tsx for the Expo root layout (auth, local DB, storage init).
+- test_app/apps/mobile-expo/metro.config.js for Metro resolver (singleton pinning for react, react-native, @expo/ui).
+- test_app/apps/mobile-expo/babel.config.js for Babel config (do NOT add @react-native/babel-plugin-codegen — crashes on RN 0.83).
 - test_app/.env for PAYLOAD_SECRET and DATABASE_URL.
 
 Server sync endpoints

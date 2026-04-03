@@ -466,7 +466,25 @@ This log captures what has been implemented so far and the current state of the 
 
 **HtmlStyle theming**: headings (28/22/18pt bold), blockquote (border accent), codeblock (dark background), inline code (pink on gray), links (primary color), mentions (primary with 12% tinted background)
 
-**Dependencies**: `react-native-enriched >=0.5.0` added as optional peer dependency (New Architecture/Fabric only, requires dev client build)
+**Dependencies**: `react-native-enriched ^0.5.2` installed in the mobile app's `package.json` + added as optional peer dependency of admin-native (New Architecture/Fabric only, requires dev client build with `expo prebuild --clean`)
+
+**Fabric/Bridgeless integration — hard-won lessons (2026-04-04)**:
+
+The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextInputView', { interfaceOnly: true })` — a Fabric-only component with no Paper ViewManager fallback. This required solving three interlocking problems:
+
+1. **Codegen Babel plugin crash**: `@react-native/babel-plugin-codegen` (which should transform `codegenNativeComponent()` into an inline JS view config at bundle time) crashes with `Cannot read properties of null (reading 'loc')` on RN 0.83's internal `VirtualViewNativeComponent.js` files due to `@babel/traverse` 7.29 incompatibility. **Cannot use this plugin.**
+
+2. **pnpm duplicate react-native instances**: pnpm hoisted 5 separate copies of `react-native` (0.83.0 and 0.83.1 with different peer dep combinations). The fallback `codegenNativeComponent` function calls `register('EnrichedTextInputView', callback)` on one copy's `ReactNativeViewConfigRegistry.viewConfigCallbacks` Map, but React's renderer calls `get()` on a different copy's Map → callback is `undefined` → invariant violation. **Fix: Metro singleton resolver extended to pin `react-native/*` deep imports** (not just bare `react-native`) via `require.resolve(moduleName, { paths: [projectRoot] })` in `metro.config.js`.
+
+3. **Bridgeless UIManager returns null for interfaceOnly**: Even with singleton resolution, the fallback `codegenNativeComponent` path calls `UIManager.getViewManagerConfig('EnrichedTextInputView')` which returns `null` in Bridgeless mode (no Paper ViewManager for `interfaceOnly: true` components). The lazy view config callback then returns null → invariant at render time. **Fix: monkey-patch `UIManager.getViewManagerConfig` before `require('react-native-enriched')` to return a valid `{ Commands, NativeProps }` config** matching the component's NativeProps interface from the Codegen spec.
+
+**Critical rules for Fabric-only native components in pnpm monorepos**:
+- `@react-native/babel-plugin-codegen` may crash on newer @babel/traverse — don't add it globally
+- Metro singleton resolver MUST pin both `'react-native'` AND `'react-native/*'` deep imports — the default only pins the bare import
+- `interfaceOnly: true` components NEED a UIManager.getViewManagerConfig shim in Bridgeless mode when the Codegen plugin can't run — the fallback `requireNativeComponent` path can't work without it
+- `fs.realpathSync` on pnpm symlinks resolves to `.pnpm/` store paths outside Metro's watchFolders → use `require.resolve(moduleName, { paths: [projectRoot] })` instead
+- The native binary can have all Fabric C++ symbols compiled in (ComponentDescriptor, ShadowNode, Props, EventEmitter) while the JS side completely fails — always verify BOTH C++ symbols (`strings` on binary) AND JS view config registration
+- `RichTextErrorBoundary` catches render-time invariant violations, but in DEV mode React shows the red screen BEFORE the boundary processes — not useful for dev builds
 
 ### Phase 13 — Local DB reset & live sync progress (2026-04-03)
 
