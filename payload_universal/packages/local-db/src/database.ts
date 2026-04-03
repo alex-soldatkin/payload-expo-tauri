@@ -128,14 +128,17 @@ export const createLocalDB = async ({
 
   const resolvedStorage = storage ?? getRxStorageMemory()
 
-  // Helper: create the RxDatabase. ignoreDuplicate prevents DB8 if the
-  // internal name registry wasn't fully cleaned up by a prior remove().
+  // Helper: create the RxDatabase.
+  // closeDuplicates: automatically close any prior instance with the same
+  // name that's still in RxDB's internal registry. This prevents DB8
+  // (duplicate name in registry) without requiring dev-mode — unlike
+  // ignoreDuplicate which throws DB9 in production builds.
   const openDB = () =>
     createRxDatabase({
       name: 'payload_local',
       storage: resolvedStorage,
       multiInstance: false,
-      ignoreDuplicate: true,
+      closeDuplicates: true,
     })
 
   let db = await openDB()
