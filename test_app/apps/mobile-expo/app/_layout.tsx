@@ -20,6 +20,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 
 import {
+  CustomComponentProvider,
   PayloadNativeProvider,
   ScrollablePreviewProvider,
   ToastProvider,
@@ -30,13 +31,16 @@ import {
   useToast,
 } from '@payload-universal/admin-native'
 import * as ScrollablePreview from '@/modules/scrollable-preview'
+import { customComponentRegistry } from '@/src/generated/custom-components/_registry'
 import {
+  ClientValidatorProvider,
   LocalDBProvider,
   getRxStorageSQLite,
   getSQLiteBasicsExpoSQLiteAsync,
   useLocalDBStatus,
   type SyncProgress,
 } from '@payload-universal/local-db'
+import { clientHooksConfig } from '@/src/validators'
 import * as SQLite from 'expo-sqlite'
 
 // Configure local notifications to show banners while the app is in the foreground
@@ -121,15 +125,17 @@ function LocalDBGate({ children }: { children: React.ReactNode }) {
   const { auth } = usePayloadNative()
 
   return (
-    <LocalDBProvider
-      schema={schema}
-      baseURL={baseURL}
-      token={auth.token}
-      wsURL={DEFAULT_WS_URL}
-      storage={sqliteStorage}
-    >
-      {children}
-    </LocalDBProvider>
+    <ClientValidatorProvider config={clientHooksConfig}>
+      <LocalDBProvider
+        schema={schema}
+        baseURL={baseURL}
+        token={auth.token}
+        wsURL={DEFAULT_WS_URL}
+        storage={sqliteStorage}
+      >
+        {children}
+      </LocalDBProvider>
+    </ClientValidatorProvider>
   )
 }
 
@@ -217,14 +223,16 @@ export default function RootLayout() {
             initialToken={initialToken}
             onTokenChange={handleTokenChange}
           >
-            <ScrollablePreviewProvider value={ScrollablePreview}>
-              <LocalDBGate>
-                <ToastProvider>
-                  <StatusBar style="dark" />
-                  <AuthGate />
-                </ToastProvider>
-              </LocalDBGate>
-            </ScrollablePreviewProvider>
+            <CustomComponentProvider registry={customComponentRegistry}>
+              <ScrollablePreviewProvider value={ScrollablePreview}>
+                <LocalDBGate>
+                  <ToastProvider>
+                    <StatusBar style="dark" />
+                    <AuthGate />
+                  </ToastProvider>
+                </LocalDBGate>
+              </ScrollablePreviewProvider>
+            </CustomComponentProvider>
           </PayloadNativeProvider>
         )}
       </SafeAreaProvider>

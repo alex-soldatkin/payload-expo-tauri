@@ -20,6 +20,7 @@ import { Save } from 'lucide-react-native'
 import {
   DocumentActionsMenu,
   DocumentForm,
+  extractRootFields,
   getCollectionLabel,
   getDocumentTitle,
   useAdminSchema,
@@ -28,7 +29,7 @@ import {
   useMenuModel,
   VersionsBottomSheet,
 } from '@payload-universal/admin-native'
-import { useLocalDB, useLocalDocument, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
+import { useLocalDB, useLocalDocument, useLocalMutations, useLocalDBStatus, useValidatedMutations } from '@payload-universal/local-db'
 import { useHeaderScrollY } from '@/components/HeaderScrollContext'
 
 export default function DocumentEditScreen() {
@@ -55,13 +56,26 @@ export default function DocumentEditScreen() {
 
   // Reactive local document — updates instantly when RxDB data changes
   const { doc, loading, error } = useLocalDocument(localDB, slug, id)
-  const { update, remove } = useLocalMutations(localDB, slug)
+  const { remove } = useLocalMutations(localDB, slug)
 
   // Collection metadata from the menu model
   const collectionMeta = menuModel?.collections.find((c) => c.slug === slug)
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
   const useAsTitle = collectionMeta?.useAsTitle
+
+  // Extract root fields from schema for client-side validation
+  const rootFields = useMemo(
+    () => (schemaMap ? extractRootFields(schemaMap, slug) : []),
+    [schemaMap, slug],
+  )
+
+  // Validated mutations: hooks + validation run locally BEFORE writing to RxDB
+  const {
+    update: validatedUpdate,
+    errors: validationErrors,
+    clearFieldError,
+  } = useValidatedMutations(localDB, slug, rootFields)
 
   // Feature flags from collection config
   const hasDrafts = collectionMeta?.drafts ?? false
@@ -78,7 +92,14 @@ export default function DocumentEditScreen() {
     const writeData = options?.status
       ? { ...data, _status: options.status }
       : data
-    await update(id, writeData)
+    const result = await validatedUpdate(id, writeData, (doc as Record<string, unknown>) ?? undefined)
+    if (!result.success) {
+      // Throw so DocumentForm can display the error banner and toast.
+      // The field-level errors are already in validationErrors state.
+      const count = Object.keys(result.errors).length
+      const err = new Error(`${count} field${count !== 1 ? 's' : ''} failed validation`)
+      throw err
+    }
   }
 
   const handleDelete = () => {
@@ -221,6 +242,8 @@ export default function DocumentEditScreen() {
         initialData={(doc as Record<string, unknown>) ?? {}}
         onSubmit={handleSubmit}
         onDelete={handleDelete}
+        errors={validationErrors}
+        onFieldEdit={clearFieldError}
         submitLabel={hasDrafts ? undefined : 'Update'}
         draftStatus={hasDrafts ? ((docStatus as 'draft' | 'published') ?? 'draft') : undefined}
         contentInsetTop={headerHeight}

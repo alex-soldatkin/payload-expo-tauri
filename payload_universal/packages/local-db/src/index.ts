@@ -53,6 +53,17 @@ export type { SyncReplicationConfig, SyncReplicationState } from './syncReplicat
 export { UploadQueueManager, UPLOAD_QUEUE_COLLECTION } from './uploadQueue'
 export type { PendingUploadItem, UploadStatus, EnqueueArgs } from './uploadQueue'
 
+// Client-side validation & hooks
+export { ClientValidatorProvider, useClientValidatorConfig } from './ClientValidatorContext'
+export type { ClientValidatorProviderProps } from './ClientValidatorContext'
+export { useValidatedMutations } from './validatedHooks'
+export type {
+  UseValidatedMutationsResult,
+  ValidatedMutationResult,
+  ValidatedMutationSuccess,
+  ValidatedMutationFailure,
+} from './validatedHooks'
+
 // SQLite storage (drop-in replacement for rxdb trial)
 export { getRxStorageSQLite, getSQLiteBasicsExpoSQLiteAsync } from './storage'
 export type { SQLiteStorageSettings } from './storage'

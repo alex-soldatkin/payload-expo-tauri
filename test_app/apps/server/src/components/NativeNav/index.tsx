@@ -47,27 +47,27 @@ export const NativeNav: React.FC = () => {
   }, [getPreference])
 
   const groups = useMemo(() => {
-    const collections = config.collections
-      .filter((collection) => visibleEntities.collections.includes(collection.slug))
+    const collections = (config.collections || [])
+      .filter((collection: any) => visibleEntities.collections.includes(collection.slug as never))
       .map(
-        (collection) =>
+        (collection: any) =>
           ({
             type: EntityType.collection,
             entity: collection,
-          }) satisfies EntityToGroup,
+          }) as any,
       )
 
-    const globals = config.globals
-      .filter((global) => visibleEntities.globals.includes(global.slug))
+    const globals = (config.globals || [])
+      .filter((global: any) => visibleEntities.globals.includes(global.slug as never))
       .map(
-        (global) =>
+        (global: any) =>
           ({
             type: EntityType.global,
             entity: global,
-          }) satisfies EntityToGroup,
+          }) as any,
       )
 
-    return groupNavItems([...collections, ...globals], permissions, i18n)
+    return groupNavItems([...collections, ...globals], permissions as any, i18n as any)
   }, [config.collections, config.globals, visibleEntities, permissions, i18n])
 
   const folderURL = formatAdminURL({

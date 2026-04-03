@@ -161,22 +161,15 @@ export const createLocalDB = async ({
         },
       })
       collections[slug] = created[slug]
-    } catch (err) {
-      // Schema conflict — remove old collection and recreate
-      try {
-        if (db.collections[slug]) {
-          await db.collections[slug].remove()
-        }
-        const created = await db.addCollections({
-          [slug]: {
-            schema: rxSchema,
-            migrationStrategies: {},
-            autoMigrate: true,
-          },
-        })
-        collections[slug] = created[slug]
-      } catch (retryErr) {
-        console.warn(`[local-db] Failed to create collection "${slug}":`, retryErr)
+    } catch (err: any) {
+      if (typeof err === 'object' && err !== null && String(err).includes('DB6')) {
+        console.warn(`[local-db] Schema conflict (DB6) detected for "${slug}". Wiping local database to recover...`)
+        // The safest way to handle DB6 in dev is to blow away the database and let the app reload.
+        try { await db.destroy() } catch { /* ignore */ }
+        try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
+        throw new Error(`Local DB was purged due to a schema change in "${slug}". Please fully reload/restart the app.`)
+      } else {
+        console.warn(`[local-db] Failed to create collection "${slug}":`, err)
       }
     }
   }

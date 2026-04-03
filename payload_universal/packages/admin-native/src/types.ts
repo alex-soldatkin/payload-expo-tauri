@@ -1,3 +1,4 @@
+import type React from 'react'
 import type { AdminSchema, MenuModel, SerializedSchemaMap } from '@payload-universal/admin-schema'
 
 // Re-export schema types for consumer convenience
@@ -206,6 +207,47 @@ export type PayloadNativeContextValue = {
   refreshSchema: () => Promise<void>
   isSchemaLoading: boolean
   schemaError: string | null
+}
+
+// ---------------------------------------------------------------------------
+// Custom component override types
+// ---------------------------------------------------------------------------
+
+/** Slots where a custom component can override the default rendering. */
+export type ComponentSlot = 'Field' | 'Cell' | 'Label' | 'Description' | 'Error'
+
+/**
+ * A custom field entry in the registry.
+ * Can provide overrides for individual slots (Field, Cell, Label, etc.)
+ * and injection points (beforeInput, afterInput).
+ */
+export type CustomFieldEntry = {
+  Field?: React.ComponentType<FieldComponentProps>
+  Cell?: React.ComponentType<any>
+  Label?: React.ComponentType<any>
+  Description?: React.ComponentType<any>
+  Error?: React.ComponentType<any>
+  beforeInput?: React.ComponentType<any>[]
+  afterInput?: React.ComponentType<any>[]
+}
+
+/**
+ * Registry of custom component overrides.
+ *
+ * - `fields`: Keyed by "collectionSlug.fieldPath" (e.g. "posts.title")
+ *   or just "fieldPath" for global overrides. Values are either a bare
+ *   component (treated as a Field slot override) or a CustomFieldEntry.
+ *
+ * - `views`: Custom collection/global views keyed by
+ *   "collectionSlug.viewKey" (e.g. "posts.Edit.CustomTab").
+ *
+ * - `admin`: Admin-level overrides keyed by slot name
+ *   (e.g. "Nav", "beforeDashboard", "afterDashboard").
+ */
+export type CustomComponentRegistry = {
+  fields: Record<string, CustomFieldEntry | React.ComponentType<any>>
+  views: Record<string, { Component: React.ComponentType<any>; tab?: { label: string } }>
+  admin: Record<string, React.ComponentType<any>>
 }
 
 // ---------------------------------------------------------------------------

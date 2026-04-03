@@ -114,6 +114,38 @@ export const getByPath = (obj: Record<string, unknown>, path: string): unknown =
   }, obj)
 }
 
+// ---------------------------------------------------------------------------
+// Width-aware field grouping
+// ---------------------------------------------------------------------------
+
+export type FieldWidthGroup =
+  | { type: 'single'; field: ClientField }
+  | { type: 'width-row'; fields: ClientField[] }
+
+/**
+ * Groups consecutive fields that have `admin.width` into width-row groups.
+ * Fields without width remain individual entries. Used to render fields
+ * side-by-side when they have explicit width percentages (e.g. '50%').
+ */
+export const groupFieldsByWidth = (fields: ClientField[]): FieldWidthGroup[] => {
+  const groups: FieldWidthGroup[] = []
+  let i = 0
+  while (i < fields.length) {
+    if (fields[i].admin?.width) {
+      const wFields: ClientField[] = []
+      while (i < fields.length && fields[i].admin?.width) {
+        wFields.push(fields[i])
+        i++
+      }
+      groups.push({ type: 'width-row', fields: wFields })
+    } else {
+      groups.push({ type: 'single', field: fields[i] })
+      i++
+    }
+  }
+  return groups
+}
+
 /** Set a nested value in an object by dot-separated path (immutable). */
 export const setByPath = (
   obj: Record<string, unknown>,

@@ -36,15 +36,26 @@ export const NativeHost: React.FC<NativeHostProps> = ({
   const Host = nativeComponents.Host
 
   if (Host) {
-    // matchContents={false} → omit the prop entirely so the Host stretches to its RN parent
     const hostProps: any = {
       colorScheme: 'light',
       ignoreSafeArea: 'keyboard',
       style,
     }
-    if (matchContents !== false) {
-      hostProps.matchContents = matchContents
+
+    // Translate our { width, height } shape to @expo/ui's { horizontal, vertical }
+    if (typeof matchContents === 'object') {
+      hostProps.matchContents = {
+        horizontal: matchContents.width ?? false,
+        vertical: matchContents.height ?? false,
+      }
+    } else if (matchContents === false) {
+      // Omit entirely → Host stretches to RN parent (both axes from RN layout)
+      // NOTE: this means the Host will NOT report SwiftUI content size back to RN.
+      // Only use this when the RN parent already has an explicit size.
+    } else {
+      hostProps.matchContents = matchContents // true → match both axes
     }
+
     return <Host {...hostProps}>{children}</Host>
   }
 

@@ -32,9 +32,17 @@ import { useResponsive, SIDEBAR_WIDTH } from '@/hooks/useResponsive'
 
 let BlurView: React.ComponentType<any> | null = null
 try {
-  BlurView = require('expo-blur').BlurView
+  // expo-blur uses a native view (ViewManagerAdapter_ExpoBlur_ExpoBlurView).
+  // The JS module always loads, but the native view crashes at RENDER time if
+  // the binary doesn't include it. The view config getter is registered lazily
+  // via NativeComponentRegistry — it doesn't throw at require time.
+  // Check globalThis.expo.getViewConfig() which is the native registry probe.
+  const hasNativeView = globalThis.expo?.getViewConfig?.('ExpoBlur', 'ExpoBlurView') != null
+  if (hasNativeView) {
+    BlurView = require('expo-blur').BlurView
+  }
 } catch {
-  /* expo-blur not installed or native module unavailable */
+  /* expo-blur not installed or native view unavailable */
 }
 
 let GlassView: React.ComponentType<any> | null = null

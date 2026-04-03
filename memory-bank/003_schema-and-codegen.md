@@ -20,6 +20,12 @@ MenuModel extensions (2026-04-02)
 - Extracted in `buildMenuModel()` via `(collection.admin as Record<string, unknown>)?.icon`.
 - Consumed on mobile by `CollectionIcon` component and `getSFSymbol()` for native menus.
 
-Notes on hooks
-- Hooks run on the server. Do not try to run them on mobile or desktop clients.
-- If you need client visible metadata, generate a small hooks manifest from the config. Keep it read only and do not expose server secrets.
+Notes on hooks and validators
+- Server-side hooks and validators run via Payload as before — these remain the authoritative source.
+- **Client-side hooks and validators** now also run on mobile via `@payload-universal/client-validators`:
+  - Built-in validators (required, min, max, minLength, maxLength, email regex, select matching, etc.) are ported from Payload's `fields/validations.ts` without server dependencies.
+  - Custom validators and hooks are defined per-app in a client-safe module (e.g. `src/validators/index.ts`), bundled by Metro at build time.
+  - `useValidatedMutations` hook runs hooks + validation BEFORE writing to local RxDB — validation failures never reach the DB.
+  - `ClientValidatorProvider` context holds the `ClientHooksConfig` and is mounted in the app root.
+  - Functions CANNOT be serialized through the JSON admin-schema endpoint. Client validators are imported as code, not fetched as JSON.
+  - Keep custom validators free of server dependencies (no `req`, `payload`, database queries, etc.).

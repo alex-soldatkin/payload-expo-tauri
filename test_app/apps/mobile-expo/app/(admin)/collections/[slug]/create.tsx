@@ -9,17 +9,18 @@
  * draft by default (user can choose to publish immediately via the
  * dual Save Draft / Publish buttons).
  */
-import React from 'react'
+import React, { useMemo } from 'react'
 import { ActivityIndicator, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 
 import {
   DocumentForm,
+  extractRootFields,
   getCollectionLabel,
   useAdminSchema,
   useMenuModel,
 } from '@payload-universal/admin-native'
-import { useLocalDB, useLocalMutations, useLocalDBStatus } from '@payload-universal/local-db'
+import { useLocalDB, useLocalDBStatus, useValidatedMutations } from '@payload-universal/local-db'
 
 export default function DocumentCreateScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>()
@@ -28,12 +29,24 @@ export default function DocumentCreateScreen() {
   const menuModel = useMenuModel()
   const localDB = useLocalDB()
   const { isReady } = useLocalDBStatus()
-  const { create } = useLocalMutations(localDB, slug)
 
   const collectionMeta = menuModel?.collections.find((c) => c.slug === slug)
   const collectionLabel = menuModel ? getCollectionLabel(menuModel, slug, false) : slug
   const schemaMap = schema?.collections[slug]
   const hasDrafts = collectionMeta?.drafts ?? false
+
+  // Extract root fields from schema for client-side validation
+  const rootFields = useMemo(
+    () => (schemaMap ? extractRootFields(schemaMap, slug) : []),
+    [schemaMap, slug],
+  )
+
+  // Validated mutations: hooks + validation run locally BEFORE writing to RxDB
+  const {
+    create: validatedCreate,
+    errors: validationErrors,
+    clearFieldError,
+  } = useValidatedMutations(localDB, slug, rootFields)
 
   const handleSubmit = async (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => {
     // Merge status into the data for the local DB write
@@ -42,8 +55,13 @@ export default function DocumentCreateScreen() {
       : hasDrafts
         ? { ...data, _status: 'draft' }  // Default to draft for draft-enabled collections
         : data
-    const id = await create(writeData)
-    router.replace(`/(admin)/collections/${slug}/${id}`)
+    const result = await validatedCreate(writeData)
+    if (!result.success) {
+      // Throw so DocumentForm can display the error banner and toast
+      const count = Object.keys(result.errors).length
+      throw new Error(`${count} field${count !== 1 ? 's' : ''} failed validation`)
+    }
+    router.replace(`/(admin)/collections/${slug}/${result.id}`)
   }
 
   if (!isReady || !schemaMap) {
@@ -79,6 +97,8 @@ export default function DocumentCreateScreen() {
         slug={slug}
         initialData={{}}
         onSubmit={handleSubmit}
+        errors={validationErrors}
+        onFieldEdit={clearFieldError}
         submitLabel={hasDrafts ? undefined : 'Create'}
         draftStatus={hasDrafts ? 'draft' : undefined}
       />

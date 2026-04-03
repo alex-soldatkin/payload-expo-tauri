@@ -468,7 +468,7 @@
 				ONLY_ACTIVE_ARCH = YES;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "$(inherited) DEBUG";
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
@@ -525,7 +525,7 @@
 				MTL_ENABLE_DEBUG_INFO = NO;
 				OTHER_CFLAGS = "$(inherited)";
 				OTHER_CPLUSPLUSFLAGS = "$(inherited)";
-				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native";
+				REACT_NATIVE_PATH = "${PODS_ROOT}/../../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native";
 				SDKROOT = iphoneos;
 				SWIFT_ENABLE_EXPLICIT_MODULES = NO;
 				USE_HERMES = true;

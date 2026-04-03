@@ -23,6 +23,13 @@ Spacedrive references
 - spacedrive-main/package.json for the monorepo layout under apps/* and packages/*.
 
 Local workspace references
+- payload_universal/packages/client-validators/src/index.ts for client-safe field validators and hooks (runs on mobile without server deps).
+- payload_universal/packages/client-validators/src/builtinValidators.ts for built-in validators ported from Payload.
+- payload_universal/packages/client-validators/src/runValidation.ts for the schema-walking validation runner.
+- payload_universal/packages/client-validators/src/runHooks.ts for beforeValidate/beforeChange/afterChange/afterRead hook runners.
+- payload_universal/packages/local-db/src/validatedHooks.ts for useValidatedMutations (validates before writing to RxDB).
+- payload_universal/packages/local-db/src/ClientValidatorContext.tsx for ClientValidatorProvider context.
+- test_app/apps/mobile-expo/src/validators/index.ts for the test app's custom client-side validators and hooks.
 - payload_universal/packages/schema/src/createPayloadConfig.ts for the shared Payload config builder.
 - payload_universal/packages/admin-schema/src/index.ts for admin schema generation.
 - payload_universal/packages/local-db/src/database.ts for the RxDB database factory (createLocalDB).

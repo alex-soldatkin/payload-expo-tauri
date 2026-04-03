@@ -163,6 +163,8 @@ export interface Post {
    * URL-friendly identifier for this post
    */
   slug?: string | null;
+  contentFormat?: ('article' | 'tutorial' | 'review') | null;
+  language?: ('en' | 'es' | 'fr') | null;
   /**
    * Short summary displayed in previews
    */
@@ -207,6 +209,14 @@ export interface Post {
    * Comma-separated keywords
    */
   metaKeywords?: string | null;
+  /**
+   * Canonical URL override
+   */
+  canonicalUrl?: string | null;
+  /**
+   * Hide from search
+   */
+  noIndex?: boolean | null;
   ogTitle?: string | null;
   ogDescription?: string | null;
   ogImage?: (string | null) | Media;
@@ -215,6 +225,11 @@ export interface Post {
    */
   readTime?: number | null;
   priority?: number | null;
+  category?: ('technology' | 'science' | 'culture' | 'travel') | null;
+  /**
+   * Further classification
+   */
+  subcategory?: string | null;
   status?: ('draft' | 'published' | 'archived') | null;
   publishedDate?: string | null;
   author?: (string | null) | User;
@@ -395,6 +410,8 @@ export interface MediaSelect<T extends boolean = true> {
 export interface PostsSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
+  contentFormat?: T;
+  language?: T;
   excerpt?: T;
   content?: T;
   heroImage?: T;
@@ -412,11 +429,15 @@ export interface PostsSelect<T extends boolean = true> {
   metaTitle?: T;
   metaDescription?: T;
   metaKeywords?: T;
+  canonicalUrl?: T;
+  noIndex?: T;
   ogTitle?: T;
   ogDescription?: T;
   ogImage?: T;
   readTime?: T;
   priority?: T;
+  category?: T;
+  subcategory?: T;
   status?: T;
   publishedDate?: T;
   author?: T;

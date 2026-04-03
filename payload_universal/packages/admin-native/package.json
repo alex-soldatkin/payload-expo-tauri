@@ -8,24 +8,35 @@
     ".": "./src/index.ts",
     "./fields": "./src/fields/index.ts",
     "./provider": "./src/PayloadNativeProvider.tsx",
-    "./toast": "./src/Toast.tsx"
+    "./toast": "./src/Toast.tsx",
+    "./validation": "./src/validation.ts",
+    "./form": "./src/usePayloadForm.ts"
   },
   "peerDependencies": {
+    "@expo/ui": ">=55.0.0",
+    "@react-native-picker/picker": ">=2.0.0",
+    "expo-glass-effect": ">=55.0.0",
+    "expo-image-picker": ">=15.0.0",
+    "expo-router": ">=4.0.0",
     "react": ">=18.0.0",
     "react-native": ">=0.72.0",
-    "expo-router": ">=4.0.0",
-    "expo-image-picker": ">=15.0.0",
-    "@react-native-picker/picker": ">=2.0.0",
-    "@expo/ui": ">=55.0.0",
-    "expo-glass-effect": ">=55.0.0",
     "react-native-gesture-handler": ">=2.0.0",
-    "react-native-reanimated": ">=3.0.0"
+    "react-native-reanimated": ">=3.0.0",
+    "react-native-webview": ">=13.0.0"
   },
   "peerDependenciesMeta": {
-    "@expo/ui": { "optional": true },
-    "expo-glass-effect": { "optional": true }
+    "@expo/ui": {
+      "optional": true
+    },
+    "expo-glass-effect": {
+      "optional": true
+    }
   },
   "dependencies": {
-    "@payload-universal/admin-schema": "workspace:*"
+    "@payload-universal/admin-schema": "workspace:*",
+    "zod": ">=3.22.0 <4.0.0"
+  },
+  "optionalDependencies": {
+    "react-hook-form": "^7.72.1"
   }
 }

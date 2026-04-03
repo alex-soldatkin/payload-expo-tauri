@@ -70,7 +70,7 @@ export const startReplication = (
       async handler(checkpoint, size) {
         const params = new URLSearchParams()
         params.set('limit', String(size || batchSize))
-        params.set('sort', 'updatedAt')
+        params.set('sort', 'updatedAt,id') // Deterministic sort
         params.set('depth', '0')
 
         // Include draft documents in pull results so the mobile app
@@ -147,28 +147,7 @@ export const startReplication = (
             }
           : checkpoint
 
-        // Force-update local docs that were changed on the server.
-        // RxDB's replication may skip updates for docs that were originally
-        // pushed by the client (it considers the client authoritative).
-        // We bypass this by upserting directly for non-locally-modified docs.
-        for (const doc of filtered) {
-          if (doc._deleted) continue
-          try {
-            const localDoc = await collection.findOne(doc.id).exec()
-            if (localDoc) {
-              const localData = localDoc.toJSON(true) as any
-              // Only update if not locally modified and server version is newer
-              if (!localData._locallyModified && localData.updatedAt !== doc.updatedAt) {
-                await localDoc.incrementalPatch({
-                  ...doc,
-                  _locallyModified: false,
-                })
-              }
-            }
-          } catch {
-            // Non-fatal — replication will handle it
-          }
-        }
+
 
         return {
           documents: filtered,

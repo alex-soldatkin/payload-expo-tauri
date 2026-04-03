@@ -1,6 +1,8 @@
 /**
  * TextInput-based field components: text, email, number, textarea, code, json, point.
- * Each maps a Payload field type to a native TextInput with the appropriate keyboard config.
+ *
+ * iOS 26 Mail compose style — simple fields use inline layout (label left,
+ * input right). Multiline fields (textarea, code, json) use stacked layout.
  */
 import React from 'react'
 import { StyleSheet, TextInput, View } from 'react-native'
@@ -28,7 +30,7 @@ export const TextField: React.FC<FieldComponentProps<ClientTextField>> = ({
 }) => (
   <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
     <TextInput
-      style={[styles.input, disabled && styles.disabled, error && styles.inputError]}
+      style={[styles.inlineInput, disabled && styles.disabled]}
       value={value != null ? String(value) : ''}
       onChangeText={(v) => onChange(v)}
       placeholder={field.admin?.placeholder}
@@ -49,7 +51,7 @@ export const EmailField: React.FC<FieldComponentProps<ClientEmailField>> = ({
 }) => (
   <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
     <TextInput
-      style={[styles.input, disabled && styles.disabled, error && styles.inputError]}
+      style={[styles.inlineInput, disabled && styles.disabled]}
       value={value != null ? String(value) : ''}
       onChangeText={(v) => onChange(v)}
       placeholder={field.admin?.placeholder || 'email@example.com'}
@@ -72,7 +74,7 @@ export const NumberField: React.FC<FieldComponentProps<ClientNumberField>> = ({
 }) => (
   <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
     <TextInput
-      style={[styles.input, disabled && styles.disabled, error && styles.inputError]}
+      style={[styles.inlineInput, disabled && styles.disabled]}
       value={value != null ? String(value) : ''}
       onChangeText={(v) => {
         if (v === '' || v === '-') { onChange(v); return }
@@ -89,15 +91,15 @@ export const NumberField: React.FC<FieldComponentProps<ClientNumberField>> = ({
 )
 
 // ---------------------------------------------------------------------------
-// Textarea
+// Textarea (stacked — multiline)
 // ---------------------------------------------------------------------------
 
 export const TextareaField: React.FC<FieldComponentProps<ClientTextareaField>> = ({
   field, value, onChange, disabled, error,
 }) => (
-  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
     <TextInput
-      style={[styles.input, styles.textarea, disabled && styles.disabled, error && styles.inputError]}
+      style={[styles.multilineInput, disabled && styles.disabled]}
       value={value != null ? String(value) : ''}
       onChangeText={(v) => onChange(v)}
       placeholder={field.admin?.placeholder}
@@ -112,15 +114,15 @@ export const TextareaField: React.FC<FieldComponentProps<ClientTextareaField>> =
 )
 
 // ---------------------------------------------------------------------------
-// Code
+// Code (stacked — multiline monospaced)
 // ---------------------------------------------------------------------------
 
 export const CodeField: React.FC<FieldComponentProps<ClientCodeField>> = ({
   field, value, onChange, disabled, error,
 }) => (
-  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
     <TextInput
-      style={[styles.input, styles.code, disabled && styles.disabled, error && styles.inputError]}
+      style={[styles.multilineInput, styles.codeFont, disabled && styles.disabled]}
       value={value != null ? String(value) : ''}
       onChangeText={(v) => onChange(v)}
       placeholder={field.admin?.placeholder}
@@ -136,7 +138,7 @@ export const CodeField: React.FC<FieldComponentProps<ClientCodeField>> = ({
 )
 
 // ---------------------------------------------------------------------------
-// JSON
+// JSON (stacked — multiline monospaced)
 // ---------------------------------------------------------------------------
 
 export const JSONField: React.FC<FieldComponentProps<ClientJSONField>> = ({
@@ -144,9 +146,9 @@ export const JSONField: React.FC<FieldComponentProps<ClientJSONField>> = ({
 }) => {
   const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2) ?? ''
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <TextInput
-        style={[styles.input, styles.code, disabled && styles.disabled, error && styles.inputError]}
+        style={[styles.multilineInput, styles.codeFont, disabled && styles.disabled]}
         value={text}
         onChangeText={(v) => { try { onChange(JSON.parse(v)) } catch { onChange(v) } }}
         placeholder="{}"
@@ -163,7 +165,7 @@ export const JSONField: React.FC<FieldComponentProps<ClientJSONField>> = ({
 }
 
 // ---------------------------------------------------------------------------
-// Point (lat/lng)
+// Point (lat/lng — inline pair)
 // ---------------------------------------------------------------------------
 
 export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
@@ -174,19 +176,19 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
       <View style={styles.pointRow}>
         <TextInput
-          style={[styles.input, styles.pointInput, disabled && styles.disabled]}
+          style={[styles.inlineInput, styles.pointInput, disabled && styles.disabled]}
           value={String(coords[0] ?? '')}
           onChangeText={(v) => onChange([Number(v) || 0, coords[1]])}
-          placeholder="Longitude"
+          placeholder="Lng"
           placeholderTextColor={t.colors.textPlaceholder}
           keyboardType="numeric"
           editable={!disabled}
         />
         <TextInput
-          style={[styles.input, styles.pointInput, disabled && styles.disabled]}
+          style={[styles.inlineInput, styles.pointInput, disabled && styles.disabled]}
           value={String(coords[1] ?? '')}
           onChangeText={(v) => onChange([coords[0], Number(v) || 0])}
-          placeholder="Latitude"
+          placeholder="Lat"
           placeholderTextColor={t.colors.textPlaceholder}
           keyboardType="numeric"
           editable={!disabled}
@@ -201,19 +203,32 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  input: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
-    paddingHorizontal: 0,
-    paddingVertical: t.spacing.sm + 2,
+  // Inline input — borderless, fills the right side of the row
+  inlineInput: {
     fontSize: t.fontSize.md,
     color: t.colors.text,
+    paddingVertical: 0,
+    paddingHorizontal: 0,
     backgroundColor: 'transparent',
+    flex: 1,
+    textAlign: 'left',
   },
-  inputError: { borderBottomColor: t.colors.error },
+  // Multiline input — stacked below label with light border
+  multilineInput: {
+    fontSize: t.fontSize.md,
+    color: t.colors.text,
+    minHeight: 100,
+    paddingHorizontal: t.spacing.sm,
+    paddingVertical: t.spacing.sm,
+    backgroundColor: 'transparent',
+    textAlignVertical: 'top',
+  },
+  codeFont: {
+    fontFamily: 'monospace',
+    fontSize: t.fontSize.sm,
+    minHeight: 140,
+  },
   disabled: { opacity: 0.5 },
-  textarea: { minHeight: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.separator, borderRadius: t.borderRadius.sm, paddingHorizontal: t.spacing.md, backgroundColor: t.colors.surface },
-  code: { fontFamily: 'monospace', minHeight: 140, fontSize: t.fontSize.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.separator, borderRadius: t.borderRadius.sm, paddingHorizontal: t.spacing.md, backgroundColor: t.colors.surface },
-  pointRow: { flexDirection: 'row', gap: t.spacing.sm },
+  pointRow: { flexDirection: 'row', gap: t.spacing.md, flex: 1 },
   pointInput: { flex: 1 },
 })

@@ -61,22 +61,17 @@ const CheckboxFieldFallback: React.FC<FieldComponentProps<ClientCheckboxField>> 
   disabled,
   error,
 }) => (
-  <View style={styles.checkboxRow}>
-    <Switch
-      value={Boolean(value)}
-      onValueChange={(v) => onChange(v)}
-      disabled={disabled || field.admin?.readOnly}
-      trackColor={{ true: t.colors.primary, false: '#ccc' }}
-      thumbColor={Platform.OS === 'android' ? '#fff' : undefined}
-    />
-    <View style={styles.checkboxLabel}>
-      <Text style={fieldShellStyles.label}>{getFieldLabel(field)}</Text>
-      {getFieldDescription(field) && (
-        <Text style={fieldShellStyles.description}>{getFieldDescription(field)}</Text>
-      )}
-      {error && <Text style={fieldShellStyles.error}>{error}</Text>}
+  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} error={error}>
+    <View style={styles.checkboxInline}>
+      <Switch
+        value={Boolean(value)}
+        onValueChange={(v) => onChange(v)}
+        disabled={disabled || field.admin?.readOnly}
+        trackColor={{ true: t.colors.primary, false: '#ccc' }}
+        thumbColor={Platform.OS === 'android' ? '#fff' : undefined}
+      />
     </View>
-  </View>
+  </FieldShell>
 )
 
 export const CheckboxField: React.FC<FieldComponentProps<ClientCheckboxField>> = (props) =>
@@ -294,9 +289,8 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Checkbox fallback
-  checkboxRow: { flexDirection: 'row', alignItems: 'center', marginBottom: t.spacing.lg, gap: t.spacing.md },
-  checkboxLabel: { flex: 1 },
+  // Checkbox fallback — switch aligned right in the inline row
+  checkboxInline: { alignItems: 'flex-end' },
 
   // Date fallback
   dateButton: {

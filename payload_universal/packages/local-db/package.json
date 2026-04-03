@@ -17,6 +17,7 @@
     "expo-sqlite": ">=14.0.0"
   },
   "dependencies": {
-    "@payload-universal/admin-schema": "workspace:*"
+    "@payload-universal/admin-schema": "workspace:*",
+    "@payload-universal/client-validators": "workspace:*"
   }
 }

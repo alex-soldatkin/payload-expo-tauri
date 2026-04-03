@@ -20,8 +20,9 @@ let BlurView: React.ComponentType<{
 }> | null = null
 
 try {
-  const mod = require('expo-blur')
-  if (mod.BlurView) BlurView = mod.BlurView
+  if (globalThis.expo?.getViewConfig?.('ExpoBlur', 'ExpoBlurView') != null) {
+    BlurView = require('expo-blur').BlurView
+  }
 } catch {
   /* not available */
 }

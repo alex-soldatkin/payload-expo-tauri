@@ -90,10 +90,12 @@ Uses transparent `Modal` + `Animated` slide-up + `PanResponder` swipe-to-dismiss
 ### Single-select (native)
 ```tsx
 // Uses nativeComponents.Picker + nativeComponents.Text from shared registry
-<NativeHost>
+// CRITICAL: matchContents={{ height: true }} — SwiftUI must report height to RN
+// so UIKit hit-testing works. matchContents={false} causes zero-height frame → no taps.
+<NativeHost matchContents={{ height: true }}>
   <NativePicker selection={value} onSelectionChange={onChange}>
-    <NativeText modifiers={[{ tag: '' }]}>Select...</NativeText>
-    {options.map(opt => <NativeText key={opt.value} modifiers={[{ tag: opt.value }]}>{opt.label}</NativeText>)}
+    <NativeText modifiers={[tag('')]}>Select...</NativeText>
+    {options.map(opt => <NativeText key={opt.value} modifiers={[tag(opt.value)]}>{opt.label}</NativeText>)}
   </NativePicker>
 </NativeHost>
 ```
@@ -816,41 +818,75 @@ Payload `tabs` fields render as native `UISegmentedControl` via `@expo/ui` `Pick
 - Keys include parent tab name to avoid collisions: `${activeTab.name}-${sub.name}`
 - Tags and selection use `String()` types for consistent JS↔native bridge matching
 
-### 🚨 KNOWN BUG: Native Picker selection not working (2026-04-03)
+### RESOLVED: Native Picker selection not working (2026-04-03)
 
-**Status: UNRESOLVED.** The native segmented Picker renders correctly and shows `glassEffect` interactive visual feedback on press, but `onSelectionChange` does not fire — tapping a segment does not change the selection.
+**Status: FIXED.** Root cause was `glassEffect({ glass: { variant: 'regular', interactive: true } })` modifier applied directly to Picker components.
 
-**What works:**
-- Picker renders as segmented control visually ✅
-- `glassEffect({ glass: { variant: 'regular', interactive: true } })` shows press state ✅
-- `pickerStyle('segmented')` renders correct style (not dropdown) ✅
+**Root cause:** The `glassEffect` modifier with `interactive: true` creates its own gesture recognizer for press/hover states. When applied to a native `Picker` (which has its own built-in tap gesture handling), the glass effect's gesture handler consumed touch events before they reached the Picker's selection handler. Visual press feedback worked (handled by glass effect), but `onSelectionChange` never fired.
 
-**What doesn't work:**
-- Tapping a segment does not trigger `onSelectionChange` ❌
-- Both tab picker and regular select/radio pickers affected ❌
+**Fix:** Removed `glassEffect` modifier from all native Picker modifiers:
+- `structural.tsx` TabsField: modifiers now `[pickerStyle('segmented')]` only
+- `pickers.tsx` SelectFieldNative: no modifiers (default menu picker)
+- `pickers.tsx` RadioFieldNative: `[pickerStyle('segmented')]` only (when ≤5 options)
 
-**Attempted fixes:**
-1. Changed modifiers from object literals to function calls — fixed visual rendering but not selection
-2. Changed `selection`/`tag` to consistent `String()` types — no effect on selection
-3. Changed `NativeHost matchContents` from `true`/`{ width: false, height: true }` to `false` — no effect on selection
-4. Applied `glassEffect({ glass: { variant: 'regular', interactive: true } })` — added visual feedback but did not fix selection
+On iOS 26, `UISegmentedControl` and native Picker already have system-level liquid glass rendering — the explicit modifier was redundant and harmful.
 
-**Requirements for the fix:**
-- `glassEffect` with `interactive: true` MUST be maintained — all liquid glass UI elements need it
-- Native `@expo/ui` components must be used (not JS fallbacks) — the goal is native iOS feel
-- The `PillTabBar` (React Native fallback) works correctly — it can be used as interim until the native picker is fixed
+### ALSO RESOLVED: Native Picker STILL not tappable after glassEffect removal (2026-04-03)
 
-**Likely root cause candidates:**
-- `Host` wrapping may intercept or transform touch events before they reach the SwiftUI `Picker`
-- The `expo-glass-effect` `GlassView` containers wrapping the form content may create a gesture conflict
-- The `@expo/ui` canary version (55.0.0-canary-20260128) may have a bug in `Picker` `onSelectionChange` when used with `pickerStyle('segmented')` + `glassEffect`
-- The `GestureHandlerRootView` at the app root may conflict with SwiftUI gesture recognizers
+**Status: FIXED.** Second root cause was `matchContents={false}` on the `@expo/ui` Host wrapper.
 
-**To investigate next:**
-- Test a minimal `Picker` with `pickerStyle('segmented')` outside of DocumentForm (e.g. directly in a screen) to isolate whether the form hierarchy causes the issue
-- Test without `glassEffect` modifier to determine if it's the glass effect consuming touches
-- Check if the `Animated.ScrollView` (DocumentForm) parent interferes with SwiftUI touch delivery
-- Check expo-ui GitHub issues for known `Picker` + `segmented` + `glassEffect` interactions
+**Root cause:** `NativeHost matchContents={false}` omitted the `matchContents` prop from the `@expo/ui` Host entirely. The Swift `HostViewProps` defaulted both `matchContentsHorizontal` and `matchContentsVertical` to `false`, so SwiftUI never reported its content height (~32px for segmented controls) back to React Native via `shadowNodeProxy.setStyleSize()`. The RN UIKit frame collapsed to **zero height**. SwiftUI rendered the control visually (SwiftUI rendering is NOT clipped by the UIKit frame), but UIKit's `point(inside:with:)` returned `false` for every touch — the zero-height frame contained no hittable area.
+
+**Fix:** Changed all interactive Picker Hosts from `matchContents={false}` to `matchContents={{ height: true }}`:
+- `structural.tsx` TabsField: `<NativeHost matchContents={{ height: true }}>`
+- `pickers.tsx` SelectFieldNative: `<NativeHost matchContents={{ height: true }}>`
+- `pickers.tsx` RadioFieldNative: `<NativeHost matchContents={{ height: true }}>`
+
+Width is still controlled by RN layout (`alignSelf: 'stretch'`). Height is measured by SwiftUI and reported to RN.
+
+**NativeHost.tsx updated:** Translates `{ width, height }` shape → `{ horizontal, vertical }` for `@expo/ui`'s Host API.
+
+### Key rules for `@expo/ui` Host `matchContents`
+1. **`matchContents={true}`** — SwiftUI controls both width and height. Good for inline components like Toggle.
+2. **`matchContents={{ height: true }}`** — RN controls width, SwiftUI controls height. **Use for Pickers, segmented controls, and any control that needs to fill available width but has intrinsic height.**
+3. **`matchContents={false}`** — RN controls both axes. Host WILL NOT report size. **Only use when the RN parent has an explicit fixed size.** Interactive SwiftUI controls inside will be INVISIBLE TO TOUCH.
+4. Do NOT apply `glassEffect({ interactive: true })` to SwiftUI controls — they have their own gesture handling. Use `glassEffect` on container Views (`GlassView` from `expo-glass-effect`) instead.
+
+---
+
+## admin.width Field Layout (2026-04-03)
+
+### How it works
+Consecutive fields with `admin.width` are automatically grouped into flex rows. A `groupFieldsByWidth` helper splits field arrays into groups:
+- `{ type: 'single', field }` — fields without width (full width)
+- `{ type: 'width-row', fields: [...] }` — consecutive width fields (side-by-side)
+
+### Width applied as flex proportion
+```tsx
+// Same approach as RowField:
+<View style={{ flex: parseFloat(field.admin.width) / 100 }}>
+  {renderField(field, path)}
+</View>
+
+// Two 50% fields → flex: 0.5 each → split evenly (minus gap)
+// One 60% + one 40% → flex: 0.6 and 0.4 → proportional split
+```
+
+### Where it applies
+- **DocumentForm** `renderFields`: top-level fields
+- **GroupField** body: sub-fields within named/unnamed groups
+- **CollapsibleField** body: sub-fields within collapsibles
+- **TabContent**: sub-fields within tab panels
+- **ArrayField** rows: sub-fields within each array item
+- **BlocksField** rows: sub-fields within each block item
+- **RowField**: keeps its own existing flex-proportion logic (unchanged)
+
+### Key rules
+1. `admin.width` values are CSS percentage strings (e.g. `'50%'`).
+2. `parseFloat('50%')` gives `50`, then `/100` gives flex `0.5`.
+3. Fields without `admin.width` that are NOT part of a consecutive group render full-width.
+4. RowField still uses its own width logic (not `groupFieldsByWidth`) — it wraps ALL children in a flex row regardless of whether they have `admin.width`.
+5. The `widthRow` style is `{ flexDirection: 'row', gap: spacing.md }` — identical to RowField's `rowContainer` minus the `marginBottom`.
 
 ### iOS form field styling
 

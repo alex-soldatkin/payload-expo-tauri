@@ -23,6 +23,9 @@ export const Posts: CollectionConfig = {
       unique: true,
       admin: {
         description: 'URL-friendly identifier for this post',
+        components: {
+          Field: { path: './components/SlugField' }
+        }
       },
     },
     {
@@ -32,11 +35,41 @@ export const Posts: CollectionConfig = {
         {
           label: 'Content',
           fields: [
+            // Row — different width ratio (60/40)
+            {
+              type: 'row',
+              fields: [
+                {
+                  name: 'contentFormat',
+                  type: 'radio',
+                  options: ['article', 'tutorial', 'review'],
+                  admin: {
+                    width: '60%',
+                  },
+                },
+                {
+                  name: 'language',
+                  type: 'select',
+                  defaultValue: 'en',
+                  options: [
+                    { label: 'English', value: 'en' },
+                    { label: 'Spanish', value: 'es' },
+                    { label: 'French', value: 'fr' },
+                  ],
+                  admin: {
+                    width: '40%',
+                  },
+                },
+              ],
+            },
             {
               name: 'excerpt',
               type: 'textarea',
               admin: {
                 description: 'Short summary displayed in previews',
+                components: {
+                  afterInput: [{ path: './components/ContentMetrics' }],
+                },
               },
             },
             {
@@ -98,6 +131,9 @@ export const Posts: CollectionConfig = {
                   type: 'text',
                   admin: {
                     description: 'Overrides the page title for search engines',
+                    components: {
+                      Field: { path: './components/SEOPreview' },
+                    },
                   },
                 },
                 {
@@ -113,6 +149,28 @@ export const Posts: CollectionConfig = {
                   admin: {
                     description: 'Comma-separated keywords',
                   },
+                },
+                // Row inside a collapsible — demonstrates nested width layout
+                {
+                  type: 'row',
+                  fields: [
+                    {
+                      name: 'canonicalUrl',
+                      type: 'text',
+                      admin: {
+                        width: '70%',
+                        description: 'Canonical URL override',
+                      },
+                    },
+                    {
+                      name: 'noIndex',
+                      type: 'checkbox',
+                      admin: {
+                        width: '30%',
+                        description: 'Hide from search',
+                      },
+                    },
+                  ],
                 },
               ],
             },
@@ -150,6 +208,9 @@ export const Posts: CollectionConfig = {
           admin: {
             width: '50%',
             description: 'Estimated minutes',
+            components: {
+              afterInput: [{ path: './components/ReadTimeChart' }],
+            },
           },
         },
         {
@@ -162,6 +223,30 @@ export const Posts: CollectionConfig = {
           },
         },
       ],
+    },
+
+    // Standalone fields with admin.width — consecutive width fields are
+    // automatically grouped into a flex row on native (via groupFieldsByWidth)
+    {
+      name: 'category',
+      type: 'select',
+      options: [
+        { label: 'Technology', value: 'technology' },
+        { label: 'Science', value: 'science' },
+        { label: 'Culture', value: 'culture' },
+        { label: 'Travel', value: 'travel' },
+      ],
+      admin: {
+        width: '50%',
+      },
+    },
+    {
+      name: 'subcategory',
+      type: 'text',
+      admin: {
+        width: '50%',
+        description: 'Further classification',
+      },
     },
 
     // ---- Sidebar fields ----
@@ -178,6 +263,9 @@ export const Posts: CollectionConfig = {
       ],
       admin: {
         position: 'sidebar',
+        components: {
+          afterInput: [{ path: './components/StatusDashboard' }],
+        },
       },
     },
     {

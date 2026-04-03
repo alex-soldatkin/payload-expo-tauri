@@ -32,7 +32,7 @@ import type {
   FormErrors,
 } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel, groupFieldsByWidth } from '../schemaHelpers'
 import { nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 
@@ -110,6 +110,38 @@ const getTabLabel = (tab: { label?: string | Record<string, string>; name?: stri
 const subPath = (basePath: string, fieldName?: string): string =>
   `${basePath ? basePath + '.' : ''}${fieldName ?? ''}`
 
+/**
+ * Render sub-fields, grouping consecutive fields with `admin.width` into
+ * flex rows so they lay out side-by-side (e.g. two 50% fields in one row).
+ */
+const renderSubFieldsWithWidth = (
+  fields: ClientField[],
+  buildPath: (field: ClientField) => string,
+  renderFn: RenderFieldFn,
+  keyPrefix: string,
+): React.ReactNode[] => {
+  const groups = groupFieldsByWidth(fields)
+  return groups.map((group, gi) => {
+    if (group.type === 'width-row') {
+      return (
+        <View key={`${keyPrefix}-wrow-${gi}`} style={styles.widthRow}>
+          {group.fields.map((sub) => (
+            <View key={sub.name || `${keyPrefix}-wf-${gi}`} style={{ flex: parseFloat(sub.admin!.width!) / 100 }}>
+              {renderFn(sub, buildPath(sub))}
+            </View>
+          ))}
+        </View>
+      )
+    }
+    const sub = group.field
+    return (
+      <React.Fragment key={sub.name || `${keyPrefix}-${gi}`}>
+        {renderFn(sub, buildPath(sub))}
+      </React.Fragment>
+    )
+  })
+}
+
 // ---------------------------------------------------------------------------
 // Group
 // ---------------------------------------------------------------------------
@@ -122,7 +154,7 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
   const description = getFieldDescription(field)
 
   if (!field.name) {
-    return <>{subFields.map((sub, i) => <React.Fragment key={sub.name || `group-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}</>
+    return <>{renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'group')}</>
   }
 
   const content = (
@@ -134,7 +166,7 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
         </View>
       )}
       <View style={styles.groupBody}>
-        {subFields.map((sub, i) => <React.Fragment key={sub.name || `group-${i}`}>{renderField(sub, `${path}.${sub.name ?? ''}`)}</React.Fragment>)}
+        {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${sub.name ?? ''}`, renderField, 'grp')}
       </View>
     </>
   )
@@ -188,7 +220,7 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {subFields.map((sub, i) => <React.Fragment key={sub.name || `col-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}
+          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'coln')}
         </View>
       )}
     </Container>
@@ -238,7 +270,7 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {subFields.map((sub, i) => <React.Fragment key={sub.name || `col-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}
+          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'colf')}
         </View>
       )}
     </Wrapper>
@@ -301,10 +333,12 @@ const TabContent: React.FC<{
   return (
     <TabDepthContext.Provider value={depth + 1}>
       <View style={styles.tabContent}>
-        {(activeTab.fields ?? []).map((sub: ClientField, i: number) => {
-          const bp = activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name)
-          return <React.Fragment key={`${activeTab.name || 'tab'}-${sub.name || i}`}>{renderField(sub, bp)}</React.Fragment>
-        })}
+        {renderSubFieldsWithWidth(
+          activeTab.fields ?? [],
+          (sub: ClientField) => activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name),
+          renderField,
+          activeTab.name || 'tab',
+        )}
       </View>
     </TabDepthContext.Provider>
   )
@@ -367,7 +401,7 @@ export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = ({
     <View style={[styles.tabsContainer, depth > 0 && styles.tabsNested]}>
       {useNativeSegmented ? (
         <View style={styles.nativeTabBarWrapper}>
-          <NativeHost matchContents={false}>
+          <NativeHost matchContents={{ height: true }}>
             <NativePicker
               selection={String(activeIndex)}
               onSelectionChange={(s: any) => {
@@ -376,9 +410,6 @@ export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = ({
               }}
               modifiers={[
                 nativeComponents.pickerStyle!('segmented'),
-                ...(nativeComponents.glassEffect
-                  ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })]
-                  : []),
               ]}
             >
               {tabs.map((tab, i) => <NativeText key={tab.name || `tab-${i}`} modifiers={[nativeComponents.tag!(String(i))]}>{labelForTab(tab, i)}</NativeText>)}
@@ -434,7 +465,7 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
               <Text style={styles.arrayRowTitle}>{singularLabel} {index + 1}</Text>
               {!disabled && <Pressable onPress={() => removeRow(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
             </View>
-            {subFields.map((sub, fi) => <React.Fragment key={sub.name || `arr-${fi}`}>{renderField(sub, `${path}.${index}.${sub.name ?? ''}`)}</React.Fragment>)}
+            {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`)}
           </>
         )
         return liquidGlassAvailable && GlassView ? (
@@ -503,7 +534,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
               <Text style={styles.blockTypeLabel}>{block?.labels?.singular || item.blockType || 'Block'}</Text>
               {!disabled && <Pressable onPress={() => removeBlock(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
             </View>
-            {(block?.fields ?? []).map((sub, fi) => <React.Fragment key={sub.name || `blk-${fi}`}>{renderField(sub, `${path}.${index}.${sub.name ?? ''}`)}</React.Fragment>)}
+            {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`)}
           </>
         )
         return liquidGlassAvailable && GlassView ? (
@@ -548,131 +579,118 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  container: { marginBottom: t.spacing.lg },
+  container: { marginBottom: t.spacing.xs },
   required: { color: t.colors.error },
-  error: { fontSize: t.fontSize.xs, color: t.colors.error, marginTop: t.spacing.xs },
+  error: { fontSize: 12, color: t.colors.error, marginTop: 2 },
 
-  // Group — iOS Settings-style card
+  // Group — clean section divider (no card/shadow)
   groupCard: {
-    marginBottom: t.spacing.lg,
-    backgroundColor: t.colors.surface,
-    borderRadius: t.borderRadius.md,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    marginTop: t.spacing.sm,
+    marginBottom: t.spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.separator,
+    paddingTop: t.spacing.xs,
   },
   glassGroupCard: {
-    marginBottom: t.spacing.lg,
+    marginBottom: t.spacing.xs,
     borderRadius: t.borderRadius.md,
     overflow: 'hidden',
   },
-  groupGutter: { borderLeftWidth: 3, borderLeftColor: t.colors.primary },
+  groupGutter: { borderLeftWidth: 2, borderLeftColor: t.colors.textMuted },
   groupHeader: {
-    paddingHorizontal: t.spacing.lg,
-    paddingVertical: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
+    paddingVertical: 4,
   },
-  groupLabel: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-  groupDesc: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 2, marginBottom: t.spacing.sm },
-  groupBody: { padding: t.spacing.lg },
+  groupLabel: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.textMuted },
+  groupDesc: { fontSize: 12, color: t.colors.textPlaceholder, marginTop: 1, marginBottom: t.spacing.xs },
+  groupBody: { },
 
-  // Collapsible — iOS Settings-style grouped section
+  // Collapsible — clean toggle section
   collapsibleContainer: {
-    marginBottom: t.spacing.lg,
-    backgroundColor: t.colors.surface,
-    borderRadius: t.borderRadius.md,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.06,
-    shadowRadius: 4,
-    elevation: 2,
+    marginTop: t.spacing.xs,
+    marginBottom: t.spacing.xs,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: t.colors.separator,
   },
   glassCollapsibleContainer: {
-    marginBottom: t.spacing.lg,
+    marginBottom: t.spacing.xs,
     borderRadius: t.borderRadius.md,
     overflow: 'hidden',
   },
   collapsibleHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: t.spacing.lg,
-    paddingVertical: 14,
-    minHeight: 48,
+    paddingVertical: 10,
+    minHeight: 44,
   },
   collapsibleHeaderPressed: {
-    backgroundColor: 'rgba(0, 0, 0, 0.04)',
+    opacity: 0.6,
   },
   collapsibleChevron: {
-    fontSize: 18,
+    fontSize: 16,
     color: t.colors.textMuted,
     fontWeight: '600',
-    marginLeft: t.spacing.sm,
+    marginLeft: t.spacing.xs,
   },
   collapsibleHeaderContent: {
     flex: 1,
   },
   collapsibleTitle: {
     fontSize: t.fontSize.md,
-    fontWeight: '600',
+    fontWeight: '500',
     color: t.colors.text,
   },
   collapsibleHint: {
-    fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
-    marginTop: 2,
+    fontSize: 12,
+    color: t.colors.textPlaceholder,
+    marginTop: 1,
   },
   collapsibleBody: {
-    paddingHorizontal: t.spacing.lg,
-    paddingTop: t.spacing.sm,
-    paddingBottom: t.spacing.lg,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: t.colors.separator,
+    paddingTop: 2,
+    paddingBottom: t.spacing.sm,
   },
 
   // Error badge (reused by collapsible + tabs)
-  errorBadge: { backgroundColor: t.colors.error, borderRadius: 9, minWidth: 18, height: 18, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 5, marginLeft: t.spacing.sm },
-  errorBadgeText: { color: '#fff', fontSize: 10, fontWeight: '800' },
+  errorBadge: { backgroundColor: t.colors.error, borderRadius: 8, minWidth: 16, height: 16, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4, marginLeft: t.spacing.xs },
+  errorBadgeText: { color: '#fff', fontSize: 9, fontWeight: '800' },
+
+  // Width-grouped fields
+  widthRow: { flexDirection: 'row' as const, gap: t.spacing.md },
 
   // Row
-  rowContainer: { flexDirection: 'row', gap: t.spacing.md, marginBottom: t.spacing.lg },
+  rowContainer: { flexDirection: 'row', gap: t.spacing.md },
   rowItem: { flex: 1 },
 
   // Tabs
-  tabsContainer: { marginBottom: t.spacing.lg },
-  tabsNested: { marginBottom: t.spacing.sm, marginTop: t.spacing.xs },
-  nativeTabBarWrapper: { marginBottom: t.spacing.md },
+  tabsContainer: { marginBottom: t.spacing.xs },
+  tabsNested: { marginBottom: 2, marginTop: 2 },
+  nativeTabBarWrapper: { marginBottom: t.spacing.sm },
 
-  // Pill tab bar — segmented control look (fallback when native picker unavailable)
+  // Pill tab bar
   pillBar: {
     flexDirection: 'row',
     backgroundColor: 'rgba(0,0,0,0.05)',
-    borderRadius: 10,
-    padding: 3,
-    marginBottom: t.spacing.md,
-    gap: 2,
+    borderRadius: 9,
+    padding: 2,
+    marginBottom: t.spacing.sm,
+    gap: 1,
   },
   pill: {
     flex: 1,
-    paddingVertical: 7,
+    paddingVertical: 6,
     paddingHorizontal: t.spacing.sm,
-    borderRadius: 8,
+    borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
     flexDirection: 'row',
-    gap: 4,
+    gap: 3,
   },
   pillActive: {
     backgroundColor: '#fff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.12,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 0.5 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 1,
   },
   pillText: {
     fontSize: t.fontSize.sm,
@@ -685,24 +703,24 @@ const styles = StyleSheet.create({
   },
   pillTextError: { color: t.colors.error },
 
-  tabContent: { paddingTop: t.spacing.sm },
+  tabContent: { paddingTop: 4 },
 
-  // Array
-  arrayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.sm },
-  arrayCount: { fontSize: t.fontSize.xs, color: t.colors.textMuted },
-  arrayRow: { backgroundColor: t.colors.surface, borderRadius: t.borderRadius.md, borderWidth: 1, borderColor: t.colors.border, padding: t.spacing.md, marginBottom: t.spacing.sm },
-  glassArrayRow: { borderRadius: t.borderRadius.md, padding: t.spacing.md, marginBottom: t.spacing.sm },
-  arrayRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.sm },
-  arrayRowTitle: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.text },
+  // Array — minimal row styling
+  arrayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  arrayCount: { fontSize: 12, color: t.colors.textPlaceholder },
+  arrayRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.separator, paddingVertical: t.spacing.sm, marginBottom: 2 },
+  glassArrayRow: { borderRadius: t.borderRadius.md, padding: t.spacing.sm, marginBottom: 2 },
+  arrayRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 },
+  arrayRowTitle: { fontSize: t.fontSize.sm, fontWeight: '500', color: t.colors.textMuted },
   removeText: { fontSize: t.fontSize.sm, color: t.colors.destructive },
-  addBtn: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.lg, borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm, borderStyle: 'dashed', alignItems: 'center' as const },
-  glassAddBtn: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.lg, borderRadius: t.borderRadius.sm, alignItems: 'center' as const },
-  addText: { fontSize: t.fontSize.sm, color: t.colors.textMuted, fontWeight: '600' },
+  addBtn: { paddingVertical: t.spacing.sm, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.separator, alignItems: 'center' as const },
+  glassAddBtn: { paddingVertical: t.spacing.sm, borderRadius: t.borderRadius.sm, alignItems: 'center' as const },
+  addText: { fontSize: t.fontSize.sm, color: t.colors.textMuted, fontWeight: '500' },
 
   // Blocks
-  blockRow: { backgroundColor: t.colors.surface, borderRadius: t.borderRadius.md, borderWidth: 1, borderColor: t.colors.border, padding: t.spacing.md, marginBottom: t.spacing.sm },
-  blockTypeLabel: { fontSize: t.fontSize.xs, fontWeight: '700', color: t.colors.primary, textTransform: 'uppercase', letterSpacing: 0.5 },
-  blockPicker: { backgroundColor: t.colors.surface, borderRadius: t.borderRadius.sm, borderWidth: 1, borderColor: t.colors.border, marginTop: t.spacing.sm, overflow: 'hidden' },
-  blockPickerItem: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.colors.separator },
+  blockRow: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.separator, paddingVertical: t.spacing.sm, marginBottom: 2 },
+  blockTypeLabel: { fontSize: 11, fontWeight: '600', color: t.colors.textMuted, letterSpacing: 0.3 },
+  blockPicker: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: t.colors.separator, marginTop: t.spacing.xs, overflow: 'hidden' },
+  blockPickerItem: { paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: t.colors.separator },
   blockPickerText: { fontSize: t.fontSize.md, color: t.colors.text },
 })

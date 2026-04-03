@@ -9,8 +9,13 @@ const monoRoot = path.resolve(workspaceRoot, '..')
 
 const config = getDefaultConfig(projectRoot)
 
-// Watch both the test_app workspace and the payload_universal packages
-config.watchFolders = [workspaceRoot, path.resolve(monoRoot, 'payload_universal/packages')]
+// Watch test_app workspace, payload_universal, and payload-main/packages
+config.watchFolders = [
+  workspaceRoot,
+  path.resolve(monoRoot, 'payload_universal/packages'),
+  path.resolve(monoRoot, 'payload_universal/tools'),
+  path.resolve(monoRoot, 'payload-main/packages'),
+]
 
 // Modules that must resolve to the app's own copy (never hoisted/duplicated)
 const singletonModules = {
@@ -33,6 +38,7 @@ config.resolver = {
     ...singletonModules,
     '@expo/ui': expoUIReal,
     'react-freeze': path.resolve(projectRoot, 'node_modules/react-freeze'),
+    '@payload-universal/ui': path.resolve(monoRoot, 'payload_universal/packages/payload-universal-ui'),
   },
   resolveRequest: (context, moduleName, platform) => {
     // Pin react / react-native singletons

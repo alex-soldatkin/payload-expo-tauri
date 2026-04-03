@@ -1,0 +1,13 @@
+{
+  "name": "@payload-universal/native-component-codegen",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "payload-native-codegen": "./src/cli.ts"
+  },
+  "dependencies": {
+    "ts-morph": "^25.0.0",
+    "commander": "^13.1.0"
+  }
+}

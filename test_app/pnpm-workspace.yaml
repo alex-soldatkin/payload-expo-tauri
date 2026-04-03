@@ -2,4 +2,5 @@ packages:
   - "apps/*"
   - "packages/*"
   - "../payload_universal/packages/*"
+  - "../payload_universal/tools/*"
   - "../payload-main/packages/*"

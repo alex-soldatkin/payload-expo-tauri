@@ -340,11 +340,97 @@ This log captures what has been implemented so far and the current state of the 
 **NativeHost changes:**
 - `matchContents={false}` added as option — omits the prop from Host so it stretches to fill RN parent. May help touch hit-testing for interactive controls.
 
-### 🚨 Known bug: Native Picker onSelectionChange not firing
-The native segmented Picker renders correctly and shows glass interactive feedback on press, but `onSelectionChange` callback does not fire. Tapping segments doesn't change the selection. Affects both tab pickers and regular select/radio pickers. The `PillTabBar` (React Native fallback) works correctly as interim. See `013_ui-patterns.md` for full investigation notes and next steps.
+### Phase 9d — Picker selection fix + admin.width layout (2026-04-03)
+
+**Fixed: Native Picker onSelectionChange not firing (Phase 1 — glassEffect)**
+- **Root cause**: `glassEffect({ glass: { variant: 'regular', interactive: true } })` modifier applied directly to native `Picker` components created a competing gesture handler that consumed touch events before they reached the Picker's built-in selection handler. The visual press feedback worked (glass effect handled it) but `onSelectionChange` never fired.
+- **Fix**: Removed `glassEffect` modifier from all native Picker components (TabsField, SelectFieldNative, RadioFieldNative). On iOS 26, `UISegmentedControl` and native Picker already have system-level liquid glass rendering — the explicit modifier was redundant.
+- **Key lesson**: Do NOT apply `glassEffect({ interactive: true })` to SwiftUI controls that have their own gesture handling (Picker, Toggle, etc.). It creates competing touch handlers. Use `glassEffect` on container Views (GlassView) instead.
+
+**Fixed: Native Picker STILL not tappable after glassEffect removal (Phase 2 — matchContents)**
+- **Root cause**: `NativeHost matchContents={false}` omitted the `matchContents` prop entirely from the `@expo/ui` Host. This caused the Swift `HostViewProps` to default both `matchContentsHorizontal` and `matchContentsVertical` to `false`, meaning SwiftUI never reported its content size (e.g. ~32px for a segmented control) back to React Native. The RN frame collapsed to **zero height**. SwiftUI rendered the control visually (because SwiftUI rendering is NOT clipped by the UIKit frame), but UIKit's `point(inside:with:)` returned `false` for all touch points — the zero-height frame contained no touchable area.
+- **Fix**: Changed all interactive Picker Hosts from `matchContents={false}` to `matchContents={{ height: true }}`. This tells SwiftUI to measure its content height and report it to React Native via `shadowNodeProxy.setStyleSize()`, giving the UIKit view a real frame that receives touches. Width is still controlled by RN layout (`alignSelf: 'stretch'`).
+- **Updated `NativeHost.tsx`**: The wrapper now translates `{ width, height }` → `{ horizontal, vertical }` for `@expo/ui`'s Host API.
+- **Affected components**: TabsField (segmented tabs), SelectFieldNative, RadioFieldNative — all three now tappable.
+- **Key lesson**: `matchContents={false}` means "don't report ANY SwiftUI size to RN" — use `matchContents={{ height: true }}` when you need RN to control width but SwiftUI to control height. The visual rendering of SwiftUI is decoupled from the UIKit frame, so a zero-height frame LOOKS correct but BLOCKS all touches.
+
+**`admin.width` field layout support:**
+- **`groupFieldsByWidth`** helper added to `schemaHelpers.ts`: groups consecutive fields with `admin.width` into `width-row` groups. Fields without width remain individual entries.
+- **`renderSubFieldsWithWidth`** helper in `structural.tsx`: renders sub-field lists with width-aware flex rows. Used by GroupField, CollapsibleField, TabContent, ArrayField, BlocksField.
+- **DocumentForm** `renderFields` updated to use `groupFieldsByWidth` for top-level field layout.
+- Width applied as `flex: parseFloat(adminWidth) / 100` — same proportional approach as RowField.
+- `widthRow` style: `{ flexDirection: 'row', gap: spacing.md }` — matches RowField's `rowContainer`.
+- Works at all nesting levels: top-level fields, inside groups, inside collapsibles, inside tabs, inside array rows, inside block rows.
+- Exported: `groupFieldsByWidth`, `FieldWidthGroup` type from admin-native package.
+
+**Test app demonstration** (Posts collection):
+- Content tab: `row` with 60/40 split (contentFormat radio + language select)
+- Top-level: two standalone fields with `admin.width: '50%'` (category + subcategory) — demonstrates `groupFieldsByWidth` auto-grouping
+- SEO > Meta Tags collapsible: `row` with 70/30 split (canonicalUrl + noIndex checkbox)
+
+### Phase 10 — Client-side validators and hooks (2026-04-03)
+- **New package: `@payload-universal/client-validators`** — zero-dependency client-safe validators and hooks:
+  - Ported all Payload built-in field validators from `payload-main/packages/payload/src/fields/validations.ts` without `req`, `t()`, `payload`, or Node.js dependencies
+  - Supports: text (required/minLength/maxLength/hasMany), textarea, email (regex), password, number (min/max/hasMany), checkbox, date, code, json, select (option matching/duplicates), radio, point (lat/lng bounds), array (minRows/maxRows), blocks, relationship, upload, richText (empty content check)
+  - English default messages matching Payload's translation keys; optional `t()` override for i18n
+  - **`runValidation(fields, data, slug, config, operation)`** — walks the full client field schema tree (group, row, collapsible, tabs, array, blocks) and runs built-in + custom validators against form data; returns `{ valid, errors }` map compatible with `FormErrors`
+  - **`runBeforeValidateHooks` / `runBeforeChangeHooks` / `runAfterChangeHooks` / `runAfterReadHooks`** — pipeline-style hook runners matching Payload's server-side execution order (collection-level → field-level)
+  - **`ClientHooksConfig`** type: per-collection map of custom validators and hooks keyed by field path
+- **`useValidatedMutations` hook** (`@payload-universal/local-db`):
+  - Drop-in replacement for `useLocalMutations` that adds validation + hooks BEFORE writing to RxDB
+  - Execution order: beforeValidate hooks → schema validation → abort if errors → beforeChange hooks → write to RxDB → afterChange hooks
+  - Returns `{ create, update, remove, errors, clearErrors, clearFieldError }`
+  - `create`/`update` return `{ success: true, id }` or `{ success: false, errors }` — validation failures never reach the DB
+- **`ClientValidatorProvider`** context: holds the app's `ClientHooksConfig`, mounted in the root layout alongside `LocalDBProvider`
+- **DocumentForm** updated:
+  - New `onFieldEdit?: (fieldPath: string) => void` prop — called when user edits a field, so parent can clear validation errors incrementally
+  - `errorCount` now includes both server errors and external (client-side validation) errors
+  - Validation banner and per-field error display work identically for both server-side and client-side errors
+- **Screen integration** (`[id].tsx` and `create.tsx`):
+  - Switched from `useLocalMutations` → `useValidatedMutations` with `extractRootFields(schemaMap, slug)` for schema-driven validation
+  - Validation errors passed to `DocumentForm` via `errors` prop; `clearFieldError` wired to `onFieldEdit`
+  - On validation failure: errors display inline immediately (no network round-trip), form data is NOT written to RxDB
+  - On success: data is written to RxDB instantly (local-first), sync pushes to server in background
+- **Test app validators** (`src/validators/index.ts`):
+  - Posts: auto-generate slug from title (beforeChange hook), slug URL-safe validator, friendly priority range message
+  - Media: alt text minimum 3 characters for accessibility
+  - All built-in constraints (required, min, max, minLength, maxLength, email regex) run automatically from schema metadata
+- **Architecture**: validators/hooks are JavaScript functions bundled at build time via Metro (not serialized through the JSON admin-schema endpoint). Custom validators defined per-app in a client-safe module imported by the mobile app.
+
+### Phase 11 — Zod validation + React Hook Form integration (2026-04-03)
+
+**Phase 1: Zod schema generation (`validation.ts`):**
+- `payloadFieldsToZod(fields)` — converts `ClientField[]` to a `z.ZodObject` at runtime
+- Supports all constraints: `required`, `min`/`max`, `minLength`/`maxLength`, `options` enum, email format, point tuples
+- Structural recursion: `group` → nested `z.object`, `array` → `z.array(rowSchema)` with `minRows`/`maxRows`, `blocks` → `z.discriminatedUnion('blockType')`, `tabs` → named tab objects or flattened unnamed tabs
+- `row` and `collapsible` are flattened (layout-only — children merge into parent shape)
+- `validateFormData(fields, data)` — runs safeParse and returns flat `Record<string, string | undefined>` error map compatible with `FormErrors`
+- Used by both the RHF resolver and the legacy fallback path
+
+**Phase 2: React Hook Form at DocumentForm level (`usePayloadForm.ts`):**
+- `usePayloadForm({ fields, defaultValues, onSubmit })` — creates an RHF `useForm` instance with a custom Zod resolver built from the Payload field schema
+- `RHFFieldBridge` component — wraps `Controller` around `FieldRenderer`, keeping the existing `{ value, onChange, error }` interface. Each field gets its own Controller for per-field re-render isolation.
+- Server errors injected into RHF state via `setError(path, { type: 'server', message })` — fields see them through `fieldState.error` without a separate error context
+- `FormProvider` wraps the form tree so nested components can `useFormContext()` / `usePayloadField()`
+- Returns `isDirty`, `dirtyFields`, `isSubmitting` for free
+
+**Phase 3: Field-level useController (`usePayloadField` hook):**
+- `usePayloadField({ control, name, defaultValue })` — thin wrapper around RHF's `useController`
+- Returns `{ value, onChange, onBlur, error, isDirty, isTouched, ref }` — identical shape to what field components already consume
+- Field components can opt in incrementally: call `usePayloadField` inside the component, fall back to props if null
+- Exported from `@payload-universal/admin-native/form`
+
+**DocumentForm refactored:**
+- Delegates to `DocumentFormRHF` when react-hook-form is installed, `DocumentFormLegacy` otherwise
+- Legacy path now also runs `validateFormData()` before submit (Phase 1 benefit even without RHF)
+- `DocumentFormHandle.isDirty` exposed for "unsaved changes" prompts
+- Zero API change for consumers — same `schemaMap`, `onSubmit`, `errors` props
+
+**Dependencies:**
+- `zod ^3.23.0` — production dependency (small, tree-shakeable)
+- `react-hook-form ^7.54.0` — optional dependency. If not installed, everything falls back gracefully.
 
 ## Current known gaps
-- **Native Picker selection broken** — see above. `glassEffect` interactive must be maintained.
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.
 - Pre-existing TS errors in admin-native (React 19 `key`/`ref` prop changes, `expo-router` resolution from workspace) and admin-schema (Payload type mismatches) — cosmetic, do not affect runtime.

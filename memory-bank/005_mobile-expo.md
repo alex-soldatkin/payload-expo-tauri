@@ -114,12 +114,24 @@ Native iOS liquid glass UI (2026-04-03)
 - `TabDepthContext` tracks nesting: nested tabs also use segmented control style
 - **Critical**: SwiftUI modifiers MUST use factory functions from `nativeComponents` registry, NOT object literals. Object literals are silently ignored (missing `$type`).
 - **Critical**: `nativeComponents.glassEffect!({ glass: { variant: 'regular', interactive: true } })` MUST be applied to all native SwiftUI interactive controls
-- 🚨 **UNRESOLVED**: Native `Picker` `onSelectionChange` does not fire despite correct rendering + glass interactive visual feedback. Root cause under investigation. PillTabBar (RN fallback) works as interim. See `013_ui-patterns.md` for full notes.
+- ✅ **RESOLVED**: Native `Picker` `onSelectionChange` now fires correctly. Root cause was `matchContents={false}` on the `@expo/ui` Host, which caused the UIKit frame to collapse to zero height — SwiftUI still rendered visually but UIKit hit-testing failed. Fix: `matchContents={{ height: true }}` on all interactive Picker Hosts.
 
 Relationship picker inline preview (2026-04-03)
 - Long-press on a picker row in the BottomSheet shows an inline DocumentForm preview (pure React, no native context menu)
 - "Select" picks the item, "Back" returns to the list
 - Avoids the native ScrollablePreview UIKit crash inside BottomSheet Modals (see 013_ui-patterns.md)
+
+Client-side validation and hooks (2026-04-03)
+- `@payload-universal/client-validators` package: zero-dependency client-safe validators and hooks
+- Built-in validators ported from Payload's `fields/validations.ts` — required, minLength, maxLength, min, max, email regex, select option matching, point bounds, array/blocks row counts, richText empty check
+- `runValidation()` walks the full field schema tree (groups, rows, collapsibles, tabs, arrays, blocks) and validates all leaf fields
+- `runBeforeValidateHooks` / `runBeforeChangeHooks` / `runAfterChangeHooks` — pipeline-style hook runners matching Payload's execution order
+- `useValidatedMutations` hook: drop-in replacement for `useLocalMutations` — runs hooks + validation BEFORE writing to RxDB
+- `ClientValidatorProvider` context wraps the app root; holds the app-specific `ClientHooksConfig`
+- Custom validators/hooks defined per-app in `src/validators/index.ts` — bundled by Metro, not fetched via JSON
+- DocumentForm shows validation errors inline immediately — no server round-trip needed
+- `onFieldEdit` callback clears individual field errors as the user types
+- **Critical**: validation failures NEVER reach RxDB — data integrity enforced at the UI layer before the local-first write
 
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.

@@ -20,7 +20,7 @@ export const defaultTheme = {
     warning: '#ca8a04',
     warningBackground: '#fefce8',
     destructive: '#dc2626',
-    separator: '#f0f0f0',
+    separator: '#e0e0e0',
   },
   spacing: {
     xs: 4,

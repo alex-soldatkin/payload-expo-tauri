@@ -34,6 +34,20 @@ export { SyncStatusSection } from './SyncStatusSection'
 export { VersionDiff } from './VersionDiff'
 export { VersionsBottomSheet } from './VersionsBottomSheet'
 
+// Custom component overrides
+export {
+  CustomComponentProvider,
+  useCustomAdminComponent,
+  useCustomComponent,
+  useCustomComponentRegistry,
+  useCustomFieldSlots,
+  useCustomView,
+} from './CustomComponentContext'
+
+// WebView fallback bridge
+export { WebViewFieldBridge } from './WebViewFieldBridge'
+export type { WebViewFieldBridgeProps } from './WebViewFieldBridge'
+
 // Preview context — wrap content in PreviewContextProvider to disable Link.Preview in nested fields
 export { PreviewContextProvider, useIsInsidePreview } from './PreviewContext'
 
@@ -96,12 +110,31 @@ export {
   getFieldDescription,
   getFieldLabel,
   getGlobalLabel,
+  groupFieldsByWidth,
   isFieldHidden,
   isFieldSidebar,
   normalizeOption,
   setByPath,
   splitFieldsBySidebar,
 } from './schemaHelpers'
+export type { FieldWidthGroup } from './schemaHelpers'
+
+// Validation (Phase 1 — Zod schema from Payload fields)
+export { payloadFieldsToZod, validateFormData } from './validation'
+
+// React Hook Form integration (Phase 2 + 3)
+export {
+  isRHFAvailable,
+  usePayloadField,
+  usePayloadForm,
+  usePayloadFormContext,
+} from './usePayloadForm'
+export type {
+  PayloadFieldProps,
+  PayloadFieldReturn,
+  PayloadFormConfig,
+  PayloadFormReturn,
+} from './usePayloadForm'
 
 // Theme
 export { defaultTheme } from './theme'
@@ -135,6 +168,9 @@ export type {
   ClientTextareaField,
   ClientUIField,
   ClientUploadField,
+  ComponentSlot,
+  CustomComponentRegistry,
+  CustomFieldEntry,
   FieldComponentProps,
   FieldValue,
   FormErrors,

@@ -8,7 +8,8 @@
     "build": "next build",
     "start": "next start",
     "generate:types": "payload generate:types",
-    "generate:importmap": "payload generate:importmap"
+    "generate:importmap": "payload generate:importmap",
+    "generate:native-registry": "tsx ../../../payload_universal/packages/admin-schema/src/bin/generateNativeRegistry.ts src/payload.config.ts ../mobile-expo/src/customComponents.ts"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.19",

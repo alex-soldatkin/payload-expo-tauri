@@ -96,11 +96,10 @@ const SelectFieldNative: React.FC<FieldComponentProps<ClientSelectField>> = ({
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost matchContents={false} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
+      <NativeHost matchContents={{ height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
           selection={value != null ? String(value) : ''}
           onSelectionChange={(s: any) => { if (!isDisabled) onChange(s === '' ? null : s) }}
-          modifiers={nativeComponents.glassEffect ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })] : undefined}
         >
           <NativeText modifiers={[tag('')]}>Select...</NativeText>
           {options.map((opt) => (
@@ -187,14 +186,11 @@ const RadioFieldNative: React.FC<FieldComponentProps<ClientRadioField>> = ({
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost matchContents={false} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
+      <NativeHost matchContents={{ height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
           selection={value != null ? String(value) : ''}
           onSelectionChange={(s: any) => { if (!isDisabled) onChange(s === '' ? null : s) }}
-          modifiers={[
-            ...(useSegmented ? [psModifier('segmented')] : []),
-            ...(nativeComponents.glassEffect ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })] : []),
-          ]}
+          modifiers={useSegmented ? [psModifier('segmented')] : undefined}
         >
           {!useSegmented && <NativeText modifiers={[tag('')]}>Select...</NativeText>}
           {options.map((opt) => (
@@ -579,13 +575,12 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
 const styles = StyleSheet.create({
   pickerButton: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
-    paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm + 2,
-    backgroundColor: t.colors.surface,
+    paddingVertical: 0,
+    backgroundColor: 'transparent',
   },
   pickerText: { fontSize: t.fontSize.md, color: t.colors.text, flex: 1 },
   pickerPlaceholder: { color: t.colors.textPlaceholder },
-  chevron: { fontSize: 20, color: t.colors.textMuted, marginLeft: t.spacing.sm },
+  chevron: { fontSize: 18, color: t.colors.textMuted, marginLeft: t.spacing.xs },
 
   sheetTitle: { fontSize: t.fontSize.lg, fontWeight: '700', color: t.colors.text, marginBottom: t.spacing.md },
   searchInput: {
@@ -607,8 +602,8 @@ const styles = StyleSheet.create({
   clearText: { fontSize: t.fontSize.sm, color: t.colors.destructive },
 
   uploadButton: {
-    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
-    borderStyle: 'dashed', padding: t.spacing.lg, backgroundColor: t.colors.surface,
+    borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.separator, borderRadius: t.borderRadius.sm,
+    borderStyle: 'dashed', padding: t.spacing.md, backgroundColor: 'transparent',
   },
   uploadPlaceholder: { alignItems: 'center', gap: t.spacing.xs },
   uploadIcon: { fontSize: 24, color: t.colors.textMuted },
@@ -623,10 +618,9 @@ const styles = StyleSheet.create({
 
 const pickerStyles = StyleSheet.create({
   wrapper: {
-    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
-    backgroundColor: t.colors.surface, overflow: 'hidden',
+    backgroundColor: 'transparent', overflow: 'hidden',
   },
-  wrapperError: { borderColor: t.colors.error },
+  wrapperError: { },
   picker: Platform.select({ ios: { marginHorizontal: -8 }, android: { marginHorizontal: 4 } }) as any,
   item: { fontSize: t.fontSize.md, color: t.colors.text },
 })
