@@ -47,26 +47,14 @@ config.resolver = {
     // physical copies of react-native, causing separate module instances
     // (e.g. ReactNativeViewConfigRegistry has separate Maps → register()
     // and get() operate on different instances → invariant violation).
-    for (const [pkg, pkgPath] of Object.entries(singletonModules)) {
+    for (const [pkg] of Object.entries(singletonModules)) {
       if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {
-        const subpath = moduleName === pkg ? '' : moduleName.slice(pkg.length)
-        const resolved = path.join(
-          fs.realpathSync(pkgPath),
-          subpath,
-        )
-        // Try with common extensions
-        for (const ext of ['', '.js', '.ts', '.tsx', '.jsx', '.json']) {
-          const candidate = resolved + ext
-          if (fs.existsSync(candidate)) {
-            return { filePath: candidate, type: 'sourceFile' }
-          }
-        }
-        // Fall back to Node resolution from the app's copy
         try {
-          return {
-            filePath: require.resolve(moduleName, { paths: [projectRoot] }),
-            type: 'sourceFile',
-          }
+          // Use require.resolve from the app's projectRoot — this always
+          // returns the app's own copy and gives Metro a path it can watch.
+          // (fs.realpathSync on the pnpm store path points outside watchFolders.)
+          const resolved = require.resolve(moduleName, { paths: [projectRoot] })
+          return { filePath: resolved, type: 'sourceFile' }
         } catch { /* let default resolver handle it */ }
       }
     }
