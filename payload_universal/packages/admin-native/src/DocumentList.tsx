@@ -36,6 +36,23 @@ import { FilterChips } from './FilterChips'
 import { FilterBottomSheet } from './FilterBottomSheet'
 import { BottomSheet } from './BottomSheet'
 
+// Lucide icons for the summary fields picker
+let GripVerticalIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let CircleCheckIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let CircleIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let CheckIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let XIcon: React.ComponentType<{ size: number; color: string }> | null = null
+try {
+  const lucide = require('lucide-react-native')
+  GripVerticalIcon = lucide.GripVertical
+  CircleCheckIcon = lucide.CircleCheck
+  CircleIcon = lucide.Circle
+  CheckIcon = lucide.Check
+  XIcon = lucide.X
+} catch {
+  /* lucide-react-native not available */
+}
+
 // Optional: drag-to-reorder in the summary fields picker
 let Sortable: any = null
 let SortableItem: any = null
@@ -319,6 +336,7 @@ export const DocumentList: React.FC<Props> = ({
     const summaryLines = summaryFields
       .filter((f) => f !== titleField && f !== thumbnailField)
       .map((fieldName) => ({
+        key: fieldName,
         label: fieldLabelMap.get(fieldName) ?? fieldName,
         value: formatFieldValue(item[fieldName]),
       }))
@@ -340,7 +358,7 @@ export const DocumentList: React.FC<Props> = ({
           {summaryLines.length > 0 && (
             <View style={styles.summaryGrid}>
               {summaryLines.map((line) => (
-                <View key={line.label} style={styles.summaryCell}>
+                <View key={line.key} style={styles.summaryCell}>
                   <Text style={styles.summaryLabel} numberOfLines={1}>{line.label}</Text>
                   <Text style={styles.summaryValue} numberOfLines={1}>{line.value}</Text>
                 </View>
@@ -489,7 +507,46 @@ function SummaryFieldsPicker({
   onSummaryFieldsChange,
   collection,
 }: SummaryFieldsPickerProps) {
-  // Split fields into selected (in order) and unselected (schema order)
+  // ── Local draft state — changes are buffered until "Save" ──────────
+  const [draft, setDraft] = useState<string[]>(summaryFields)
+
+  // Sync draft when the sheet opens or external state changes while closed
+  useEffect(() => {
+    if (visible) setDraft(summaryFields)
+  }, [visible]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Animated save button state: 'idle' | 'success' | 'error'
+  const [saveState, setSaveState] = useState<'idle' | 'success' | 'error'>('idle')
+  const saveBtnScale = useRef(new Animated.Value(1)).current
+
+  const handleSave = useCallback(() => {
+    // Bounce animation
+    Animated.sequence([
+      Animated.timing(saveBtnScale, { toValue: 0.8, duration: 80, useNativeDriver: true }),
+      Animated.spring(saveBtnScale, { toValue: 1, friction: 3, tension: 200, useNativeDriver: true }),
+    ]).start()
+
+    try {
+      onSummaryFieldsChange(draft)
+      setSaveState('success')
+      // Flash green then close
+      setTimeout(() => {
+        setSaveState('idle')
+        onClose()
+      }, 600)
+    } catch {
+      setSaveState('error')
+      // Flash red then reset
+      setTimeout(() => setSaveState('idle'), 1200)
+    }
+  }, [draft, onSummaryFieldsChange, onClose, saveBtnScale])
+
+  // Reset save state when sheet opens
+  useEffect(() => {
+    if (visible) setSaveState('idle')
+  }, [visible])
+
+  // ── Derived data from draft (not summaryFields) ────────────────────
   const displayableFields = fields.filter(
     (f) =>
       f.name &&
@@ -498,59 +555,87 @@ function SummaryFieldsPicker({
   )
   const fieldMap = new Map(displayableFields.map((f) => [f.name!, f]))
 
-  // Selected items in their persisted order (for the sortable list)
-  const selectedItems = summaryFields
-    .filter((name) => fieldMap.has(name))
-    .map((name) => ({ id: name, field: fieldMap.get(name)! }))
-
-  // Unselected items (schema order)
-  const unselectedItems = displayableFields.filter(
-    (f) => f.name && !summaryFields.includes(f.name),
+  // Memoize selectedItems so Sortable doesn't remount on every render.
+  // Sortable uses a hash of all item IDs as a React key — new object refs
+  // with the same IDs still trigger a full remount, killing animations.
+  const selectedItems = useMemo(
+    () => draft
+      .filter((name) => fieldMap.has(name))
+      .map((name) => ({ id: name, field: fieldMap.get(name)! })),
+    [draft, fieldMap],
   )
 
-  const handleToggle = (fieldName: string) => {
-    const isSelected = summaryFields.includes(fieldName)
-    const next = isSelected
-      ? summaryFields.filter((f) => f !== fieldName)
-      : [...summaryFields, fieldName]
-    onSummaryFieldsChange(next)
-  }
+  const unselectedItems = displayableFields.filter(
+    (f) => f.name && !draft.includes(f.name),
+  )
 
-  const handleMove = useCallback(
-    (_id: string, from: number, to: number) => {
-      onSummaryFieldsChange((prev: string[]) => {
-        const next = [...(typeof prev === 'object' ? prev : summaryFields)]
-        const [moved] = next.splice(from, 1)
-        next.splice(to, 0, moved)
-        return next
+  const handleToggle = useCallback((fieldName: string) => {
+    setDraft((prev) => {
+      const isSelected = prev.includes(fieldName)
+      return isSelected
+        ? prev.filter((f) => f !== fieldName)
+        : [...prev, fieldName]
+    })
+  }, [])
+
+  // onMove: the library requires this to update the data array (gotcha #11).
+  // However, updating state during drag triggers Sortable remount (gotcha #23),
+  // killing the animation. So onMove is a no-op — we defer to onDrop.
+  const noopMove = useCallback(() => {}, [])
+
+  // onDrop: called when the item is released. allPositions maps id → final index.
+  // We read the final ordering from allPositions and update draft once.
+  const handleDrop = useCallback(
+    (_id: string, _position: number, allPositions?: Record<string, number>) => {
+      if (!allPositions) return
+      setDraft((prev) => {
+        // allPositions maps item id → new index. Build the reordered array.
+        const items = prev.filter((name) => allPositions[name] != null)
+        const sorted = items.sort((a, b) => allPositions[a] - allPositions[b])
+        // Preserve any fields in draft that aren't in the sortable (shouldn't happen, but safe)
+        const rest = prev.filter((name) => allPositions[name] == null)
+        return [...sorted, ...rest]
       })
     },
-    [onSummaryFieldsChange, summaryFields],
+    [],
   )
 
-  // Sortable render callback
+  const handleClear = useCallback(() => setDraft([]), [])
+
+  // Sortable render callback — must spread ...props (gotcha from SKILL.md)
   const renderSortableItem = useCallback(
     ({ item, ...props }: any) => (
       <SortableItem
         key={item.id}
         id={item.id}
         data={item}
-        onMove={handleMove}
+        onMove={noopMove}
+        onDrop={handleDrop}
         {...props}
       >
         <View style={sfStyles.fieldRow}>
           <SortableItem.Handle>
             <View style={sfStyles.dragHandle}>
-              <Text style={sfStyles.dragIcon}>☰</Text>
+              {GripVerticalIcon ? (
+                <GripVerticalIcon size={18} color={t.colors.textMuted} />
+              ) : (
+                <Text style={sfStyles.dragIcon}>☰</Text>
+              )}
             </View>
           </SortableItem.Handle>
           <Pressable
             style={sfStyles.fieldRowInner}
             onPress={() => handleToggle(item.id)}
           >
-            <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
-              <Text style={sfStyles.checkmark}>✓</Text>
-            </View>
+            {CircleCheckIcon ? (
+              <View style={sfStyles.checkboxNative}>
+                <CircleCheckIcon size={22} color={t.colors.primary} />
+              </View>
+            ) : (
+              <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
+                <Text style={sfStyles.checkmark}>✓</Text>
+              </View>
+            )}
             <View style={sfStyles.fieldInfo}>
               <Text style={sfStyles.fieldLabel}>{getFieldLabel(item.field)}</Text>
               <Text style={sfStyles.fieldType}>{item.field.type}</Text>
@@ -559,87 +644,126 @@ function SummaryFieldsPicker({
         </View>
       </SortableItem>
     ),
-    [handleMove, handleToggle],
+    [noopMove, handleDrop, handleToggle],
   )
 
+  const sortableHeight = selectedItems.length * SORTABLE_ITEM_HEIGHT
+
   return (
-    <BottomSheet visible={visible} onClose={onClose} height={0.65}>
-      <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
-      <Text style={sfStyles.sheetHint}>
-        Select fields to show on each card. Drag ☰ to reorder.
-      </Text>
-
-      {/* Selected fields — draggable list */}
-      {selectedItems.length > 0 && Sortable && SortableItem ? (
-        <View style={sfStyles.sortableContainer}>
-          <Text style={sfStyles.sectionLabel}>ACTIVE — drag to reorder</Text>
-          <Sortable
-            data={selectedItems}
-            renderItem={renderSortableItem}
-            itemHeight={SORTABLE_ITEM_HEIGHT}
-            style={{ backgroundColor: 'transparent' }}
-          />
+    <BottomSheet visible={visible} onClose={onClose} height={0.7}>
+      {/* Header row — title + Save button (zIndex keeps it above dragged items) */}
+      <View style={sfStyles.sheetHeader}>
+        <View style={{ flex: 1 }}>
+          <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
+          <Text style={sfStyles.sheetHint}>
+            Select fields to show. Drag to reorder.
+          </Text>
         </View>
-      ) : selectedItems.length > 0 ? (
-        /* Fallback when react-native-reanimated-dnd not available */
-        <View>
-          <Text style={sfStyles.sectionLabel}>ACTIVE</Text>
-          {selectedItems.map((si) => (
-            <Pressable key={si.id} style={sfStyles.fieldRow} onPress={() => handleToggle(si.id)}>
-              <View style={sfStyles.dragHandle}>
-                <Text style={sfStyles.dragIcon}>☰</Text>
-              </View>
-              <View style={sfStyles.fieldRowInner}>
-                <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
-                  <Text style={sfStyles.checkmark}>✓</Text>
-                </View>
-                <View style={sfStyles.fieldInfo}>
-                  <Text style={sfStyles.fieldLabel}>{getFieldLabel(si.field)}</Text>
-                  <Text style={sfStyles.fieldType}>{si.field.type}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))}
-        </View>
-      ) : null}
+        <Pressable onPress={handleSave}>
+          <Animated.View style={[
+            sfStyles.saveBtn,
+            saveState === 'success' && sfStyles.saveBtnSuccess,
+            saveState === 'error' && sfStyles.saveBtnError,
+            { transform: [{ scale: saveBtnScale }] },
+          ]}>
+            {saveState === 'success' ? (
+              CheckIcon ? <CheckIcon size={20} color="#fff" /> : <Text style={sfStyles.saveBtnText}>✓</Text>
+            ) : saveState === 'error' ? (
+              XIcon ? <XIcon size={20} color="#fff" /> : <Text style={sfStyles.saveBtnText}>✕</Text>
+            ) : (
+              CheckIcon ? <CheckIcon size={20} color="#fff" /> : <Text style={sfStyles.saveBtnText}>✓</Text>
+            )}
+          </Animated.View>
+        </Pressable>
+      </View>
 
-      {/* Unselected fields — simple list */}
-      {unselectedItems.length > 0 && (
-        <View style={sfStyles.unselectedSection}>
-          <Text style={sfStyles.sectionLabel}>AVAILABLE</Text>
-          <FlatList
-            data={unselectedItems}
-            keyExtractor={(item) => item.name!}
-            renderItem={({ item: field }) => (
+      <View style={{ flex: 1 }}>
+        {/* Active fields — Sortable with drag handles */}
+        {selectedItems.length > 0 && Sortable && SortableItem ? (
+          <>
+            <Text style={sfStyles.sectionLabel}>ACTIVE — drag to reorder</Text>
+            <View style={{ height: sortableHeight }}>
+              <Sortable
+                data={selectedItems}
+                renderItem={renderSortableItem}
+                itemHeight={SORTABLE_ITEM_HEIGHT}
+                useFlatList={false}
+                style={{ backgroundColor: 'transparent' }}
+                contentContainerStyle={{ backgroundColor: 'transparent' }}
+              />
+            </View>
+          </>
+        ) : selectedItems.length > 0 ? (
+          <>
+            <Text style={sfStyles.sectionLabel}>ACTIVE</Text>
+            {selectedItems.map((si) => (
+              <Pressable key={si.id} style={sfStyles.fieldRow} onPress={() => handleToggle(si.id)}>
+                <View style={sfStyles.dragHandle}>
+                  {GripVerticalIcon ? (
+                    <GripVerticalIcon size={18} color={t.colors.textMuted} />
+                  ) : (
+                    <Text style={sfStyles.dragIcon}>☰</Text>
+                  )}
+                </View>
+                <View style={sfStyles.fieldRowInner}>
+                  {CircleCheckIcon ? (
+                    <View style={sfStyles.checkboxNative}>
+                      <CircleCheckIcon size={22} color={t.colors.primary} />
+                    </View>
+                  ) : (
+                    <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
+                      <Text style={sfStyles.checkmark}>✓</Text>
+                    </View>
+                  )}
+                  <View style={sfStyles.fieldInfo}>
+                    <Text style={sfStyles.fieldLabel}>{getFieldLabel(si.field)}</Text>
+                    <Text style={sfStyles.fieldType}>{si.field.type}</Text>
+                  </View>
+                </View>
+              </Pressable>
+            ))}
+          </>
+        ) : null}
+
+        {/* Available fields — plain list */}
+        {unselectedItems.length > 0 && (
+          <>
+            <Text style={sfStyles.sectionLabel}>AVAILABLE</Text>
+            {unselectedItems.map((field) => (
               <Pressable
+                key={field.name}
                 style={sfStyles.fieldRow}
                 onPress={() => handleToggle(field.name!)}
               >
                 <View style={sfStyles.dragHandlePlaceholder} />
                 <View style={sfStyles.fieldRowInner}>
-                  <View style={sfStyles.checkbox}>
-                    <Text style={sfStyles.checkmarkEmpty} />
-                  </View>
+                  {CircleIcon ? (
+                    <View style={sfStyles.checkboxNative}>
+                      <CircleIcon size={22} color={t.colors.border} />
+                    </View>
+                  ) : (
+                    <View style={sfStyles.checkbox} />
+                  )}
                   <View style={sfStyles.fieldInfo}>
                     <Text style={sfStyles.fieldLabel}>{getFieldLabel(field)}</Text>
                     <Text style={sfStyles.fieldType}>{field.type}</Text>
                   </View>
                 </View>
               </Pressable>
-            )}
-          />
-        </View>
-      )}
+            ))}
+          </>
+        )}
 
-      {displayableFields.length === 0 && (
-        <Text style={sfStyles.emptyText}>No displayable fields</Text>
-      )}
+        {displayableFields.length === 0 && (
+          <Text style={sfStyles.emptyText}>No displayable fields</Text>
+        )}
 
-      {summaryFields.length > 0 && (
-        <Pressable style={sfStyles.clearBtn} onPress={() => onSummaryFieldsChange([])}>
-          <Text style={sfStyles.clearText}>Clear all</Text>
-        </Pressable>
-      )}
+        {draft.length > 0 && (
+          <Pressable style={sfStyles.clearBtn} onPress={handleClear}>
+            <Text style={sfStyles.clearText}>Clear all</Text>
+          </Pressable>
+        )}
+      </View>
     </BottomSheet>
   )
 }
@@ -779,8 +903,35 @@ const styles = StyleSheet.create({
 
 // Summary field picker styles
 const sfStyles = StyleSheet.create({
+  sheetHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    marginBottom: t.spacing.sm,
+    zIndex: 10,
+  },
   sheetTitle: { fontSize: t.fontSize.lg, fontWeight: '700', color: t.colors.text, marginBottom: 4 },
-  sheetHint: { fontSize: t.fontSize.sm, color: t.colors.textMuted, marginBottom: t.spacing.md },
+  sheetHint: { fontSize: t.fontSize.sm, color: t.colors.textMuted },
+  saveBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: t.colors.primary,
+    alignItems: 'center' as const,
+    justifyContent: 'center' as const,
+    marginLeft: t.spacing.md,
+  },
+  saveBtnSuccess: {
+    backgroundColor: '#16a34a',
+  },
+  saveBtnError: {
+    backgroundColor: '#dc2626',
+  },
+  saveBtnText: {
+    color: '#fff',
+    fontSize: 18,
+    fontWeight: '700',
+  },
   sectionLabel: {
     fontSize: 11,
     fontWeight: '700',
@@ -790,16 +941,6 @@ const sfStyles = StyleSheet.create({
     marginTop: t.spacing.md,
     marginBottom: t.spacing.xs,
     paddingHorizontal: t.spacing.sm,
-  },
-  sortableContainer: {
-    // The Sortable component needs a known height for its internal ScrollView.
-    // We cap this and let the unselected list scroll separately below.
-    maxHeight: SORTABLE_ITEM_HEIGHT * 5 + 28, // 5 items + section label
-    overflow: 'hidden',
-  },
-  unselectedSection: {
-    flex: 1,
-    minHeight: 80,
   },
   fieldRow: {
     flexDirection: 'row',
@@ -821,12 +962,12 @@ const sfStyles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  dragHandlePlaceholder: {
-    width: 32,
-  },
   dragIcon: {
     fontSize: 18,
     color: t.colors.textMuted,
+  },
+  dragHandlePlaceholder: {
+    width: 32,
   },
   checkbox: {
     width: 22,
@@ -842,8 +983,10 @@ const sfStyles = StyleSheet.create({
     backgroundColor: t.colors.primary,
     borderColor: t.colors.primary,
   },
+  checkboxNative: {
+    marginRight: t.spacing.md,
+  },
   checkmark: { fontSize: 13, color: '#fff', fontWeight: '700' },
-  checkmarkEmpty: { fontSize: 13, color: 'transparent' },
   fieldInfo: { flex: 1 },
   fieldLabel: { fontSize: t.fontSize.md, color: t.colors.text, fontWeight: '500' },
   fieldType: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 1 },

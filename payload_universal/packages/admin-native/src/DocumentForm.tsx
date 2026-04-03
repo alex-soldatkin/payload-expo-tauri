@@ -13,7 +13,18 @@
  * Exposes a ref with { submit() } so the parent can trigger save from a header button.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Animated, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+
+// Optional: GlassView for liquid glass containers on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
 
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
@@ -260,14 +271,25 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
 
         {/* Sidebar fields → "Details" section on mobile */}
         {sidebarFields.length > 0 && (
-          <View style={styles.sidebarSection}>
-            <View style={styles.sidebarHeader}>
-              <Text style={styles.sidebarTitle}>Details</Text>
+          liquidGlassAvailable && GlassView ? (
+            <GlassView style={styles.glassSidebarSection} glassEffectStyle="regular">
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>Details</Text>
+              </View>
+              <View style={styles.sidebarBody}>
+                {renderFields(sidebarFields)}
+              </View>
+            </GlassView>
+          ) : (
+            <View style={styles.sidebarSection}>
+              <View style={styles.sidebarHeader}>
+                <Text style={styles.sidebarTitle}>Details</Text>
+              </View>
+              <View style={styles.sidebarBody}>
+                {renderFields(sidebarFields)}
+              </View>
             </View>
-            <View style={styles.sidebarBody}>
-              {renderFields(sidebarFields)}
-            </View>
-          </View>
+          )
         )}
 
         {saveError && !errorCount && (
@@ -364,6 +386,11 @@ const styles = StyleSheet.create({
     borderRadius: t.borderRadius.md,
     borderWidth: 1,
     borderColor: t.colors.border,
+    overflow: 'hidden',
+  },
+  glassSidebarSection: {
+    marginTop: t.spacing.xl,
+    borderRadius: t.borderRadius.md,
     overflow: 'hidden',
   },
   sidebarHeader: {

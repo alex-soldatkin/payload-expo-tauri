@@ -18,6 +18,17 @@ import * as SecureStore from 'expo-secure-store'
 import { useAuth } from '@payload-universal/admin-native'
 import { useResponsive } from '@/hooks/useResponsive'
 
+// Optional: GlassView for liquid glass login button on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
+
 const BASE_URL_KEY = 'payload_base_url'
 const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
 
@@ -115,20 +126,43 @@ export default function LoginScreen() {
         )}
 
         {/* Submit */}
-        <Pressable
-          className="rounded-xl bg-black px-4 py-4"
-          style={isLoading ? { opacity: 0.5 } : undefined}
-          onPress={handleLogin}
-          disabled={isLoading}
-        >
-          {isLoading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text className="text-center text-base font-semibold text-white">
-              Sign In
-            </Text>
-          )}
-        </Pressable>
+        {liquidGlassAvailable && GlassView ? (
+          <Pressable
+            onPress={handleLogin}
+            disabled={isLoading}
+            style={isLoading ? { opacity: 0.5 } : undefined}
+          >
+            <GlassView
+              style={{ borderRadius: 12, paddingVertical: 16, paddingHorizontal: 16, alignItems: 'center' }}
+              isInteractive
+              glassEffectStyle="regular"
+              tintColor="rgba(0,0,0,0.8)"
+            >
+              {isLoading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text className="text-center text-base font-semibold text-white">
+                  Sign In
+                </Text>
+              )}
+            </GlassView>
+          </Pressable>
+        ) : (
+          <Pressable
+            className="rounded-xl bg-black px-4 py-4"
+            style={isLoading ? { opacity: 0.5 } : undefined}
+            onPress={handleLogin}
+            disabled={isLoading}
+          >
+            {isLoading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text className="text-center text-base font-semibold text-white">
+                Sign In
+              </Text>
+            )}
+          </Pressable>
+        )}
       </View>
     </KeyboardAvoidingView>
   )

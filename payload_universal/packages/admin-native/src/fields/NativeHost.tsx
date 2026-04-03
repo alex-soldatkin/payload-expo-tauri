@@ -36,16 +36,16 @@ export const NativeHost: React.FC<NativeHostProps> = ({
   const Host = nativeComponents.Host
 
   if (Host) {
-    return (
-      <Host
-        matchContents={matchContents}
-        colorScheme="light"
-        ignoreSafeArea="keyboard"
-        style={style}
-      >
-        {children}
-      </Host>
-    )
+    // matchContents={false} → omit the prop entirely so the Host stretches to its RN parent
+    const hostProps: any = {
+      colorScheme: 'light',
+      ignoreSafeArea: 'keyboard',
+      style,
+    }
+    if (matchContents !== false) {
+      hostProps.matchContents = matchContents
+    }
+    return <Host {...hostProps}>{children}</Host>
   }
 
   return <>{children}</>

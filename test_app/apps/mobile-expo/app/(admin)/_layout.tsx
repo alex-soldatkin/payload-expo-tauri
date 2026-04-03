@@ -37,6 +37,16 @@ try {
   /* expo-blur not installed or native module unavailable */
 }
 
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* expo-glass-effect not available */
+}
+
 // SwiftUI components for the native long-press menu (iOS only)
 let SMenu: any = null
 let SButton: any = null
@@ -302,6 +312,35 @@ function SidebarNavItem({
   customIcon?: React.ReactNode
 }) {
   const color = isActive ? ACTIVE_COLOR : '#1f1f1f'
+
+  const innerContent = (
+    <>
+      {customIcon ?? (Icon ? <Icon size={20} color={color} /> : null)}
+      <Text style={[sidebarStyles.itemLabel, { color }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </>
+  )
+
+  // On iOS 26+ with liquid glass: use GlassView for native hover/press states
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <Pressable onPress={onPress}>
+        <GlassView
+          style={[
+            sidebarStyles.item,
+            indent && sidebarStyles.itemIndented,
+          ]}
+          isInteractive
+          glassEffectStyle={isActive ? 'regular' : 'regular'}
+          tintColor={isActive ? 'rgba(0,122,255,0.15)' : undefined}
+        >
+          {innerContent}
+        </GlassView>
+      </Pressable>
+    )
+  }
+
   return (
     <Pressable onPress={onPress}>
       {({ pressed }) => (
@@ -313,10 +352,7 @@ function SidebarNavItem({
             pressed && !isActive && sidebarStyles.itemPressed,
           ]}
         >
-          {customIcon ?? (Icon ? <Icon size={20} color={color} /> : null)}
-          <Text style={[sidebarStyles.itemLabel, { color }]} numberOfLines={1}>
-            {label}
-          </Text>
+          {innerContent}
         </View>
       )}
     </Pressable>

@@ -5,7 +5,18 @@
  * On tablet, content is constrained to a comfortable reading width.
  */
 import React from 'react'
-import { Alert, Pressable, ScrollView, Text, View } from 'react-native'
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native'
+
+// Optional: GlassView for liquid glass cards on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
 
 import {
   SyncStatusSection,
@@ -42,6 +53,44 @@ export default function AccountScreen() {
     ])
   }
 
+  // Card wrapper: GlassView on iOS 26+, plain View otherwise
+  const Card = ({ children, style }: { children: React.ReactNode; style?: any }) =>
+    liquidGlassAvailable && GlassView ? (
+      <GlassView
+        style={[{ borderRadius: 16, padding: 20 }, style]}
+        glassEffectStyle="regular"
+      >
+        {children}
+      </GlassView>
+    ) : (
+      <View className="rounded-2xl bg-surface p-5" style={style}>
+        {children}
+      </View>
+    )
+
+  // Action button: GlassView interactive on iOS 26+, plain Pressable otherwise
+  const ActionButton = ({ children, onPress, disabled, style }: { children: React.ReactNode; onPress: () => void; disabled?: boolean; style?: any }) =>
+    liquidGlassAvailable && GlassView ? (
+      <Pressable onPress={onPress} disabled={disabled} style={disabled ? { opacity: 0.5 } : undefined}>
+        <GlassView
+          style={[{ borderRadius: 16, padding: 16 }, style]}
+          isInteractive
+          glassEffectStyle="regular"
+        >
+          {children}
+        </GlassView>
+      </Pressable>
+    ) : (
+      <Pressable
+        className="rounded-2xl bg-surface p-4"
+        onPress={onPress}
+        disabled={disabled}
+        style={[disabled ? { opacity: 0.5 } : undefined, style]}
+      >
+        {children}
+      </Pressable>
+    )
+
   return (
     <ScrollView
       className="flex-1 bg-paper"
@@ -49,7 +98,7 @@ export default function AccountScreen() {
     >
       <View style={isTablet ? { maxWidth: 600, width: '100%', alignSelf: 'center' as const } : undefined}>
         {/* Profile card */}
-        <View className="rounded-2xl bg-surface p-5">
+        <Card>
           <View className="mb-4 h-14 w-14 items-center justify-center rounded-full bg-black">
             <Text className="text-xl font-bold text-white">
               {displayName.charAt(0).toUpperCase()}
@@ -62,10 +111,10 @@ export default function AccountScreen() {
           {user?.id && (
             <Text className="mt-1 text-xs text-ink-muted">ID: {user.id as string}</Text>
           )}
-        </View>
+        </Card>
 
         {/* Sync Status */}
-        <View className="mt-4 rounded-2xl bg-surface p-5">
+        <Card style={{ marginTop: 16 }}>
           <SyncStatusSection
             pendingUploads={uploads.items}
             syncStatus={dbStatus.syncStatus}
@@ -84,10 +133,10 @@ export default function AccountScreen() {
               Local DB error: {dbStatus.error}
             </Text>
           )}
-        </View>
+        </Card>
 
         {/* Server info */}
-        <View className="mt-4 rounded-2xl bg-surface p-5">
+        <Card style={{ marginTop: 16 }}>
           <Text className="text-sm font-semibold text-ink">Server</Text>
           <Text className="mt-1 text-xs text-ink-muted">{baseURL}</Text>
 
@@ -113,24 +162,19 @@ export default function AccountScreen() {
               </Text>
             </>
           )}
-        </View>
+        </Card>
 
         {/* Actions */}
         <View className="mt-4 gap-2">
-          <Pressable
-            className="rounded-2xl bg-surface p-4"
-            onPress={refreshSchema}
-            disabled={isSchemaLoading}
-            style={isSchemaLoading ? { opacity: 0.5 } : undefined}
-          >
+          <ActionButton onPress={refreshSchema} disabled={isSchemaLoading}>
             <Text className="text-base text-ink">
               {isSchemaLoading ? 'Refreshing...' : 'Refresh Schema'}
             </Text>
-          </Pressable>
+          </ActionButton>
 
-          <Pressable className="rounded-2xl bg-surface p-4" onPress={handleLogout}>
+          <ActionButton onPress={handleLogout}>
             <Text className="text-base font-semibold text-red-600">Sign Out</Text>
-          </Pressable>
+          </ActionButton>
         </View>
       </View>
     </ScrollView>

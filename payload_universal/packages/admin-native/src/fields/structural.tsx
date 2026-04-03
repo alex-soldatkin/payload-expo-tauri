@@ -36,6 +36,17 @@ import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
 import { nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 
+// Optional: GlassView for liquid glass containers on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
+
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true)
@@ -54,6 +65,13 @@ const useRenderField = (): RenderFieldFn => {
   if (!fn) throw new Error('FieldRendererContext is required for structural fields')
   return fn
 }
+
+// ---------------------------------------------------------------------------
+// Tab depth context — top-level tabs = segmented, nested = pills
+// ---------------------------------------------------------------------------
+
+const TabDepthContext = createContext(0)
+const useTabDepth = () => useContext(TabDepthContext)
 
 // ---------------------------------------------------------------------------
 // Error map context
@@ -107,8 +125,8 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
     return <>{subFields.map((sub, i) => <React.Fragment key={sub.name || `group-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}</>
   }
 
-  return (
-    <View style={[styles.groupCard, !(field.admin?.hideGutter ?? false) && styles.groupGutter]}>
+  const content = (
+    <>
       {field.label && (
         <View style={styles.groupHeader}>
           <Text style={styles.groupLabel}>{getFieldLabel(field)}</Text>
@@ -118,6 +136,23 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
       <View style={styles.groupBody}>
         {subFields.map((sub, i) => <React.Fragment key={sub.name || `group-${i}`}>{renderField(sub, `${path}.${sub.name ?? ''}`)}</React.Fragment>)}
       </View>
+    </>
+  )
+
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <GlassView
+        style={[styles.glassGroupCard, !(field.admin?.hideGutter ?? false) && styles.groupGutter]}
+        glassEffectStyle="regular"
+      >
+        {content}
+      </GlassView>
+    )
+  }
+
+  return (
+    <View style={[styles.groupCard, !(field.admin?.hideGutter ?? false) && styles.groupGutter]}>
+      {content}
     </View>
   )
 }
@@ -140,8 +175,13 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
     ? `${getFieldLabel(field)} (${errorCount} error${errorCount !== 1 ? 's' : ''})`
     : getFieldLabel(field)
 
+  const ContainerStyle = liquidGlassAvailable && GlassView ? styles.glassCollapsibleContainer : styles.collapsibleContainer
+  const Container = liquidGlassAvailable && GlassView
+    ? ({ children }: any) => <GlassView style={ContainerStyle} glassEffectStyle="regular">{children}</GlassView>
+    : ({ children }: any) => <View style={ContainerStyle}>{children}</View>
+
   return (
-    <View style={styles.collapsibleContainer}>
+    <Container>
       <NativeHost>
         <DisclosureGroup label={label} isExpanded={expanded} onIsExpandedChange={setExpanded} />
       </NativeHost>
@@ -151,7 +191,7 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
           {subFields.map((sub, i) => <React.Fragment key={sub.name || `col-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}
         </View>
       )}
-    </View>
+    </Container>
   )
 }
 
@@ -174,8 +214,12 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
     Animated.spring(chevronAnim, { toValue: next ? 1 : 0, useNativeDriver: true, damping: 15, stiffness: 200 }).start()
   }
 
+  const Wrapper = liquidGlassAvailable && GlassView
+    ? ({ children, style }: any) => <GlassView style={[styles.glassCollapsibleContainer, style]} glassEffectStyle="regular">{children}</GlassView>
+    : ({ children, style }: any) => <View style={[styles.collapsibleContainer, style]}>{children}</View>
+
   return (
-    <View style={styles.collapsibleContainer}>
+    <Wrapper>
       <Pressable
         style={({ pressed }) => [styles.collapsibleHeader, pressed && styles.collapsibleHeaderPressed]}
         onPress={toggle}
@@ -197,7 +241,7 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
           {subFields.map((sub, i) => <React.Fragment key={sub.name || `col-${i}`}>{renderField(sub, subPath(path, sub.name))}</React.Fragment>)}
         </View>
       )}
-    </View>
+    </Wrapper>
   )
 }
 
@@ -229,20 +273,13 @@ export const RowField: React.FC<FieldComponentProps<ClientRowField>> = ({
 // Tabs
 // ---------------------------------------------------------------------------
 
-const SEGMENTED_TAB_THRESHOLD = 5
+// Native segmented picker threshold — beyond this, fall back to scrollable pills
+const SEGMENTED_TAB_THRESHOLD = 6
 
-const TabsFieldNative: React.FC<FieldComponentProps<ClientTabsField>> = ({
-  field, path,
-}) => {
-  const renderField = useRenderField()
+/** Shared tab error counting logic. */
+const useTabErrorCounts = (tabs: any[], path: string) => {
   const errors = useContext(ErrorMapContext)
-  const tabs = field.tabs ?? []
-  const [activeIndex, setActiveIndex] = useState(0)
-  const activeTab = tabs[activeIndex]
-  const NativePicker = nativeComponents.Picker!
-  const NativeText = nativeComponents.Text!
-
-  const tabErrorCounts = useMemo(() =>
+  return useMemo(() =>
     tabs.map((tab) => {
       let count = 0
       for (const sub of tab.fields ?? []) {
@@ -251,6 +288,70 @@ const TabsFieldNative: React.FC<FieldComponentProps<ClientTabsField>> = ({
       }
       return count
     }), [tabs, path, errors])
+}
+
+/** Render active tab content, wrapped in depth+1 context for nested tabs. */
+const TabContent: React.FC<{
+  activeTab: any
+  path: string
+  depth: number
+  renderField: RenderFieldFn
+}> = ({ activeTab, path, depth, renderField }) => {
+  if (!activeTab) return null
+  return (
+    <TabDepthContext.Provider value={depth + 1}>
+      <View style={styles.tabContent}>
+        {(activeTab.fields ?? []).map((sub: ClientField, i: number) => {
+          const bp = activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name)
+          return <React.Fragment key={`${activeTab.name || 'tab'}-${sub.name || i}`}>{renderField(sub, bp)}</React.Fragment>
+        })}
+      </View>
+    </TabDepthContext.Provider>
+  )
+}
+
+/** Pill-style tab bar — used for nested tabs and fallback on all platforms. */
+const PillTabBar: React.FC<{
+  tabs: any[]
+  activeIndex: number
+  setActiveIndex: (i: number) => void
+  tabErrorCounts: number[]
+}> = ({ tabs, activeIndex, setActiveIndex, tabErrorCounts }) => (
+  <View style={styles.pillBar}>
+    {tabs.map((tab, i) => {
+      const label = getTabLabel(tab, i)
+      const errs = tabErrorCounts[i] ?? 0
+      const isActive = i === activeIndex
+      return (
+        <Pressable
+          key={tab.name || `tab-${i}`}
+          style={[styles.pill, isActive && styles.pillActive]}
+          onPress={() => setActiveIndex(i)}
+        >
+          <Text style={[styles.pillText, isActive && styles.pillTextActive, errs > 0 && styles.pillTextError]}>
+            {label}
+          </Text>
+          {errs > 0 && <View style={styles.errorBadge}><Text style={styles.errorBadgeText}>{errs}</Text></View>}
+        </Pressable>
+      )
+    })}
+  </View>
+)
+
+
+export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = ({
+  field, path,
+}) => {
+  const renderField = useRenderField()
+  const depth = useTabDepth()
+  const tabs = field.tabs ?? []
+  const [activeIndex, setActiveIndex] = useState(0)
+  const activeTab = tabs[activeIndex]
+  const tabErrorCounts = useTabErrorCounts(tabs, path)
+
+  const hasNativePicker = !!(nativeComponents.Picker && nativeComponents.Text)
+  const NativePicker = nativeComponents.Picker
+  const NativeText = nativeComponents.Text
 
   const labelForTab = (tab: any, i: number): string => {
     const base = getTabLabel(tab, i)
@@ -258,96 +359,39 @@ const TabsFieldNative: React.FC<FieldComponentProps<ClientTabsField>> = ({
     return errs > 0 ? `${base} (${errs})` : base
   }
 
-  const useSegmented = tabs.length <= SEGMENTED_TAB_THRESHOLD
+  // Always use native segmented picker when available (all depths).
+  // Falls back to pill bar (which mimics the segmented look) otherwise.
+  const useNativeSegmented = hasNativePicker && tabs.length <= SEGMENTED_TAB_THRESHOLD
 
   return (
-    <View style={styles.tabsContainer}>
-      {useSegmented ? (
+    <View style={[styles.tabsContainer, depth > 0 && styles.tabsNested]}>
+      {useNativeSegmented ? (
         <View style={styles.nativeTabBarWrapper}>
-          <NativeHost>
+          <NativeHost matchContents={false}>
             <NativePicker
-              selection={activeIndex}
-              onSelectionChange={(s) => { if (typeof s === 'number') setActiveIndex(s) }}
-              modifiers={[{ pickerStyle: 'segmented' }]}
+              selection={String(activeIndex)}
+              onSelectionChange={(s: any) => {
+                const idx = typeof s === 'number' ? s : parseInt(String(s), 10)
+                if (!isNaN(idx) && idx >= 0 && idx < tabs.length) setActiveIndex(idx)
+              }}
+              modifiers={[
+                nativeComponents.pickerStyle!('segmented'),
+                ...(nativeComponents.glassEffect
+                  ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })]
+                  : []),
+              ]}
             >
-              {tabs.map((tab, i) => <NativeText key={tab.name || `tab-${i}`} modifiers={[{ tag: i }]}>{labelForTab(tab, i)}</NativeText>)}
+              {tabs.map((tab, i) => <NativeText key={tab.name || `tab-${i}`} modifiers={[nativeComponents.tag!(String(i))]}>{labelForTab(tab, i)}</NativeText>)}
             </NativePicker>
           </NativeHost>
         </View>
       ) : (
-        <TabBarFallback tabs={tabs} activeIndex={activeIndex} setActiveIndex={setActiveIndex} tabErrorCounts={tabErrorCounts} />
+        <PillTabBar tabs={tabs} activeIndex={activeIndex} setActiveIndex={setActiveIndex} tabErrorCounts={tabErrorCounts} />
       )}
-      {activeTab && (
-        <View style={styles.tabContent}>
-          {(activeTab.fields ?? []).map((sub, i) => {
-            const bp = activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name)
-            return <React.Fragment key={sub.name || `tf-${i}`}>{renderField(sub, bp)}</React.Fragment>
-          })}
-        </View>
-      )}
+      <TabContent activeTab={activeTab} path={path} depth={depth} renderField={renderField} />
     </View>
   )
 }
-
-/** Reusable tab bar for fallback + >5-tab cases. */
-const TabBarFallback: React.FC<{
-  tabs: any[]
-  activeIndex: number
-  setActiveIndex: (i: number) => void
-  tabErrorCounts: number[]
-}> = ({ tabs, activeIndex, setActiveIndex, tabErrorCounts }) => (
-  <View style={styles.tabBar}>
-    {tabs.map((tab, i) => {
-      const label = getTabLabel(tab, i)
-      const errs = tabErrorCounts[i] ?? 0
-      return (
-        <Pressable key={tab.name || `tab-${i}`} style={[styles.tab, i === activeIndex && styles.tabActive]} onPress={() => setActiveIndex(i)}>
-          <View style={styles.tabLabelRow}>
-            <Text style={[styles.tabText, i === activeIndex && styles.tabTextActive, errs > 0 && styles.tabTextError]}>{label}</Text>
-            {errs > 0 && <View style={styles.errorBadge}><Text style={styles.errorBadgeText}>{errs}</Text></View>}
-          </View>
-        </Pressable>
-      )
-    })}
-  </View>
-)
-
-const TabsFieldFallback: React.FC<FieldComponentProps<ClientTabsField>> = ({
-  field, path,
-}) => {
-  const renderField = useRenderField()
-  const errors = useContext(ErrorMapContext)
-  const tabs = field.tabs ?? []
-  const [activeIndex, setActiveIndex] = useState(0)
-  const activeTab = tabs[activeIndex]
-
-  const tabErrorCounts = useMemo(() =>
-    tabs.map((tab) => {
-      let count = 0
-      for (const sub of tab.fields ?? []) {
-        const fp = tab.name ? `${subPath(path, tab.name)}.${sub.name ?? ''}` : subPath(path, sub.name)
-        for (const errPath in errors) { if (errors[errPath] && (errPath === fp || errPath.startsWith(fp + '.'))) count++ }
-      }
-      return count
-    }), [tabs, path, errors])
-
-  return (
-    <View style={styles.tabsContainer}>
-      <TabBarFallback tabs={tabs} activeIndex={activeIndex} setActiveIndex={setActiveIndex} tabErrorCounts={tabErrorCounts} />
-      {activeTab && (
-        <View style={styles.tabContent}>
-          {(activeTab.fields ?? []).map((sub, i) => {
-            const bp = activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name)
-            return <React.Fragment key={sub.name || `tf-${i}`}>{renderField(sub, bp)}</React.Fragment>
-          })}
-        </View>
-      )}
-    </View>
-  )
-}
-
-export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = (props) =>
-  <TabsFieldFallback {...props} />
 
 // ---------------------------------------------------------------------------
 // Array
@@ -383,18 +427,37 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
       </View>
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {items.map((_, index) => (
-        <View key={`${path}.${index}`} style={styles.arrayRow}>
-          <View style={styles.arrayRowHeader}>
-            <Text style={styles.arrayRowTitle}>{singularLabel} {index + 1}</Text>
-            {!disabled && <Pressable onPress={() => removeRow(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
+      {items.map((_, index) => {
+        const rowContent = (
+          <>
+            <View style={styles.arrayRowHeader}>
+              <Text style={styles.arrayRowTitle}>{singularLabel} {index + 1}</Text>
+              {!disabled && <Pressable onPress={() => removeRow(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
+            </View>
+            {subFields.map((sub, fi) => <React.Fragment key={sub.name || `arr-${fi}`}>{renderField(sub, `${path}.${index}.${sub.name ?? ''}`)}</React.Fragment>)}
+          </>
+        )
+        return liquidGlassAvailable && GlassView ? (
+          <GlassView key={`${path}.${index}`} style={styles.glassArrayRow} glassEffectStyle="regular">
+            {rowContent}
+          </GlassView>
+        ) : (
+          <View key={`${path}.${index}`} style={styles.arrayRow}>
+            {rowContent}
           </View>
-          {subFields.map((sub, fi) => <React.Fragment key={sub.name || `arr-${fi}`}>{renderField(sub, `${path}.${index}.${sub.name ?? ''}`)}</React.Fragment>)}
-        </View>
-      ))}
+        )
+      })}
 
       {!disabled && (field.maxRows == null || items.length < field.maxRows) && (
-        <Pressable style={styles.addBtn} onPress={addRow}><Text style={styles.addText}>+ Add {singularLabel}</Text></Pressable>
+        liquidGlassAvailable && GlassView ? (
+          <Pressable onPress={addRow}>
+            <GlassView style={styles.glassAddBtn} isInteractive glassEffectStyle="regular">
+              <Text style={styles.addText}>+ Add {singularLabel}</Text>
+            </GlassView>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.addBtn} onPress={addRow}><Text style={styles.addText}>+ Add {singularLabel}</Text></Pressable>
+        )
       )}
     </View>
   )
@@ -434,20 +497,37 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
 
       {items.map((item, index) => {
         const block = blocks.find((b) => b.slug === item.blockType)
-        return (
-          <View key={`${path}.${index}`} style={styles.blockRow}>
+        const blockContent = (
+          <>
             <View style={styles.arrayRowHeader}>
               <Text style={styles.blockTypeLabel}>{block?.labels?.singular || item.blockType || 'Block'}</Text>
               {!disabled && <Pressable onPress={() => removeBlock(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
             </View>
             {(block?.fields ?? []).map((sub, fi) => <React.Fragment key={sub.name || `blk-${fi}`}>{renderField(sub, `${path}.${index}.${sub.name ?? ''}`)}</React.Fragment>)}
+          </>
+        )
+        return liquidGlassAvailable && GlassView ? (
+          <GlassView key={`${path}.${index}`} style={styles.glassArrayRow} glassEffectStyle="regular">
+            {blockContent}
+          </GlassView>
+        ) : (
+          <View key={`${path}.${index}`} style={styles.blockRow}>
+            {blockContent}
           </View>
         )
       })}
 
       {!disabled && (field.maxRows == null || items.length < field.maxRows) && (
         <>
-          <Pressable style={styles.addBtn} onPress={() => setShowPicker(true)}><Text style={styles.addText}>+ Add block</Text></Pressable>
+          {liquidGlassAvailable && GlassView ? (
+            <Pressable onPress={() => setShowPicker(true)}>
+              <GlassView style={styles.glassAddBtn} isInteractive glassEffectStyle="regular">
+                <Text style={styles.addText}>+ Add block</Text>
+              </GlassView>
+            </Pressable>
+          ) : (
+            <Pressable style={styles.addBtn} onPress={() => setShowPicker(true)}><Text style={styles.addText}>+ Add block</Text></Pressable>
+          )}
           {showPicker && (
             <View style={styles.blockPicker}>
               {blocks.map((block) => (
@@ -484,6 +564,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 2,
   },
+  glassGroupCard: {
+    marginBottom: t.spacing.lg,
+    borderRadius: t.borderRadius.md,
+    overflow: 'hidden',
+  },
   groupGutter: { borderLeftWidth: 3, borderLeftColor: t.colors.primary },
   groupHeader: {
     paddingHorizontal: t.spacing.lg,
@@ -501,12 +586,16 @@ const styles = StyleSheet.create({
     backgroundColor: t.colors.surface,
     borderRadius: t.borderRadius.md,
     overflow: 'hidden',
-    // Subtle shadow instead of border for native feel
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.06,
     shadowRadius: 4,
     elevation: 2,
+  },
+  glassCollapsibleContainer: {
+    marginBottom: t.spacing.lg,
+    borderRadius: t.borderRadius.md,
+    overflow: 'hidden',
   },
   collapsibleHeader: {
     flexDirection: 'row',
@@ -555,24 +644,59 @@ const styles = StyleSheet.create({
 
   // Tabs
   tabsContainer: { marginBottom: t.spacing.lg },
+  tabsNested: { marginBottom: t.spacing.sm, marginTop: t.spacing.xs },
   nativeTabBarWrapper: { marginBottom: t.spacing.md },
-  tabBar: { flexDirection: 'row', borderBottomWidth: 1, borderBottomColor: t.colors.border, marginBottom: t.spacing.md },
-  tab: { paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.md, marginBottom: -1 },
-  tabActive: { borderBottomWidth: 2, borderBottomColor: t.colors.primary },
-  tabLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  tabText: { fontSize: t.fontSize.sm, color: t.colors.textMuted },
-  tabTextActive: { color: t.colors.text, fontWeight: '600' },
-  tabTextError: { color: t.colors.error },
+
+  // Pill tab bar — segmented control look (fallback when native picker unavailable)
+  pillBar: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 10,
+    padding: 3,
+    marginBottom: t.spacing.md,
+    gap: 2,
+  },
+  pill: {
+    flex: 1,
+    paddingVertical: 7,
+    paddingHorizontal: t.spacing.sm,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 4,
+  },
+  pillActive: {
+    backgroundColor: '#fff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.12,
+    shadowRadius: 3,
+    elevation: 2,
+  },
+  pillText: {
+    fontSize: t.fontSize.sm,
+    color: t.colors.textMuted,
+    fontWeight: '500',
+  },
+  pillTextActive: {
+    color: t.colors.text,
+    fontWeight: '600',
+  },
+  pillTextError: { color: t.colors.error },
+
   tabContent: { paddingTop: t.spacing.sm },
 
   // Array
   arrayHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.sm },
   arrayCount: { fontSize: t.fontSize.xs, color: t.colors.textMuted },
   arrayRow: { backgroundColor: t.colors.surface, borderRadius: t.borderRadius.md, borderWidth: 1, borderColor: t.colors.border, padding: t.spacing.md, marginBottom: t.spacing.sm },
+  glassArrayRow: { borderRadius: t.borderRadius.md, padding: t.spacing.md, marginBottom: t.spacing.sm },
   arrayRowHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: t.spacing.sm },
   arrayRowTitle: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.text },
   removeText: { fontSize: t.fontSize.sm, color: t.colors.destructive },
-  addBtn: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.lg, borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm, borderStyle: 'dashed', alignItems: 'center' },
+  addBtn: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.lg, borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm, borderStyle: 'dashed', alignItems: 'center' as const },
+  glassAddBtn: { paddingVertical: t.spacing.md, paddingHorizontal: t.spacing.lg, borderRadius: t.borderRadius.sm, alignItems: 'center' as const },
   addText: { fontSize: t.fontSize.sm, color: t.colors.textMuted, fontWeight: '600' },
 
   // Blocks

@@ -96,14 +96,15 @@ const SelectFieldNative: React.FC<FieldComponentProps<ClientSelectField>> = ({
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost matchContents={{ width: false, height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
+      <NativeHost matchContents={false} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
-          selection={value as string ?? ''}
-          onSelectionChange={(s) => { if (!isDisabled) onChange(s === '' ? null : s) }}
+          selection={value != null ? String(value) : ''}
+          onSelectionChange={(s: any) => { if (!isDisabled) onChange(s === '' ? null : s) }}
+          modifiers={nativeComponents.glassEffect ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })] : undefined}
         >
           <NativeText modifiers={[tag('')]}>Select...</NativeText>
           {options.map((opt) => (
-            <NativeText key={opt.value} modifiers={[tag(opt.value)]}>{opt.label}</NativeText>
+            <NativeText key={opt.value} modifiers={[tag(String(opt.value))]}>{opt.label}</NativeText>
           ))}
         </NativePicker>
       </NativeHost>
@@ -186,15 +187,18 @@ const RadioFieldNative: React.FC<FieldComponentProps<ClientRadioField>> = ({
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
-      <NativeHost matchContents={{ width: false, height: true }} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
+      <NativeHost matchContents={false} style={[nativePickerStyles.hostFullWidth, isDisabled && fieldShellStyles.disabledHost]}>
         <NativePicker
-          selection={value as string ?? ''}
-          onSelectionChange={(s) => { if (!isDisabled) onChange(s === '' ? null : s) }}
-          modifiers={useSegmented ? [psModifier('segmented')] : undefined}
+          selection={value != null ? String(value) : ''}
+          onSelectionChange={(s: any) => { if (!isDisabled) onChange(s === '' ? null : s) }}
+          modifiers={[
+            ...(useSegmented ? [psModifier('segmented')] : []),
+            ...(nativeComponents.glassEffect ? [nativeComponents.glassEffect({ glass: { variant: 'regular', interactive: true } })] : []),
+          ]}
         >
           {!useSegmented && <NativeText modifiers={[tag('')]}>Select...</NativeText>}
           {options.map((opt) => (
-            <NativeText key={opt.value} modifiers={[tag(opt.value)]}>{opt.label}</NativeText>
+            <NativeText key={opt.value} modifiers={[tag(String(opt.value))]}>{opt.label}</NativeText>
           ))}
         </NativePicker>
       </NativeHost>

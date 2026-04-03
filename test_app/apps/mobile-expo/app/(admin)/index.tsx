@@ -23,6 +23,17 @@ import {
 } from '@payload-universal/admin-native'
 import { useResponsive } from '@/hooks/useResponsive'
 
+// Optional: GlassView for liquid glass cards on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
+
 const GRID_GAP = 8
 
 export default function DashboardScreen() {
@@ -177,11 +188,8 @@ function CollectionCard({
   icon?: string
   onPress: () => void
 }) {
-  return (
-    <Pressable
-      className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
-      onPress={onPress}
-    >
+  const content = (
+    <>
       <CollectionIcon icon={icon} size={22} color="#555" />
       <View className="flex-1">
         <Text className="text-base font-semibold text-ink">{label}</Text>
@@ -194,6 +202,29 @@ function CollectionCard({
           )}
         </View>
       </View>
+    </>
+  )
+
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <Pressable onPress={onPress} style={{ marginBottom: 8 }}>
+        <GlassView
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 12, borderRadius: 16, padding: 16 }}
+          isInteractive
+          glassEffectStyle="regular"
+        >
+          {content}
+        </GlassView>
+      </Pressable>
+    )
+  }
+
+  return (
+    <Pressable
+      className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
+      onPress={onPress}
+    >
+      {content}
     </Pressable>
   )
 }

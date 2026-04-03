@@ -66,6 +66,9 @@ export type NativeComponentRegistry = {
   /** Modifier factory: creates a `pickerStyle` modifier. */
   pickerStyle: ((style: string) => { $type: string; style: string }) | null
 
+  /** Modifier factory: creates a `glassEffect` modifier with interactive support. */
+  glassEffect: ((params?: { glass?: { variant?: string; interactive?: boolean }; tint?: string; shape?: string }) => any) | null
+
   /** Native bottom sheet (SwiftUI .sheet presentation). */
   BottomSheet: React.ComponentType<{
     isPresented: boolean
@@ -98,6 +101,7 @@ export const emptyRegistry: NativeComponentRegistry = {
   Text: null,
   tag: null,
   pickerStyle: null,
+  glassEffect: null,
   BottomSheet: null,
   Group: null,
   presentationDetents: null,

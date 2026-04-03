@@ -12,7 +12,7 @@
  *    directly (not local-first) and can be compared and restored.
  */
 import React, { useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Animated, Pressable, Text, View } from 'react-native'
+import { ActivityIndicator, Alert, Animated, Platform, Pressable, Text, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import { Save } from 'lucide-react-native'
@@ -138,41 +138,81 @@ export default function DocumentEditScreen() {
       <Stack.Screen
         options={{
           title: title,
-          headerRight: () => (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
-              {/* Native actions menu (versions, draft/publish) — renders as
-                  a SwiftUI Picker with menu style on iOS (native dropdown),
-                  falls back to BottomSheet on Android. */}
-              {(hasVersions || hasDrafts) && (
-                <DocumentActionsMenu
-                  hasVersions={hasVersions}
-                  hasDrafts={hasDrafts}
-                  currentStatus={docStatus}
-                  onViewVersions={() => setVersionsVisible(true)}
-                  onSaveDraft={() => formRef.current?.submitWithStatus('draft')}
-                  onPublish={() => formRef.current?.submitWithStatus('published')}
-                  onUnpublish={() => formRef.current?.submitWithStatus('draft')}
-                />
-              )}
-              {/* Save button */}
-              <Pressable
-                onPress={() => {
-                  if (hasDrafts) {
-                    // Default save action: preserve current status
-                    const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
-                    formRef.current?.submitWithStatus(status)
-                  } else {
-                    formRef.current?.submit()
-                  }
-                }}
-                hitSlop={8}
-              >
-                <Save size={22} color="#1f1f1f" />
-              </Pressable>
-            </View>
-          ),
+          ...(Platform.OS !== 'ios' ? {
+            headerRight: () => (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
+                {(hasVersions || hasDrafts) && (
+                  <DocumentActionsMenu
+                    hasVersions={hasVersions}
+                    hasDrafts={hasDrafts}
+                    currentStatus={docStatus}
+                    onViewVersions={() => setVersionsVisible(true)}
+                    onSaveDraft={() => formRef.current?.submitWithStatus('draft')}
+                    onPublish={() => formRef.current?.submitWithStatus('published')}
+                    onUnpublish={() => formRef.current?.submitWithStatus('draft')}
+                  />
+                )}
+                <Pressable
+                  onPress={() => {
+                    if (hasDrafts) {
+                      const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
+                      formRef.current?.submitWithStatus(status)
+                    } else {
+                      formRef.current?.submit()
+                    }
+                  }}
+                  hitSlop={8}
+                >
+                  <Save size={22} color="#1f1f1f" />
+                </Pressable>
+              </View>
+            ),
+          } : {}),
         }}
       />
+      {Platform.OS === 'ios' && (
+        <Stack.Toolbar placement="right">
+          {(hasVersions || hasDrafts) && (
+            <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions">
+              {hasVersions && (
+                <Stack.Toolbar.MenuAction
+                  icon="clock.arrow.circlepath"
+                  onPress={() => setVersionsVisible(true)}
+                >
+                  Versions
+                </Stack.Toolbar.MenuAction>
+              )}
+              {hasDrafts && docStatus !== 'published' && (
+                <Stack.Toolbar.MenuAction
+                  icon="arrow.up.doc"
+                  onPress={() => formRef.current?.submitWithStatus('published')}
+                >
+                  Publish
+                </Stack.Toolbar.MenuAction>
+              )}
+              {hasDrafts && docStatus === 'published' && (
+                <Stack.Toolbar.MenuAction
+                  icon="arrow.down.doc"
+                  onPress={() => formRef.current?.submitWithStatus('draft')}
+                >
+                  Unpublish
+                </Stack.Toolbar.MenuAction>
+              )}
+            </Stack.Toolbar.Menu>
+          )}
+          <Stack.Toolbar.Button
+            icon="square.and.arrow.down"
+            onPress={() => {
+              if (hasDrafts) {
+                const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
+                formRef.current?.submitWithStatus(status)
+              } else {
+                formRef.current?.submit()
+              }
+            }}
+          />
+        </Stack.Toolbar>
+      )}
 
       <DocumentForm
         ref={formRef}

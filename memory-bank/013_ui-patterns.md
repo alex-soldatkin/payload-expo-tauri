@@ -619,10 +619,11 @@ Uses percentage-based `flexBasis` + `flexGrow` so cells naturally resize with th
 
 ### Table view for document list (tablet)
 When `showSidebar` is true, document rows render as horizontal table rows:
-- Fixed columns: Title (flex: 2), Status pill (if drafts), Updated date, chevron
-- Dynamic columns: summary fields at 120px each, with draggable header reordering
-- Table header columns are draggable via `react-native-reanimated-dnd` `Sortable` horizontal mode
-- Reorder persists through the same `summaryFields` state + AsyncStorage
+- Fixed columns: Title (140px), Status pill (if drafts, 80px), Updated date (110px), chevron (20px)
+- Dynamic columns: summary fields with `flex: 1` — header and data cells use matching flex
+- Column order is controlled through the Card Display Fields picker (⚙), not by dragging header columns directly
+- `_status` is excluded from `tableFields` when `hasDrafts` is true (it's already a dedicated status pill column) — prevents duplicate "Status" key errors
+- Column reorder is persisted via the `summaryFields` array + AsyncStorage
 
 ### Account / Login centering
 On tablet, content is constrained with `{ maxWidth: 600, alignSelf: 'center', width: '100%' }` on the inner View (not the ScrollView content container, which is unreliable).
@@ -637,63 +638,89 @@ On tablet, content is constrained with `{ maxWidth: 600, alignSelf: 'center', wi
 ### Peer dependencies
 - `react-native-reanimated` >= 4.2.0 (already installed: 4.2.1)
 - `react-native-gesture-handler` >= 2.28.0 (already installed: ~2.30.0)
-- `react-native-worklets` >= 0.7.0 (added: 0.8.1)
+- `react-native-worklets` 0.7.x (added: 0.7.1 — **NOT 0.8.x**, which is incompatible with Reanimated 4.2.x)
 
 ### Architecture
-The summary fields picker in `DocumentList.tsx` is split into two sections:
-1. **ACTIVE fields** — `Sortable` vertical list with `SortableItem.Handle` drag handles
-2. **AVAILABLE fields** — plain `FlatList` with tap-to-add checkboxes
+The summary fields picker (`SummaryFieldsPicker` in `DocumentList.tsx`) uses **buffered draft state**:
+1. Opening the sheet copies `summaryFields` → local `draft` state
+2. All toggles and reorders mutate `draft` only (no parent re-renders)
+3. Tapping **Save** (✓ button top-right) flushes `draft` → `onSummaryFieldsChange` → parent persists to AsyncStorage
+4. Dismissing without Save discards changes
 
-### Key patterns
+The picker is split into two sections:
+1. **ACTIVE fields** — `Sortable` vertical list with `SortableItem.Handle` drag handles (lucide `GripVertical` icon)
+2. **AVAILABLE fields** — plain list of `Pressable` rows with lucide `Circle` icon (tap to add)
+
+### Critical patterns
+
 ```tsx
-// Sortable items MUST have id: string
-const selectedItems = summaryFields
-  .filter(name => fieldMap.has(name))
-  .map(name => ({ id: name, field: fieldMap.get(name)! }))
+// 1. Items MUST have id: string
+const selectedItems = useMemo(() =>
+  draft.filter(name => fieldMap.has(name))
+    .map(name => ({ id: name, field: fieldMap.get(name)! })),
+  [draft, fieldMap],
+)
 
-// renderItem MUST spread ...props from parent Sortable
+// 2. renderItem MUST spread ...props from parent Sortable
 const renderSortableItem = useCallback(({ item, ...props }) => (
-  <SortableItem key={item.id} id={item.id} data={item} onMove={handleMove} {...props}>
+  <SortableItem key={item.id} id={item.id} data={item}
+    onMove={noopMove}   // ← no-op during drag!
+    onDrop={handleDrop}  // ← update state only on release
+    {...props}
+  >
     <View>
       <SortableItem.Handle>
-        <View><Text>☰</Text></View>
+        <View><GripVertical size={18} /></View>
       </SortableItem.Handle>
       {/* Pressable content for toggling */}
     </View>
   </SortableItem>
-), [handleMove])
+), [noopMove, handleDrop, handleToggle])
 
-// onMove MUST update the state array (library only animates visually)
-onMove={(id, from, to) => {
-  setFields(prev => {
-    const next = [...prev]
-    const [moved] = next.splice(from, 1)
-    next.splice(to, 0, moved)
-    return next
-  })
-}}
+// 3. onDrop reads allPositions to get final order (single state update)
+const handleDrop = useCallback(
+  (_id, _position, allPositions) => {
+    if (!allPositions) return
+    setDraft(prev => {
+      const items = prev.filter(name => allPositions[name] != null)
+      return items.sort((a, b) => allPositions[a] - allPositions[b])
+    })
+  }, [],
+)
 ```
 
-### Draggable table header columns (tablet)
-The table header's summary field columns are a horizontal `Sortable`:
-```tsx
-<Sortable
-  data={headerColumns}
-  renderItem={renderHeaderColumn}
-  direction={SortableDirection.Horizontal}
-  itemWidth={120}
-  gap={4}
-/>
-```
-Reordering the header reorders the summary fields array, which updates both the header and the data rows.
+### Critical gotchas (hard-won lessons)
 
-### Gotchas
-1. Do NOT wrap `Sortable` in `DropProvider` or `GestureHandlerRootView` — it creates its own internally
-2. `Sortable` has a hardcoded `backgroundColor: 'white'` — override via `style={{ backgroundColor: 'transparent' }}`
-3. `SortableItem.Handle` MUST be a direct child of `SortableItem`
-4. Items MUST have `id: string` (not number)
-5. `onMove` must update state — otherwise visual order and data diverge
-6. The library optional-requires gracefully: `try { require('react-native-reanimated-dnd') } catch {}` with checkbox-only fallback when not installed
+1. **NEVER update state in `onMove` — use `onDrop` instead.**
+   Sortable remounts the entire list when the data array changes (it hashes all item IDs as a React key). Updating state in `onMove` → new data → full remount → animation state destroyed → jank + can only move one position. Make `onMove` a no-op and defer state update to `onDrop` which provides `allPositions` (a map of `id → final index`).
+
+2. **Do NOT use `@expo/ui` SwiftUI components inside Sortable items.**
+   `SFImage`, `SFButton` etc. render in a separate SwiftUI view hierarchy via `Host`. Inside `react-native-reanimated-dnd`'s gesture handler tree, SwiftUI views cause crashes. Use lucide-react-native icons instead (pure React Native SVGs, fully compatible with gesture handlers).
+
+3. **`@expo/ui` `Button` with `systemImage` only (no `label`) renders invisible.**
+   The `Host matchContents` sizes to the SwiftUI content, but a Button with only `systemImage` and no `label` prop may collapse to zero size. Always provide `label` if using `systemImage`, or use a regular `Pressable` + lucide icon for icon-only buttons.
+
+4. **`react-native-worklets` version matters.** v0.8.x is NOT compatible with `react-native-reanimated` 4.2.x. The Reanimated podspec validates the worklets version and fails `pod install` if incompatible. Use `react-native-worklets@0.7.1`.
+
+5. **Do NOT wrap `Sortable` in `DropProvider` or `GestureHandlerRootView`** — it creates its own internally. Nesting causes gesture conflicts.
+
+6. **`Sortable` has a hardcoded `backgroundColor: 'white'`** — override via `style={{ backgroundColor: 'transparent' }}`.
+
+7. **`SortableItem.Handle` MUST be a direct child of `SortableItem`.** Use handles when items contain interactive elements (Pressable, buttons) to prevent drag conflicts.
+
+8. **Items MUST have `id: string`** (not number). Missing or duplicate IDs cause silent broken reordering.
+
+9. **`useFlatList={false}`** renders items in a plain ScrollView instead of FlatList. Use this when the Sortable is inside a fixed-height container to avoid nested scroll conflicts.
+
+10. **`onSummaryFieldsChange` expects a plain array, not a setter function.** Passing `(prev) => newArray` instead of `newArray` was an early bug — the callback is not React's `setState`.
+
+11. **Duplicate React keys from field labels.** Payload's `_status` field (draft/published) has label "Status", and users can create their own `status` field with the same label. Use field **names** (unique in schema) as React keys, never labels.
+
+### Icons used (lucide-react-native)
+- `GripVertical` — drag handle (reorder grip)
+- `CircleCheck` — selected/active field checkbox
+- `Circle` — unselected/available field checkbox
+- `Check` — save button icon (white on primary circle)
 
 ---
 

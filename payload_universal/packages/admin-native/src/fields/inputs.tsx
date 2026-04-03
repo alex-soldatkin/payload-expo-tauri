@@ -202,14 +202,18 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
 
 const styles = StyleSheet.create({
   input: {
-    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
-    paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm + 2,
-    fontSize: t.fontSize.md, color: t.colors.text, backgroundColor: t.colors.surface,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: t.colors.separator,
+    paddingHorizontal: 0,
+    paddingVertical: t.spacing.sm + 2,
+    fontSize: t.fontSize.md,
+    color: t.colors.text,
+    backgroundColor: 'transparent',
   },
-  inputError: { borderColor: t.colors.error },
-  disabled: { opacity: 0.5, backgroundColor: '#f9f9f9' },
-  textarea: { minHeight: 100 },
-  code: { fontFamily: 'monospace', minHeight: 140, fontSize: t.fontSize.sm },
+  inputError: { borderBottomColor: t.colors.error },
+  disabled: { opacity: 0.5 },
+  textarea: { minHeight: 100, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.separator, borderRadius: t.borderRadius.sm, paddingHorizontal: t.spacing.md, backgroundColor: t.colors.surface },
+  code: { fontFamily: 'monospace', minHeight: 140, fontSize: t.fontSize.sm, borderWidth: StyleSheet.hairlineWidth, borderColor: t.colors.separator, borderRadius: t.borderRadius.sm, paddingHorizontal: t.spacing.md, backgroundColor: t.colors.surface },
   pointRow: { flexDirection: 'row', gap: t.spacing.sm },
   pointInput: { flex: 1 },
 })

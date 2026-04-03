@@ -25,6 +25,7 @@ try {
     Text: swiftUI.Text,
     tag: modifiers.tag,
     pickerStyle: modifiers.pickerStyle,
+    glassEffect: modifiers.glassEffect,
     BottomSheet: swiftUI.BottomSheet,
     Group: swiftUI.Group,
     presentationDetents: modifiers.presentationDetents,

@@ -14,14 +14,12 @@
  *   - Same header actions and long-press preview
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
+import { Alert, Animated as RNAnimated, Platform, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Filter, Plus, Settings } from 'lucide-react-native'
 import { DeviceMotion } from 'expo-sensors'
-import { Sortable, SortableItem, SortableDirection } from 'react-native-reanimated-dnd'
-
 import {
   DocumentForm,
   DocumentList,
@@ -82,7 +80,7 @@ export default function CollectionDocumentsScreen() {
   const headerScrollY = useHeaderScrollY()
   const scrollHandler = useMemo(
     () =>
-      Animated.event(
+      RNAnimated.event(
         [{ nativeEvent: { contentOffset: { y: headerScrollY } } }],
         { useNativeDriver: true },
       ),
@@ -139,35 +137,12 @@ export default function CollectionDocumentsScreen() {
     [slug],
   )
 
-  // Summary fields for the table columns (exclude the title field since it's the first column)
+  // Summary fields for the table columns.
+  // Exclude the title field (already the first column) and _status when
+  // hasDrafts is true (already rendered as a dedicated status pill column).
   const tableFields = useMemo(
-    () => summaryFields.filter((f) => f !== useAsTitle),
-    [summaryFields, useAsTitle],
-  )
-
-  // Draggable header column data (each needs an `id: string` for the Sortable)
-  const headerColumns = useMemo(
-    () => tableFields.map((f) => ({ id: f, label: humaniseFieldName(f) })),
-    [tableFields],
-  )
-
-  // When a header column is dragged, reorder within summaryFields
-  const handleHeaderMove = useCallback(
-    (_id: string, from: number, to: number) => {
-      // tableFields is a subset of summaryFields — map indices back
-      setSummaryFields((prev) => {
-        const fieldNames = prev.filter((f) => f !== useAsTitle)
-        const [moved] = fieldNames.splice(from, 1)
-        fieldNames.splice(to, 0, moved)
-        // Reconstruct: keep titleField in its position, swap the rest
-        const next = useAsTitle && prev.includes(useAsTitle)
-          ? [useAsTitle, ...fieldNames]
-          : fieldNames
-        AsyncStorage.setItem(SUMMARY_FIELDS_KEY_PREFIX + slug, JSON.stringify(next)).catch(() => {})
-        return next
-      })
-    },
-    [useAsTitle, slug],
+    () => summaryFields.filter((f) => f !== useAsTitle && !(hasDrafts && f === '_status')),
+    [summaryFields, useAsTitle, hasDrafts],
   )
 
   // --- Swipe to delete + shake to undo ---
@@ -318,49 +293,18 @@ export default function CollectionDocumentsScreen() {
     [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId, showSidebar, useAsTitle, tableFields, hasDrafts],
   )
 
-  // ── Draggable table header (tablet) ──────────────────────────────────
-  const HEADER_COL_WIDTH = 120
-
-  const renderHeaderColumn = useCallback(
-    ({ item, ...props }: any) => (
-      <SortableItem
-        key={item.id}
-        id={item.id}
-        data={item}
-        onMove={handleHeaderMove}
-        {...props}
-      >
-        <View style={tableStyles.headerFieldDraggable}>
-          <Text style={tableStyles.headerFieldText} numberOfLines={1}>
-            {item.label}
-          </Text>
-        </View>
-      </SortableItem>
-    ),
-    [handleHeaderMove],
-  )
-
+  // ── Table header (tablet) ────────────────────────────────────────────
+  // Column order is controlled via the Card Display Fields picker (⚙).
   const tableHeader = showSidebar ? (
     <View style={[tableStyles.headerRow, { marginTop: headerHeight }]}>
-      {/* Title column — fixed, not draggable */}
       <Text style={tableStyles.headerTitle}>
         {useAsTitle ? humaniseFieldName(useAsTitle) : 'ID'}
       </Text>
-
-      {/* Summary field columns — draggable to reorder */}
-      {headerColumns.length > 0 && (
-        <View style={tableStyles.headerDraggableRegion}>
-          <Sortable
-            data={headerColumns}
-            renderItem={renderHeaderColumn}
-            direction={SortableDirection.Horizontal}
-            itemWidth={HEADER_COL_WIDTH}
-            gap={4}
-            style={{ backgroundColor: 'transparent' }}
-          />
-        </View>
-      )}
-
+      {tableFields.map((field) => (
+        <Text key={field} style={tableStyles.headerField} numberOfLines={1}>
+          {humaniseFieldName(field)}
+        </Text>
+      ))}
       {hasDrafts && <Text style={tableStyles.headerStatus}>Status</Text>}
       <Text style={tableStyles.headerDate}>Updated</Text>
       <View style={{ width: 20 }} />
@@ -370,31 +314,51 @@ export default function CollectionDocumentsScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: '#f6f4f1', width: '100%' }}>
       {!isPreview && (
-        <Stack.Screen
-          options={{
-            title: label,
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16, marginRight: 4 }}>
-                <Pressable onPress={() => setSummaryPickerOpen(true)} hitSlop={8}>
-                  <Settings size={22} color="#1f1f1f" />
-                </Pressable>
-                <Pressable onPress={() => setFilterSheetOpen(true)} hitSlop={8}>
-                  <Filter size={22} color="#1f1f1f" />
-                </Pressable>
-                <Pressable onPress={() => router.push(`/(admin)/collections/${slug}/create`)} hitSlop={8}>
-                  <Plus size={22} color="#1f1f1f" />
-                </Pressable>
-              </View>
-            ),
-            headerSearchBarOptions: {
-              placeholder: `Search ${label}...`,
-              hideWhenScrolling: true,
-              autoCapitalize: 'none',
-              onChangeText: (e) => setSearchText(e.nativeEvent.text),
-              onCancelButtonPress: () => setSearchText(''),
-            },
-          }}
-        />
+        <>
+          <Stack.Screen
+            options={{
+              title: label,
+              ...(Platform.OS !== 'ios' ? {
+                headerRight: () => (
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
+                    <Pressable onPress={() => setSummaryPickerOpen(true)} hitSlop={8}>
+                      <Settings size={22} color="#1f1f1f" />
+                    </Pressable>
+                    <Pressable onPress={() => setFilterSheetOpen(true)} hitSlop={8}>
+                      <Filter size={22} color="#1f1f1f" />
+                    </Pressable>
+                    <Pressable onPress={() => router.push(`/(admin)/collections/${slug}/create`)} hitSlop={8}>
+                      <Plus size={22} color="#1f1f1f" />
+                    </Pressable>
+                  </View>
+                ),
+              } : {}),
+              headerSearchBarOptions: {
+                placeholder: `Search ${label}...`,
+                hideWhenScrolling: true,
+                autoCapitalize: 'none',
+                onChangeText: (e) => setSearchText(e.nativeEvent.text),
+                onCancelButtonPress: () => setSearchText(''),
+              },
+            }}
+          />
+          {Platform.OS === 'ios' && (
+            <Stack.Toolbar placement="right">
+              <Stack.Toolbar.Button
+                icon="gearshape"
+                onPress={() => setSummaryPickerOpen(true)}
+              />
+              <Stack.Toolbar.Button
+                icon="line.3.horizontal.decrease"
+                onPress={() => setFilterSheetOpen(true)}
+              />
+              <Stack.Toolbar.Button
+                icon="plus"
+                onPress={() => router.push(`/(admin)/collections/${slug}/create`)}
+              />
+            </Stack.Toolbar>
+          )}
+        </>
       )}
       {tableHeader}
       <DocumentList
@@ -438,28 +402,22 @@ const tableStyles = StyleSheet.create({
     backgroundColor: '#f6f4f1',
   },
   headerTitle: {
-    flex: 2,
+    width: 140,
     fontSize: 12,
     fontWeight: '600',
     color: '#8E8E93',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginRight: 8,
   },
-  headerDraggableRegion: {
+  headerField: {
     flex: 1,
-    overflow: 'hidden',
-  },
-  headerFieldDraggable: {
-    width: 120,
-    height: 30,
-    justifyContent: 'center',
-  },
-  headerFieldText: {
     fontSize: 12,
     fontWeight: '600',
     color: '#8E8E93',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
+    marginRight: 4,
   },
   headerStatus: {
     width: 80,
@@ -490,14 +448,14 @@ const tableStyles = StyleSheet.create({
     backgroundColor: '#fff',
   },
   titleCell: {
-    flex: 2,
+    width: 140,
     fontSize: 15,
     fontWeight: '600',
     color: '#1f1f1f',
     marginRight: 8,
   },
   fieldCell: {
-    width: 120,
+    flex: 1,
     fontSize: 14,
     color: '#666',
     marginRight: 4,

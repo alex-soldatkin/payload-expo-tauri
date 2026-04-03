@@ -34,12 +34,14 @@ export const FieldShell: React.FC<FieldShellProps> = ({
 )
 
 export const fieldShellStyles = StyleSheet.create({
-  container: { marginBottom: t.spacing.lg },
+  container: { marginBottom: t.spacing.md },
   label: {
-    fontSize: t.fontSize.sm,
+    fontSize: t.fontSize.xs,
     fontWeight: '600',
-    color: t.colors.text,
-    marginBottom: t.spacing.xs,
+    color: t.colors.textMuted,
+    marginBottom: 2,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
   },
   required: { color: t.colors.error },
   description: {

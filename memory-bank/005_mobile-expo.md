@@ -94,13 +94,15 @@ iPad responsive layout (2026-04-03)
 - Cards use flex-percentage grid (`flexBasis: '46%'` / `'30%'`) that naturally resizes with container
 
 Drag-to-reorder summary fields (2026-04-03)
-- Installed `react-native-reanimated-dnd` v2.0.0 + `react-native-worklets` v0.8.1
-- Summary fields picker (Card Display Fields bottom sheet) now shows ACTIVE fields in a `Sortable` vertical list with drag handles
-- AVAILABLE (unselected) fields shown below in a plain FlatList — tap to add, tap to remove
-- Drag handle (`SortableItem.Handle`) restricts drag to the ☰ icon area — checkboxes and labels remain tappable
-- Table header columns on tablet are horizontally draggable via `Sortable` with `SortableDirection.Horizontal`
-- Reordering header columns reorders the `summaryFields` array (persisted to AsyncStorage), updating both header and data rows
-- Graceful fallback: `react-native-reanimated-dnd` is optional-required (`try/catch`); without it, picker renders checkbox-only FlatList
+- Installed `react-native-reanimated-dnd` v2.0.0 + `react-native-worklets` v0.7.1 (NOT 0.8.x — incompatible with Reanimated 4.2.x)
+- Summary fields picker uses **buffered draft state**: changes are local until Save (✓ button) is tapped. Prevents jank from parent re-renders during drag.
+- ACTIVE fields: `Sortable` vertical list with `SortableItem.Handle` drag handles (lucide `GripVertical` icon)
+- AVAILABLE fields: plain `Pressable` rows with lucide `Circle`/`CircleCheck` icons — tap to toggle
+- **Critical**: `onMove` is a no-op — state is updated only in `onDrop` (with `allPositions` map). Updating state in `onMove` triggers Sortable full remount (it hashes item IDs as React key), killing animation mid-drag.
+- **Critical**: Do NOT use `@expo/ui` SwiftUI components (`Image`, `Button`) inside Sortable items — they crash. Use lucide-react-native icons instead.
+- Table header columns on tablet are static (ordered by `summaryFields`); column order is controlled through the picker, not by dragging headers directly
+- `_status` excluded from table summary columns when `hasDrafts` is true (already shown as dedicated status pill column)
+- Graceful fallback: `react-native-reanimated-dnd` is optional-required (`try/catch`); without it, picker renders checkbox-only list
 
 Relationship picker inline preview (2026-04-03)
 - Long-press on a picker row in the BottomSheet shows an inline DocumentForm preview (pure React, no native context menu)

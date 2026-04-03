@@ -23,6 +23,7 @@ try {
     Text: jc.Text,
     tag: null,         // Android Picker uses different API
     pickerStyle: null,
+    glassEffect: null,  // No liquid glass on Android
     BottomSheet: null,  // No native equivalent on Android
     Group: null,
     presentationDetents: null,
