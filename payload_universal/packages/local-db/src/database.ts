@@ -109,14 +109,20 @@ export type CreateLocalDBArgs = {
   wsURL?: string
 }
 
-export const createLocalDB = async ({
-  schema,
-  baseURL,
-  token,
-  pullInterval = 30_000,
-  storage,
-  wsURL,
-}: CreateLocalDBArgs): Promise<PayloadLocalDB> => {
+export const createLocalDB = async (
+  args: CreateLocalDBArgs,
+  /** @internal Retry count — prevents infinite recursion on persistent DB6. */
+  _retryCount = 0,
+): Promise<PayloadLocalDB> => {
+  const {
+    schema,
+    baseURL,
+    token,
+    pullInterval = 30_000,
+    storage,
+    wsURL,
+  } = args
+
   // If a previous instance exists (e.g. hot reload), destroy it first to avoid DB9.
   if (_existingDB) {
     try { await _existingDB.destroy() } catch { /* already closed */ }
@@ -155,7 +161,6 @@ export const createLocalDB = async ({
       const created = await db.addCollections({
         [slug]: {
           schema: rxSchema,
-          // If schema version changed, drop old data and repull from server
           migrationStrategies: {},
           autoMigrate: true,
         },
@@ -163,11 +168,19 @@ export const createLocalDB = async ({
       collections[slug] = created[slug]
     } catch (err: any) {
       if (typeof err === 'object' && err !== null && String(err).includes('DB6')) {
-        console.warn(`[local-db] Schema conflict (DB6) detected for "${slug}". Wiping local database to recover...`)
-        // The safest way to handle DB6 in dev is to blow away the database and let the app reload.
+        console.warn(`[local-db] Schema conflict (DB6) for "${slug}". Wiping DB and retrying...`)
+
+        // Destroy the half-initialised database
         try { await db.destroy() } catch { /* ignore */ }
+        // Physically remove persisted SQLite data
         try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
-        throw new Error(`Local DB was purged due to a schema change in "${slug}". Please fully reload/restart the app.`)
+
+        // Auto-retry once — the fresh DB will have no schema conflicts
+        if (_retryCount < 1) {
+          return createLocalDB(args, _retryCount + 1)
+        }
+        // Safety valve: if retry also fails, throw a clear error
+        throw new Error(`Persistent schema conflict in "${slug}" after DB reset. Please clear app data.`)
       } else {
         console.warn(`[local-db] Failed to create collection "${slug}":`, err)
       }
