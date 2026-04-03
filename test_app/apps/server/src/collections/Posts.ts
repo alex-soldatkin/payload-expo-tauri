@@ -29,6 +29,13 @@ export const Posts: CollectionConfig = {
       },
     },
     {
+      name: 'summary',
+      type: 'richText',
+      admin: {
+        description: 'A brief rich-text summary shown on the post card and in previews.',
+      },
+    },
+    {
       // Tabs — maps to segmented control on mobile
       type: 'tabs',
       tabs: [
