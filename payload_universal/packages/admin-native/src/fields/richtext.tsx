@@ -65,11 +65,22 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
+  // First check if the native Fabric view is registered. codegenNativeComponent
+  // calls getNativeComponentAttributes() which throws "View config getter callback
+  // for component 'EnrichedTextInputView' must be a function" if the native code
+  // isn't compiled into the binary. This crashes BEFORE React render, so error
+  // boundaries can't catch it. We probe it here at module load time instead.
+  const RN = require('react-native')
+  const registry = RN.getNativeComponentAttributes ?? RN.UIManager?.getViewManagerConfig
+  if (registry) {
+    registry('EnrichedTextInputView') // throws if native code missing
+  }
+
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
   enrichedAvailable = !!EnrichedTextInput
 } catch {
-  /* not installed — will use plain-text fallback */
+  /* Native view not available — will use plain-text fallback */
 }
 
 // ---------------------------------------------------------------------------
