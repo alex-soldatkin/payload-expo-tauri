@@ -65,19 +65,28 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
-  // react-native-enriched is a Fabric-only native component. When its JS module
-  // loads, codegenNativeComponent('EnrichedTextInputView') fires immediately and
-  // throws if the native view isn't compiled into the binary. This try/catch
-  // catches that throw and falls back to plain-text. The require MUST be the
-  // only thing inside this block — no other imports that could mask the error.
-  const enrichedModule = require('react-native-enriched')
-  EnrichedTextInput = enrichedModule.EnrichedTextInput
-  enrichedAvailable = !!EnrichedTextInput
+  // Check if the native Fabric component is registered in the binary BEFORE
+  // importing the JS module. UIManager.hasViewManagerConfig uses
+  // unstable_hasComponent() in Bridgeless/Fabric mode, which checks the C++
+  // Fabric component registry — the only reliable check on New Architecture.
+  //
+  // If we skip this and just require() the module, codegenNativeComponent's
+  // fallback runs requireNativeComponent() which defers the view config
+  // lookup to render time. At render time, ReactNativeViewConfigRegistry.get()
+  // throws an invariant that crashes even through error boundaries on dev builds.
+  const { UIManager } = require('react-native')
+  const hasNative = UIManager.hasViewManagerConfig?.('EnrichedTextInputView')
+
+  if (hasNative) {
+    const enrichedModule = require('react-native-enriched')
+    EnrichedTextInput = enrichedModule.EnrichedTextInput
+    enrichedAvailable = !!EnrichedTextInput
+  } else {
+    console.log('[richtext] EnrichedTextInputView not in native binary, using fallback')
+  }
 } catch (e) {
   // Native code not compiled in — plain-text fallback will be used.
-  // Common when running an Expo Go build or a dev client that was built
-  // before react-native-enriched was added to the project's dependencies.
-  console.log('[richtext] react-native-enriched not available, using fallback:', String(e).slice(0, 100))
+  console.log('[richtext] react-native-enriched not available:', String(e).slice(0, 100))
 }
 
 // ---------------------------------------------------------------------------
