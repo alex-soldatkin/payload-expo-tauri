@@ -1,18 +1,26 @@
 /**
  * Document list for a collection — always local-first.
  *
- * - Header icons: ⚙ Settings, ▽ Filter, + Create
- * - Swipe left to delete (with confirmation)
- * - Shake to undo the last delete
- * - Link.Preview (long-press peek) rendered inside Expo Router tree
+ * Phone:
+ *   - Card-style rows with summary fields
+ *   - Header icons: ⚙ Settings, ▽ Filter, + Create
+ *   - Swipe left to delete (with confirmation)
+ *   - Shake to undo the last delete
+ *   - Link.Preview (long-press peek) rendered inside Expo Router tree
+ *
+ * Tablet:
+ *   - Table-style rows (title, summary fields, status, date) matching
+ *     Payload web admin dashboard
+ *   - Same header actions and long-press preview
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Animated, Pressable, View, useWindowDimensions } from 'react-native'
+import { Alert, Animated, Pressable, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Filter, Plus, Settings } from 'lucide-react-native'
 import { DeviceMotion } from 'expo-sensors'
+import { Sortable, SortableItem, SortableDirection } from 'react-native-reanimated-dnd'
 
 import {
   DocumentForm,
@@ -26,9 +34,48 @@ import {
 import { useLocalDB, useLocalCollection, useLocalDBStatus, useLocalMutations } from '@payload-universal/local-db'
 import { useHeaderScrollY } from '@/components/HeaderScrollContext'
 import * as ScrollablePreview from '@/modules/scrollable-preview'
+import { useResponsive } from '@/hooks/useResponsive'
 
 const SUMMARY_FIELDS_KEY_PREFIX = 'card_summary_fields:'
 const SHAKE_THRESHOLD = 1.5 // acceleration magnitude to trigger undo
+
+// ---------------------------------------------------------------------------
+// Table formatting helpers (tablet)
+// ---------------------------------------------------------------------------
+
+function formatCellValue(value: unknown): string {
+  if (value == null) return '—'
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
+  const str = String(value)
+  // If it looks like an ISO date, format it nicely
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const d = new Date(str)
+    if (!isNaN(d.getTime())) {
+      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+    }
+  }
+  return str
+}
+
+function formatDate(value: unknown): string {
+  if (!value) return '—'
+  const d = new Date(String(value))
+  return isNaN(d.getTime())
+    ? '—'
+    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+function humaniseFieldName(field: string): string {
+  return field
+    .replace(/^_/, '')
+    .replace(/([A-Z])/g, ' $1')
+    .replace(/^./, (s) => s.toUpperCase())
+    .trim()
+}
+
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 
 export default function CollectionDocumentsScreen() {
   const { slug } = useLocalSearchParams<{ slug: string }>()
@@ -48,11 +95,13 @@ export default function CollectionDocumentsScreen() {
   const toast = useToast()
   const isPreview = useIsPreview()
   const [searchText, setSearchText] = useState('')
+  const { showSidebar } = useResponsive()
 
   const label = menuModel ? getCollectionLabel(menuModel, slug, true) : slug
   const schemaMap = schema?.collections[slug]
   const collectionMeta = menuModel?.collections.find((c) => c.slug === slug)
   const useAsTitle = collectionMeta?.useAsTitle
+  const hasDrafts = collectionMeta?.drafts ?? false
 
   // Always use local data — reactive, instant updates
   const localDB = useLocalDB()
@@ -88,6 +137,37 @@ export default function CollectionDocumentsScreen() {
       AsyncStorage.setItem(SUMMARY_FIELDS_KEY_PREFIX + slug, JSON.stringify(fields)).catch(() => {})
     },
     [slug],
+  )
+
+  // Summary fields for the table columns (exclude the title field since it's the first column)
+  const tableFields = useMemo(
+    () => summaryFields.filter((f) => f !== useAsTitle),
+    [summaryFields, useAsTitle],
+  )
+
+  // Draggable header column data (each needs an `id: string` for the Sortable)
+  const headerColumns = useMemo(
+    () => tableFields.map((f) => ({ id: f, label: humaniseFieldName(f) })),
+    [tableFields],
+  )
+
+  // When a header column is dragged, reorder within summaryFields
+  const handleHeaderMove = useCallback(
+    (_id: string, from: number, to: number) => {
+      // tableFields is a subset of summaryFields — map indices back
+      setSummaryFields((prev) => {
+        const fieldNames = prev.filter((f) => f !== useAsTitle)
+        const [moved] = fieldNames.splice(from, 1)
+        fieldNames.splice(to, 0, moved)
+        // Reconstruct: keep titleField in its position, swap the rest
+        const next = useAsTitle && prev.includes(useAsTitle)
+          ? [useAsTitle, ...fieldNames]
+          : fieldNames
+        AsyncStorage.setItem(SUMMARY_FIELDS_KEY_PREFIX + slug, JSON.stringify(next)).catch(() => {})
+        return next
+      })
+    },
+    [useAsTitle, slug],
   )
 
   // --- Swipe to delete + shake to undo ---
@@ -161,6 +241,35 @@ export default function CollectionDocumentsScreen() {
     ({ item, rowContent }: { item: Record<string, unknown>; rowContent: React.ReactElement; onPress: () => void }) => {
       const itemId = String(item.id)
       const isThisPreviewOpen = previewItemId === itemId
+
+      // ── Tablet: table-style row ────────────────────────────────────────
+      const displayContent = showSidebar ? (
+        <View style={tableStyles.row}>
+          <Text style={tableStyles.titleCell} numberOfLines={1}>
+            {useAsTitle ? String(item[useAsTitle] ?? item.id ?? '') : String(item.id ?? '')}
+          </Text>
+          {tableFields.map((field) => (
+            <Text key={field} style={tableStyles.fieldCell} numberOfLines={1}>
+              {formatCellValue(item[field])}
+            </Text>
+          ))}
+          {hasDrafts && (
+            <View style={tableStyles.statusCellWrapper}>
+              <Text style={[
+                tableStyles.statusPill,
+                (item._status === 'published') && tableStyles.statusPublished,
+              ]}>
+                {String(item._status ?? 'draft')}
+              </Text>
+            </View>
+          )}
+          <Text style={tableStyles.dateCell}>
+            {formatDate(item.updatedAt)}
+          </Text>
+          <Text style={tableStyles.chevron}>›</Text>
+        </View>
+      ) : rowContent
+
       return (
         <ScrollablePreview.Trigger
           previewWidth={PREVIEW_W}
@@ -171,7 +280,7 @@ export default function CollectionDocumentsScreen() {
           onPreviewOpen={() => setPreviewItemId(itemId)}
           onPreviewClose={() => setPreviewItemId(null)}
         >
-          {rowContent}
+          {displayContent}
           <ScrollablePreview.Content>
             <PreviewContextProvider value={true}>
               {schemaMap && isThisPreviewOpen ? (
@@ -206,8 +315,57 @@ export default function CollectionDocumentsScreen() {
         </ScrollablePreview.Trigger>
       )
     },
-    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId],
+    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId, showSidebar, useAsTitle, tableFields, hasDrafts],
   )
+
+  // ── Draggable table header (tablet) ──────────────────────────────────
+  const HEADER_COL_WIDTH = 120
+
+  const renderHeaderColumn = useCallback(
+    ({ item, ...props }: any) => (
+      <SortableItem
+        key={item.id}
+        id={item.id}
+        data={item}
+        onMove={handleHeaderMove}
+        {...props}
+      >
+        <View style={tableStyles.headerFieldDraggable}>
+          <Text style={tableStyles.headerFieldText} numberOfLines={1}>
+            {item.label}
+          </Text>
+        </View>
+      </SortableItem>
+    ),
+    [handleHeaderMove],
+  )
+
+  const tableHeader = showSidebar ? (
+    <View style={[tableStyles.headerRow, { marginTop: headerHeight }]}>
+      {/* Title column — fixed, not draggable */}
+      <Text style={tableStyles.headerTitle}>
+        {useAsTitle ? humaniseFieldName(useAsTitle) : 'ID'}
+      </Text>
+
+      {/* Summary field columns — draggable to reorder */}
+      {headerColumns.length > 0 && (
+        <View style={tableStyles.headerDraggableRegion}>
+          <Sortable
+            data={headerColumns}
+            renderItem={renderHeaderColumn}
+            direction={SortableDirection.Horizontal}
+            itemWidth={HEADER_COL_WIDTH}
+            gap={4}
+            style={{ backgroundColor: 'transparent' }}
+          />
+        </View>
+      )}
+
+      {hasDrafts && <Text style={tableStyles.headerStatus}>Status</Text>}
+      <Text style={tableStyles.headerDate}>Updated</Text>
+      <View style={{ width: 20 }} />
+    </View>
+  ) : null
 
   return (
     <View style={{ flex: 1, backgroundColor: '#f6f4f1', width: '100%' }}>
@@ -238,6 +396,7 @@ export default function CollectionDocumentsScreen() {
           }}
         />
       )}
+      {tableHeader}
       <DocumentList
         collection={slug}
         searchText={searchText}
@@ -262,3 +421,116 @@ export default function CollectionDocumentsScreen() {
     </View>
   )
 }
+
+// ---------------------------------------------------------------------------
+// Table styles (tablet)
+// ---------------------------------------------------------------------------
+
+const tableStyles = StyleSheet.create({
+  // Fixed header row above the list
+  headerRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#f6f4f1',
+  },
+  headerTitle: {
+    flex: 2,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerDraggableRegion: {
+    flex: 1,
+    overflow: 'hidden',
+  },
+  headerFieldDraggable: {
+    width: 120,
+    height: 30,
+    justifyContent: 'center',
+  },
+  headerFieldText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerStatus: {
+    width: 80,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  headerDate: {
+    width: 110,
+    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#8E8E93',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+
+  // Data rows
+  row: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#fff',
+  },
+  titleCell: {
+    flex: 2,
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#1f1f1f',
+    marginRight: 8,
+  },
+  fieldCell: {
+    width: 120,
+    fontSize: 14,
+    color: '#666',
+    marginRight: 4,
+  },
+  statusCellWrapper: {
+    width: 80,
+  },
+  statusPill: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#b45309',
+    backgroundColor: '#fef3c7',
+    alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 4,
+    overflow: 'hidden',
+  },
+  statusPublished: {
+    color: '#166534',
+    backgroundColor: '#dcfce7',
+  },
+  dateCell: {
+    width: 110,
+    textAlign: 'right',
+    fontSize: 13,
+    color: '#666',
+  },
+  chevron: {
+    width: 20,
+    textAlign: 'center',
+    fontSize: 20,
+    color: '#ccc',
+    fontWeight: '300',
+  },
+})

@@ -579,6 +579,124 @@ Rows are plain `View` wrappers — **no expo-router imports** (Link, useRouter).
 
 ---
 
+## iPad Responsive Layout (2026-04-03)
+
+### useResponsive hook (`hooks/useResponsive.ts`)
+Returns `{ isTablet, isLandscape, showSidebar, columns, contentWidth, width, height }`.
+- `isTablet`: `Platform.isPad` on iOS (reliable even in iPadOS Split View); `min(width, height) >= 600` on Android
+- `showSidebar`: `isTablet && width >= 1024` — only in landscape full-screen; portrait + split-view use bottom tabs
+- `columns`: computed from **content area** width (after subtracting sidebar), not raw window width; max 2 when sidebar showing, up to 3 otherwise
+- `contentWidth`: `showSidebar ? width - 280 : width`
+
+### Window resize on iPad
+React Native's `flex: 1` does NOT reliably propagate iPad window size changes. The root `GestureHandlerRootView` and the admin layout container **must** have explicit `width`/`height` from `useWindowDimensions()` to force native re-layout:
+```tsx
+const { width, height } = useWindowDimensions()
+<GestureHandlerRootView style={{ flex: 1, width, height }}>
+```
+Without this, resizing the iPad window (Split View, Stage Manager) freezes the layout at the old dimensions.
+
+### Sidebar navigation (tablet)
+- 280px wide, frosted-glass blur background (same BlurView as tab bar)
+- Shows all collections (with CollectionIcon + group headers) and globals inline
+- Active route highlighted via `usePathname()` from expo-router
+- Account pinned at bottom with separator
+- Tab bar returns `null` when sidebar is showing (`showSidebar ? null : <CustomTabBar />`)
+
+### Grid layout for cards
+Cards on dashboard, collections index, globals index use flex-based responsive grid:
+```tsx
+const gridRow = columns > 1
+  ? { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }
+  : undefined
+const gridCell = columns > 1
+  ? columns >= 3
+    ? { flexGrow: 1, flexShrink: 0, flexBasis: '30%', maxWidth: '33.33%' }
+    : { flexGrow: 1, flexShrink: 0, flexBasis: '46%' }
+  : undefined
+```
+Uses percentage-based `flexBasis` + `flexGrow` so cells naturally resize with the container.
+
+### Table view for document list (tablet)
+When `showSidebar` is true, document rows render as horizontal table rows:
+- Fixed columns: Title (flex: 2), Status pill (if drafts), Updated date, chevron
+- Dynamic columns: summary fields at 120px each, with draggable header reordering
+- Table header columns are draggable via `react-native-reanimated-dnd` `Sortable` horizontal mode
+- Reorder persists through the same `summaryFields` state + AsyncStorage
+
+### Account / Login centering
+On tablet, content is constrained with `{ maxWidth: 600, alignSelf: 'center', width: '100%' }` on the inner View (not the ScrollView content container, which is unreliable).
+
+---
+
+## Drag-to-Reorder: Summary Fields Picker (2026-04-03)
+
+### Library
+`react-native-reanimated-dnd` v2.0.0 — performant drag-and-drop built on Reanimated worklets.
+
+### Peer dependencies
+- `react-native-reanimated` >= 4.2.0 (already installed: 4.2.1)
+- `react-native-gesture-handler` >= 2.28.0 (already installed: ~2.30.0)
+- `react-native-worklets` >= 0.7.0 (added: 0.8.1)
+
+### Architecture
+The summary fields picker in `DocumentList.tsx` is split into two sections:
+1. **ACTIVE fields** — `Sortable` vertical list with `SortableItem.Handle` drag handles
+2. **AVAILABLE fields** — plain `FlatList` with tap-to-add checkboxes
+
+### Key patterns
+```tsx
+// Sortable items MUST have id: string
+const selectedItems = summaryFields
+  .filter(name => fieldMap.has(name))
+  .map(name => ({ id: name, field: fieldMap.get(name)! }))
+
+// renderItem MUST spread ...props from parent Sortable
+const renderSortableItem = useCallback(({ item, ...props }) => (
+  <SortableItem key={item.id} id={item.id} data={item} onMove={handleMove} {...props}>
+    <View>
+      <SortableItem.Handle>
+        <View><Text>☰</Text></View>
+      </SortableItem.Handle>
+      {/* Pressable content for toggling */}
+    </View>
+  </SortableItem>
+), [handleMove])
+
+// onMove MUST update the state array (library only animates visually)
+onMove={(id, from, to) => {
+  setFields(prev => {
+    const next = [...prev]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
+    return next
+  })
+}}
+```
+
+### Draggable table header columns (tablet)
+The table header's summary field columns are a horizontal `Sortable`:
+```tsx
+<Sortable
+  data={headerColumns}
+  renderItem={renderHeaderColumn}
+  direction={SortableDirection.Horizontal}
+  itemWidth={120}
+  gap={4}
+/>
+```
+Reordering the header reorders the summary fields array, which updates both the header and the data rows.
+
+### Gotchas
+1. Do NOT wrap `Sortable` in `DropProvider` or `GestureHandlerRootView` — it creates its own internally
+2. `Sortable` has a hardcoded `backgroundColor: 'white'` — override via `style={{ backgroundColor: 'transparent' }}`
+3. `SortableItem.Handle` MUST be a direct child of `SortableItem`
+4. Items MUST have `id: string` (not number)
+5. `onMove` must update state — otherwise visual order and data diverge
+6. The library optional-requires gracefully: `try { require('react-native-reanimated-dnd') } catch {}` with checkbox-only fallback when not installed
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink

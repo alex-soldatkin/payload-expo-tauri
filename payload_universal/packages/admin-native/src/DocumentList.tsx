@@ -36,6 +36,17 @@ import { FilterChips } from './FilterChips'
 import { FilterBottomSheet } from './FilterBottomSheet'
 import { BottomSheet } from './BottomSheet'
 
+// Optional: drag-to-reorder in the summary fields picker
+let Sortable: any = null
+let SortableItem: any = null
+try {
+  const dnd = require('react-native-reanimated-dnd')
+  Sortable = dnd.Sortable
+  SortableItem = dnd.SortableItem
+} catch {
+  /* react-native-reanimated-dnd not installed — checkbox-only fallback */
+}
+
 const AnimatedFlatList = Animated.createAnimatedComponent(FlatList)
 
 type Props = {
@@ -442,50 +453,194 @@ export const DocumentList: React.FC<Props> = ({
 
       {/* Summary fields picker bottom sheet */}
       {onSummaryFieldsChange && (
-        <BottomSheet visible={summaryPickerOpen} onClose={closeSummaryPicker} height={0.55}>
-          <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
-          <Text style={sfStyles.sheetHint}>Select fields to show on each card below the title.</Text>
+        <SummaryFieldsPicker
+          visible={summaryPickerOpen}
+          onClose={closeSummaryPicker}
+          fields={filterableFields}
+          summaryFields={summaryFields}
+          onSummaryFieldsChange={onSummaryFieldsChange}
+          collection={collection}
+        />
+      )}
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Summary Fields Picker — sortable list with drag handles
+// ---------------------------------------------------------------------------
+
+const SORTABLE_ITEM_HEIGHT = 54
+
+type SummaryFieldsPickerProps = {
+  visible: boolean
+  onClose: () => void
+  fields: ClientField[]
+  summaryFields: string[]
+  onSummaryFieldsChange: (fields: string[]) => void
+  collection: string
+}
+
+function SummaryFieldsPicker({
+  visible,
+  onClose,
+  fields,
+  summaryFields,
+  onSummaryFieldsChange,
+  collection,
+}: SummaryFieldsPickerProps) {
+  // Split fields into selected (in order) and unselected (schema order)
+  const displayableFields = fields.filter(
+    (f) =>
+      f.name &&
+      !['id', 'createdAt', 'updatedAt'].includes(f.name) &&
+      ['text', 'email', 'number', 'date', 'select', 'radio', 'checkbox', 'relationship', 'upload', 'textarea', 'richText', 'point', 'json'].includes(f.type),
+  )
+  const fieldMap = new Map(displayableFields.map((f) => [f.name!, f]))
+
+  // Selected items in their persisted order (for the sortable list)
+  const selectedItems = summaryFields
+    .filter((name) => fieldMap.has(name))
+    .map((name) => ({ id: name, field: fieldMap.get(name)! }))
+
+  // Unselected items (schema order)
+  const unselectedItems = displayableFields.filter(
+    (f) => f.name && !summaryFields.includes(f.name),
+  )
+
+  const handleToggle = (fieldName: string) => {
+    const isSelected = summaryFields.includes(fieldName)
+    const next = isSelected
+      ? summaryFields.filter((f) => f !== fieldName)
+      : [...summaryFields, fieldName]
+    onSummaryFieldsChange(next)
+  }
+
+  const handleMove = useCallback(
+    (_id: string, from: number, to: number) => {
+      onSummaryFieldsChange((prev: string[]) => {
+        const next = [...(typeof prev === 'object' ? prev : summaryFields)]
+        const [moved] = next.splice(from, 1)
+        next.splice(to, 0, moved)
+        return next
+      })
+    },
+    [onSummaryFieldsChange, summaryFields],
+  )
+
+  // Sortable render callback
+  const renderSortableItem = useCallback(
+    ({ item, ...props }: any) => (
+      <SortableItem
+        key={item.id}
+        id={item.id}
+        data={item}
+        onMove={handleMove}
+        {...props}
+      >
+        <View style={sfStyles.fieldRow}>
+          <SortableItem.Handle>
+            <View style={sfStyles.dragHandle}>
+              <Text style={sfStyles.dragIcon}>☰</Text>
+            </View>
+          </SortableItem.Handle>
+          <Pressable
+            style={sfStyles.fieldRowInner}
+            onPress={() => handleToggle(item.id)}
+          >
+            <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
+              <Text style={sfStyles.checkmark}>✓</Text>
+            </View>
+            <View style={sfStyles.fieldInfo}>
+              <Text style={sfStyles.fieldLabel}>{getFieldLabel(item.field)}</Text>
+              <Text style={sfStyles.fieldType}>{item.field.type}</Text>
+            </View>
+          </Pressable>
+        </View>
+      </SortableItem>
+    ),
+    [handleMove, handleToggle],
+  )
+
+  return (
+    <BottomSheet visible={visible} onClose={onClose} height={0.65}>
+      <Text style={sfStyles.sheetTitle}>Card Display Fields</Text>
+      <Text style={sfStyles.sheetHint}>
+        Select fields to show on each card. Drag ☰ to reorder.
+      </Text>
+
+      {/* Selected fields — draggable list */}
+      {selectedItems.length > 0 && Sortable && SortableItem ? (
+        <View style={sfStyles.sortableContainer}>
+          <Text style={sfStyles.sectionLabel}>ACTIVE — drag to reorder</Text>
+          <Sortable
+            data={selectedItems}
+            renderItem={renderSortableItem}
+            itemHeight={SORTABLE_ITEM_HEIGHT}
+            style={{ backgroundColor: 'transparent' }}
+          />
+        </View>
+      ) : selectedItems.length > 0 ? (
+        /* Fallback when react-native-reanimated-dnd not available */
+        <View>
+          <Text style={sfStyles.sectionLabel}>ACTIVE</Text>
+          {selectedItems.map((si) => (
+            <Pressable key={si.id} style={sfStyles.fieldRow} onPress={() => handleToggle(si.id)}>
+              <View style={sfStyles.dragHandle}>
+                <Text style={sfStyles.dragIcon}>☰</Text>
+              </View>
+              <View style={sfStyles.fieldRowInner}>
+                <View style={[sfStyles.checkbox, sfStyles.checkboxSelected]}>
+                  <Text style={sfStyles.checkmark}>✓</Text>
+                </View>
+                <View style={sfStyles.fieldInfo}>
+                  <Text style={sfStyles.fieldLabel}>{getFieldLabel(si.field)}</Text>
+                  <Text style={sfStyles.fieldType}>{si.field.type}</Text>
+                </View>
+              </View>
+            </Pressable>
+          ))}
+        </View>
+      ) : null}
+
+      {/* Unselected fields — simple list */}
+      {unselectedItems.length > 0 && (
+        <View style={sfStyles.unselectedSection}>
+          <Text style={sfStyles.sectionLabel}>AVAILABLE</Text>
           <FlatList
-            data={filterableFields.filter((f) =>
-              f.name && !['id', 'createdAt', 'updatedAt'].includes(f.name) &&
-              ['text', 'email', 'number', 'date', 'select', 'radio', 'checkbox', 'relationship', 'upload', 'textarea', 'richText', 'point', 'json'].includes(f.type),
-            )}
+            data={unselectedItems}
             keyExtractor={(item) => item.name!}
-            renderItem={({ item: field }) => {
-              const fieldName = field.name!
-              const isSelected = summaryFields.includes(fieldName)
-              return (
-                <Pressable
-                  style={sfStyles.fieldRow}
-                  onPress={() => {
-                    const next = isSelected
-                      ? summaryFields.filter((f) => f !== fieldName)
-                      : [...summaryFields, fieldName]
-                    onSummaryFieldsChange(next)
-                  }}
-                >
-                  <View style={[sfStyles.checkbox, isSelected && sfStyles.checkboxSelected]}>
-                    {isSelected && <Text style={sfStyles.checkmark}>✓</Text>}
+            renderItem={({ item: field }) => (
+              <Pressable
+                style={sfStyles.fieldRow}
+                onPress={() => handleToggle(field.name!)}
+              >
+                <View style={sfStyles.dragHandlePlaceholder} />
+                <View style={sfStyles.fieldRowInner}>
+                  <View style={sfStyles.checkbox}>
+                    <Text style={sfStyles.checkmarkEmpty} />
                   </View>
                   <View style={sfStyles.fieldInfo}>
                     <Text style={sfStyles.fieldLabel}>{getFieldLabel(field)}</Text>
                     <Text style={sfStyles.fieldType}>{field.type}</Text>
                   </View>
-                </Pressable>
-              )
-            }}
-            ListEmptyComponent={
-              <Text style={sfStyles.emptyText}>No displayable fields</Text>
-            }
+                </View>
+              </Pressable>
+            )}
           />
-          {summaryFields.length > 0 && (
-            <Pressable style={sfStyles.clearBtn} onPress={() => onSummaryFieldsChange([])}>
-              <Text style={sfStyles.clearText}>Clear all</Text>
-            </Pressable>
-          )}
-        </BottomSheet>
+        </View>
       )}
-    </View>
+
+      {displayableFields.length === 0 && (
+        <Text style={sfStyles.emptyText}>No displayable fields</Text>
+      )}
+
+      {summaryFields.length > 0 && (
+        <Pressable style={sfStyles.clearBtn} onPress={() => onSummaryFieldsChange([])}>
+          <Text style={sfStyles.clearText}>Clear all</Text>
+        </Pressable>
+      )}
+    </BottomSheet>
   )
 }
 
@@ -626,13 +781,52 @@ const styles = StyleSheet.create({
 const sfStyles = StyleSheet.create({
   sheetTitle: { fontSize: t.fontSize.lg, fontWeight: '700', color: t.colors.text, marginBottom: 4 },
   sheetHint: { fontSize: t.fontSize.sm, color: t.colors.textMuted, marginBottom: t.spacing.md },
+  sectionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: t.colors.textMuted,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase' as const,
+    marginTop: t.spacing.md,
+    marginBottom: t.spacing.xs,
+    paddingHorizontal: t.spacing.sm,
+  },
+  sortableContainer: {
+    // The Sortable component needs a known height for its internal ScrollView.
+    // We cap this and let the unselected list scroll separately below.
+    maxHeight: SORTABLE_ITEM_HEIGHT * 5 + 28, // 5 items + section label
+    overflow: 'hidden',
+  },
+  unselectedSection: {
+    flex: 1,
+    minHeight: 80,
+  },
   fieldRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: t.spacing.md,
+    height: SORTABLE_ITEM_HEIGHT,
     paddingHorizontal: t.spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: t.colors.separator,
+    backgroundColor: 'transparent',
+  },
+  fieldRowInner: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  dragHandle: {
+    width: 32,
+    height: SORTABLE_ITEM_HEIGHT,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  dragHandlePlaceholder: {
+    width: 32,
+  },
+  dragIcon: {
+    fontSize: 18,
+    color: t.colors.textMuted,
   },
   checkbox: {
     width: 22,
@@ -649,6 +843,7 @@ const sfStyles = StyleSheet.create({
     borderColor: t.colors.primary,
   },
   checkmark: { fontSize: 13, color: '#fff', fontWeight: '700' },
+  checkmarkEmpty: { fontSize: 13, color: 'transparent' },
   fieldInfo: { flex: 1 },
   fieldLabel: { fontSize: t.fontSize.md, color: t.colors.text, fontWeight: '500' },
   fieldType: { fontSize: t.fontSize.xs, color: t.colors.textMuted, marginTop: 1 },

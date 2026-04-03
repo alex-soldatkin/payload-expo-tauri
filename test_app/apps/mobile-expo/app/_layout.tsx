@@ -10,7 +10,7 @@
 import '../global.css'
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
-import { ActivityIndicator, Text, View } from 'react-native'
+import { ActivityIndicator, Text, View, useWindowDimensions } from 'react-native'
 import { Slot, useRouter, useSegments } from 'expo-router'
 import * as SecureStore from 'expo-secure-store'
 import * as Notifications from 'expo-notifications'
@@ -169,6 +169,10 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  // Explicit window dimensions force native re-layout on iPad window resize
+  // (flex: 1 alone doesn't reliably propagate size changes from the native root)
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+
   const [initialToken, setInitialToken] = useState<string | null>(null)
   const [baseURL, setBaseURL] = useState<string>(DEFAULT_BASE_URL)
   const [ready, setReady] = useState(false)
@@ -201,7 +205,7 @@ export default function RootLayout() {
   }, [])
 
   return (
-    <GestureHandlerRootView style={{ flex: 1 }}>
+    <GestureHandlerRootView style={{ flex: 1, width: windowWidth, height: windowHeight }}>
       <SafeAreaProvider>
         {!ready ? (
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: '#f6f4f1' }}>

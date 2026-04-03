@@ -37,8 +37,9 @@ type Props = {
 /**
  * Bottom sheet using transparent Modal + Animated slide-up.
  *
- * Uses `transparent` mode (not `pageSheet`) so native ScrollablePreview
- * (UIContextMenuInteraction) works correctly inside the sheet.
+ * The drag handle at the top captures touches in the capture phase
+ * so the PanResponder always works there regardless of child views.
+ * Content area scroll takes priority (FlatList, ScrollView, etc.).
  */
 export const BottomSheet: React.FC<Props> = ({
   visible,
@@ -51,26 +52,31 @@ export const BottomSheet: React.FC<Props> = ({
   const sheetHeight = screenHeight * height
 
   useEffect(() => {
-    console.log('[BOTTOMSHEET] visible changed:', visible, 'screenHeight:', screenHeight)
     if (visible) {
       Animated.spring(translateY, {
         toValue: 0,
         useNativeDriver: true,
-        damping: 20,
-        stiffness: 150,
+        damping: 22,
+        stiffness: 220,
+        mass: 0.9,
       }).start()
     } else {
-      Animated.timing(translateY, {
+      Animated.spring(translateY, {
         toValue: screenHeight,
-        duration: 200,
         useNativeDriver: true,
+        damping: 24,
+        stiffness: 280,
+        mass: 0.9,
       }).start()
     }
   }, [visible, translateY, screenHeight])
 
-  const panResponder = useRef(
+  // Handle-area PanResponder — captures in the capture phase so
+  // it always works regardless of BlurView or other overlapping children.
+  const handlePan = useRef(
     PanResponder.create({
-      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 5,
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gs) => Math.abs(gs.dy) > 4,
       onPanResponderMove: (_, gs) => {
         if (gs.dy > 0) translateY.setValue(gs.dy)
       },
@@ -81,8 +87,9 @@ export const BottomSheet: React.FC<Props> = ({
           Animated.spring(translateY, {
             toValue: 0,
             useNativeDriver: true,
-            damping: 20,
-            stiffness: 150,
+            damping: 22,
+            stiffness: 220,
+            mass: 0.9,
           }).start()
         }
       },
@@ -101,7 +108,6 @@ export const BottomSheet: React.FC<Props> = ({
       </Pressable>
       <Animated.View
         style={[styles.sheet, { height: sheetHeight, transform: [{ translateY }] }]}
-        {...panResponder.panHandlers}
       >
         {BlurView && Platform.OS === 'ios' ? (
           <BlurView
@@ -112,9 +118,10 @@ export const BottomSheet: React.FC<Props> = ({
         ) : (
           <View style={[StyleSheet.absoluteFill, styles.sheetFallbackBg]} />
         )}
-        <View style={styles.handleRow}>
+        {/* Drag handle — dedicated PanResponder so it always captures */}
+        <Animated.View style={styles.handleRow} {...handlePan.panHandlers}>
           <View style={styles.handleBar} />
-        </View>
+        </Animated.View>
         <View style={styles.content}>
           <PreviewContextProvider value={true}>
             {children}
@@ -148,7 +155,11 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
   },
-  handleRow: { alignItems: 'center', paddingVertical: 10 },
+  handleRow: {
+    alignItems: 'center',
+    paddingTop: 10,
+    paddingBottom: 14,
+  },
   handleBar: { width: 36, height: 5, borderRadius: 3, backgroundColor: 'rgba(0,0,0,0.18)' },
   content: { flex: 1, paddingHorizontal: 16, paddingBottom: 16 },
 })

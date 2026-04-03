@@ -89,6 +89,18 @@ iPad responsive layout (2026-04-03)
 - `_layout.tsx` switches between sidebar and bottom tab bar based on `showSidebar`
 - Screen files use inline styles instead of NativeWind className for reliable iPad layout (padding, flexGrow)
 - Sidebar is 280px wide, shows grouped and ungrouped collections + globals + account
+- iPad window resize: explicit `width`/`height` from `useWindowDimensions()` on root `GestureHandlerRootView` and admin layout container to force native re-layout
+- Table view: tablet document list renders horizontal table rows (matching Payload web admin) with draggable header columns
+- Cards use flex-percentage grid (`flexBasis: '46%'` / `'30%'`) that naturally resizes with container
+
+Drag-to-reorder summary fields (2026-04-03)
+- Installed `react-native-reanimated-dnd` v2.0.0 + `react-native-worklets` v0.8.1
+- Summary fields picker (Card Display Fields bottom sheet) now shows ACTIVE fields in a `Sortable` vertical list with drag handles
+- AVAILABLE (unselected) fields shown below in a plain FlatList — tap to add, tap to remove
+- Drag handle (`SortableItem.Handle`) restricts drag to the ☰ icon area — checkboxes and labels remain tappable
+- Table header columns on tablet are horizontally draggable via `Sortable` with `SortableDirection.Horizontal`
+- Reordering header columns reorders the `summaryFields` array (persisted to AsyncStorage), updating both header and data rows
+- Graceful fallback: `react-native-reanimated-dnd` is optional-required (`try/catch`); without it, picker renders checkbox-only FlatList
 
 Relationship picker inline preview (2026-04-03)
 - Long-press on a picker row in the BottomSheet shows an inline DocumentForm preview (pure React, no native context menu)

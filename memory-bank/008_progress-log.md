@@ -298,6 +298,16 @@ This log captures what has been implemented so far and the current state of the 
   - `ScrollablePreviewView.swift`: NSLog for tap, preview open, action press, dismiss lifecycle
   - `pickers.tsx`: console.log for canPreview state
 
+### Phase 9b — iPad responsiveness + drag-to-reorder (2026-04-03)
+- **iPad window resize fix**: Added explicit `width`/`height` from `useWindowDimensions()` on root `GestureHandlerRootView` and admin layout container. `flex: 1` alone doesn't propagate iPad window size changes (Split View, Stage Manager) — explicit dimensions force native re-layout.
+- **Grid cards**: Switched from pixel-width cells to flex-percentage grid (`flexBasis: '46%'`/`'30%'` + `flexGrow`) so cards resize naturally with container width.
+- **Account screen centering**: Moved from `contentContainerStyle.alignItems: 'center'` to `alignSelf: 'center'` on inner View for reliable centering.
+- **Sidebar icon alignment**: Changed `SidebarNavItem` Pressable from function-style `style` prop to explicit `<View>` wrapper for reliable `flexDirection: 'row'` layout.
+- **Table view on tablet**: Document list renders horizontal table rows (matching Payload web admin) when `showSidebar` is true. Columns: title, summary fields (120px each), status pill, date, chevron.
+- **Drag-to-reorder in summary fields picker**: Installed `react-native-reanimated-dnd` v2.0.0 + `react-native-worklets` v0.8.1. Summary fields picker (Card Display Fields) now shows ACTIVE fields in a `Sortable` vertical list with `SortableItem.Handle` drag handles, and AVAILABLE fields in a plain FlatList.
+- **Draggable table header columns**: Tablet table header's summary field columns are a horizontal `Sortable`. Reordering persists through `summaryFields` state + AsyncStorage.
+- **Graceful fallback**: `react-native-reanimated-dnd` is optional-required in DocumentList.tsx (`try/catch`); without it, the picker renders a checkbox-only FlatList identical to the previous implementation.
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.

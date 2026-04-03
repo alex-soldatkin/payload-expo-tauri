@@ -344,7 +344,6 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
   const relSchemaMap = schema?.collections?.[relationTo]
   const DocumentForm = getDocumentForm()
   const canPreview = !!(relSchemaMap && DocumentForm)
-  console.log('[REL-PICKER] canPreview:', canPreview, 'relSchemaMap:', !!relSchemaMap, 'DocumentForm:', !!DocumentForm)
   const previewW = Math.round(windowWidth * 0.92)
   const previewH = Math.round(windowHeight * 0.6)
 
@@ -363,28 +362,34 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
         <Text style={styles.chevron}>›</Text>
       </Pressable>
 
-      <BottomSheet visible={open} onClose={() => { setPreviewItem(null); setOpen(false) }} height={previewItem ? 0.75 : 0.6}>
+      <BottomSheet visible={open} onClose={() => { setPreviewItem(null); setOpen(false) }} height={0.75}>
         {previewItem ? (
           /* ── Inline preview (replaces list while peeking) ── */
-          <>
+          <View style={{ flex: 1 }}>
             <View style={previewStyles.header}>
               <Text style={styles.sheetTitle} numberOfLines={1}>
                 {docDisplayTitle(previewItem, useAsTitle)}
               </Text>
             </View>
-            <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 16 }}>
-              {DocumentForm && relSchemaMap ? (
-                <PreviewContextProvider value={true}>
-                  <DocumentForm
-                    schemaMap={relSchemaMap}
-                    slug={relationTo}
-                    initialData={previewItem}
-                    onSubmit={noopSubmit}
-                    disabled
-                  />
-                </PreviewContextProvider>
-              ) : null}
-            </ScrollView>
+            <View style={{ flex: 1, overflow: 'hidden' }}>
+              <ScrollView
+                bounces
+                showsVerticalScrollIndicator
+                contentContainerStyle={{ paddingBottom: 16 }}
+              >
+                {DocumentForm && relSchemaMap ? (
+                  <PreviewContextProvider value={true}>
+                    <DocumentForm
+                      schemaMap={relSchemaMap}
+                      slug={relationTo}
+                      initialData={previewItem}
+                      onSubmit={noopSubmit}
+                      disabled
+                    />
+                  </PreviewContextProvider>
+                ) : null}
+              </ScrollView>
+            </View>
             <View style={previewStyles.actions}>
               <Pressable
                 style={previewStyles.selectBtn}
@@ -402,7 +407,7 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
                 <Text style={previewStyles.closeText}>Back</Text>
               </Pressable>
             </View>
-          </>
+          </View>
         ) : (
           /* ── Normal picker list ── */
           <>

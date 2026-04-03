@@ -13,7 +13,7 @@
  *   - Frosted-glass background (same as phone tab bar)
  */
 import React from 'react'
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 import { Tabs, useRouter, usePathname } from 'expo-router'
 import { Home, LayoutList, Globe, User } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
@@ -197,13 +197,14 @@ function CollectionsTabItem({
 
 function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets()
+  const { width: barWidth } = useWindowDimensions()
   const menuModel = useMenuModel()
   const globalsCount =
     menuModel?.globals.filter((g) => !g.hidden).length ?? 0
 
   return (
     <View
-      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8) }]}
+      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8), width: barWidth }]}
     >
       {/* Background – translucent blur or frosted fallback */}
       {BlurView ? (
@@ -302,19 +303,22 @@ function SidebarNavItem({
 }) {
   const color = isActive ? ACTIVE_COLOR : '#1f1f1f'
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        sidebarStyles.item,
-        isActive && sidebarStyles.itemActive,
-        indent && sidebarStyles.itemIndented,
-        pressed && !isActive && sidebarStyles.itemPressed,
-      ]}
-    >
-      {customIcon ?? (Icon ? <Icon size={20} color={color} /> : null)}
-      <Text style={[sidebarStyles.itemLabel, { color }]} numberOfLines={1}>
-        {label}
-      </Text>
+    <Pressable onPress={onPress}>
+      {({ pressed }) => (
+        <View
+          style={[
+            sidebarStyles.item,
+            isActive && sidebarStyles.itemActive,
+            indent && sidebarStyles.itemIndented,
+            pressed && !isActive && sidebarStyles.itemPressed,
+          ]}
+        >
+          {customIcon ?? (Icon ? <Icon size={20} color={color} /> : null)}
+          <Text style={[sidebarStyles.itemLabel, { color }]} numberOfLines={1}>
+            {label}
+          </Text>
+        </View>
+      )}
     </Pressable>
   )
 }
@@ -499,13 +503,18 @@ function Sidebar() {
 // ===========================================================================
 
 export default function AdminLayout() {
-  const { showSidebar } = useResponsive()
+  const { showSidebar, width: windowWidth, height: windowHeight } = useResponsive()
   const menuModel = useMenuModel()
   const globalsCount =
     menuModel?.globals.filter((g) => !g.hidden).length ?? 0
 
   return (
-    <View style={[layoutStyles.root, showSidebar && layoutStyles.rootTablet]}>
+    <View style={[
+      layoutStyles.root,
+      showSidebar && layoutStyles.rootTablet,
+      // Explicit dimensions force native re-layout on iPad window resize
+      { width: windowWidth, height: windowHeight },
+    ]}>
       {showSidebar && <Sidebar />}
       <View style={layoutStyles.content}>
         <Tabs

@@ -30,7 +30,7 @@ export default function DashboardScreen() {
   const { refreshSchema, isSchemaLoading, schemaError } = usePayloadNative()
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
-  const { columns, isTablet } = useResponsive()
+  const { columns } = useResponsive()
 
   const visibleCollections = menuModel?.collections.filter((c) => !c.hidden) ?? []
   const visibleGlobals = menuModel?.globals.filter((g) => !g.hidden) ?? []
@@ -43,12 +43,14 @@ export default function DashboardScreen() {
     collections: visibleCollections.filter((c) => c.group === group),
   }))
 
-  // Grid helpers – on phone (columns === 1), styles are undefined → normal stacking
+  // Grid helpers – percentage-based flex so cells naturally resize with the container
   const gridRow = columns > 1
-    ? { flexDirection: 'row' as const, flexWrap: 'wrap' as const, margin: -(GRID_GAP / 2) }
+    ? { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: GRID_GAP }
     : undefined
   const gridCell = columns > 1
-    ? { width: `${100 / columns}%` as any, padding: GRID_GAP / 2 }
+    ? columns >= 3
+      ? { flexGrow: 1, flexShrink: 0, flexBasis: '30%' as const, maxWidth: '33.33%' as const }
+      : { flexGrow: 1, flexShrink: 0, flexBasis: '46%' as const }
     : undefined
 
   return (
