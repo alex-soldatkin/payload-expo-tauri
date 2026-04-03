@@ -313,7 +313,38 @@ This log captures what has been implemented so far and the current state of the 
   - **Duplicate key fix**: Summary card grid uses field **name** as React key, not label (two fields can share label "Status").
 - **Graceful fallback**: `react-native-reanimated-dnd` is optional-required in DocumentList.tsx (`try/catch`); without it, the picker renders a checkbox-only list.
 
+### Phase 9c — Native iOS liquid glass UI + form nativization (2026-04-03)
+
+**Stack.Toolbar (native header buttons):**
+- `collections/[slug]/index.tsx` — Settings (`gearshape`), Filter (`line.3.horizontal.decrease`), Create (`plus`) as `Stack.Toolbar.Button` SF Symbols. Replaces JS-animated `HeaderIconButton`.
+- `collections/[slug]/[id].tsx` — `Stack.Toolbar.Menu` (`ellipsis.circle`) with native menu actions (Versions, Publish, Unpublish) + Save (`square.and.arrow.down`). Replaces `DocumentActionsMenu` + Pressable on iOS.
+- Android keeps `headerRight` with Pressables + lucide icons as fallback.
+
+**GlassView containers (iOS 26+):**
+- `_layout.tsx` sidebar: `SidebarNavItem` wraps in `GlassView isInteractive`. Active = blue `tintColor`.
+- `index.tsx` dashboard: `CollectionCard` uses `GlassView isInteractive glassEffectStyle="regular"`.
+- `account.tsx`: All cards + action buttons use GlassView. Action buttons have `isInteractive`.
+- `login.tsx`: Sign In button uses `GlassView isInteractive` with dark tint.
+- `structural.tsx`: Groups, collapsibles, array rows, block rows, add buttons all use GlassView containers.
+- `DocumentForm.tsx`: Sidebar "Details" section uses GlassView.
+
+**Native form fields:**
+- `inputs.tsx`: Removed bordered input boxes. Now borderless with hairline bottom separator (iOS Settings style).
+- `FieldShell.tsx`: Labels are small, uppercase, muted — iOS form section style.
+- `structural.tsx` tabs: Uses native `Picker` with `pickerStyle('segmented')` + `glassEffect({ glass: { variant: 'regular', interactive: true } })`. `TabDepthContext` tracks nesting depth. All tab depths use segmented style.
+
+**@expo/ui modifier functions:**
+- **Critical fix**: Modifiers MUST use factory functions (`nativeComponents.pickerStyle!('segmented')`, `nativeComponents.tag!(String(i))`), NOT object literals (`{ pickerStyle: 'segmented' }`). Object literals are missing `$type` and get silently ignored by the native bridge. This was the root cause of tabs rendering as dropdown pickers instead of segmented controls.
+- Added `glassEffect` to native component registry (`native.ios.ts`, `types.ts`).
+
+**NativeHost changes:**
+- `matchContents={false}` added as option — omits the prop from Host so it stretches to fill RN parent. May help touch hit-testing for interactive controls.
+
+### 🚨 Known bug: Native Picker onSelectionChange not firing
+The native segmented Picker renders correctly and shows glass interactive feedback on press, but `onSelectionChange` callback does not fire. Tapping segments doesn't change the selection. Affects both tab pickers and regular select/radio pickers. The `PillTabBar` (React Native fallback) works correctly as interim. See `013_ui-patterns.md` for full investigation notes and next steps.
+
 ## Current known gaps
+- **Native Picker selection broken** — see above. `glassEffect` interactive must be maintained.
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.
 - Pre-existing TS errors in admin-native (React 19 `key`/`ref` prop changes, `expo-router` resolution from workspace) and admin-schema (Payload type mismatches) — cosmetic, do not affect runtime.

@@ -724,6 +724,148 @@ const handleDrop = useCallback(
 
 ---
 
+## Native iOS Liquid Glass UI (2026-04-03)
+
+### Stack.Toolbar — Native header buttons
+Collection list and document edit headers use `Stack.Toolbar` (expo-router) instead of JS `Pressable` + lucide icons on iOS. Renders as native UIKit toolbar items with SF Symbols and system liquid glass animations.
+
+```tsx
+// Page component (not layout) — place as sibling of Stack.Screen
+<Stack.Toolbar placement="right">
+  <Stack.Toolbar.Button icon="gearshape" onPress={...} />
+  <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions">
+    <Stack.Toolbar.MenuAction icon="clock.arrow.circlepath" onPress={...}>Versions</Stack.Toolbar.MenuAction>
+    <Stack.Toolbar.MenuAction icon="arrow.down.doc" onPress={...}>Unpublish</Stack.Toolbar.MenuAction>
+  </Stack.Toolbar.Menu>
+</Stack.Toolbar>
+```
+
+- `Stack.Toolbar` is iOS-only (`@platform ios`). Android uses `headerRight` with Pressables.
+- Button `icon` accepts SF Symbol names as strings.
+- Must be a direct child of `Stack.Screen` (in layout) or top-level in page component.
+
+### GlassView — Liquid glass containers (iOS 26+)
+Used for sidebar nav items, dashboard cards, account cards, login button, form structural fields (groups, collapsibles, array rows, blocks).
+
+```tsx
+import { GlassView, isLiquidGlassAvailable } from 'expo-glass-effect'
+const liquidGlass = isLiquidGlassAvailable()  // synchronous, cached
+
+// Interactive (press/hover feedback):
+<GlassView style={{ borderRadius: 16, padding: 16 }} isInteractive glassEffectStyle="regular">
+  {children}
+</GlassView>
+
+// Static (decorative glass only):
+<GlassView style={{ borderRadius: 16, padding: 16 }} glassEffectStyle="regular">
+  {children}
+</GlassView>
+```
+
+- `isLiquidGlassAvailable()` returns false on iOS < 26 and all non-iOS. Always guard with fallback.
+- `isInteractive` enables native press/hover states — use on buttons, nav items, tappable cards.
+- `glassEffectStyle="regular"` is the standard frosted glass. No `tintColor` needed for most uses.
+- Active nav items can use `tintColor="rgba(0,122,255,0.15)"` for blue tint.
+
+### @expo/ui SwiftUI modifiers — `glassEffect` for interactive controls
+
+The `glassEffect` modifier is available in the native component registry (`nativeComponents.glassEffect`) and MUST be applied to all native SwiftUI controls (Picker, Toggle, etc.) for proper interaction on iOS 26:
+
+```tsx
+modifiers={[
+  nativeComponents.pickerStyle!('segmented'),
+  nativeComponents.glassEffect!({ glass: { variant: 'regular', interactive: true } }),
+]}
+```
+
+### @expo/ui Modifier functions — MUST use function calls, not object literals
+
+**CRITICAL**: SwiftUI modifiers MUST be created via factory functions, not plain objects. The functions set an internal `$type` discriminator that the native bridge requires. Without it, the modifier is silently ignored.
+
+```tsx
+// ✅ CORRECT — function calls from nativeComponents registry
+modifiers={[nativeComponents.pickerStyle!('segmented')]}
+modifiers={[nativeComponents.tag!(String(i))]}
+
+// ❌ WRONG — object literals (missing $type, silently ignored)
+modifiers={[{ pickerStyle: 'segmented' }]}
+modifiers={[{ tag: i }]}
+```
+
+This was the root cause of tabs rendering as dropdown/wheel pickers instead of segmented controls.
+
+### NativeHost — `matchContents` affects touch hit-testing
+
+`NativeHost` wraps `@expo/ui` `Host` for SwiftUI components. The `matchContents` prop controls how the SwiftUI view is sized relative to its React Native parent:
+
+- `matchContents={true}` (default) — size to content. Good for inline Toggle, small controls.
+- `matchContents={{ width: false, height: true }}` — stretch width, match height. For pickers.
+- `matchContents={false}` — stretch to fill RN parent entirely. **Use this for interactive controls** where touch area must match the visual frame exactly.
+
+When `matchContents` is true, the Host creates an intermediate layout measurement pass that can cause touch targets to misalign with the visible SwiftUI frame.
+
+### Native segmented picker for Payload Tabs
+
+Payload `tabs` fields render as native `UISegmentedControl` via `@expo/ui` `Picker` with `pickerStyle('segmented')`:
+
+- Uses `TabDepthContext` for nesting awareness (depth 0, 1, 2...)
+- All depths use the native segmented picker when available (threshold: ≤6 tabs)
+- Falls back to a pill-style bar (React Native) that mimics the segmented look
+- `TabContent` wraps children in `TabDepthContext.Provider` with `depth + 1`
+- Only the active tab's content renders (inactive tabs unmount entirely)
+- Keys include parent tab name to avoid collisions: `${activeTab.name}-${sub.name}`
+- Tags and selection use `String()` types for consistent JS↔native bridge matching
+
+### 🚨 KNOWN BUG: Native Picker selection not working (2026-04-03)
+
+**Status: UNRESOLVED.** The native segmented Picker renders correctly and shows `glassEffect` interactive visual feedback on press, but `onSelectionChange` does not fire — tapping a segment does not change the selection.
+
+**What works:**
+- Picker renders as segmented control visually ✅
+- `glassEffect({ glass: { variant: 'regular', interactive: true } })` shows press state ✅
+- `pickerStyle('segmented')` renders correct style (not dropdown) ✅
+
+**What doesn't work:**
+- Tapping a segment does not trigger `onSelectionChange` ❌
+- Both tab picker and regular select/radio pickers affected ❌
+
+**Attempted fixes:**
+1. Changed modifiers from object literals to function calls — fixed visual rendering but not selection
+2. Changed `selection`/`tag` to consistent `String()` types — no effect on selection
+3. Changed `NativeHost matchContents` from `true`/`{ width: false, height: true }` to `false` — no effect on selection
+4. Applied `glassEffect({ glass: { variant: 'regular', interactive: true } })` — added visual feedback but did not fix selection
+
+**Requirements for the fix:**
+- `glassEffect` with `interactive: true` MUST be maintained — all liquid glass UI elements need it
+- Native `@expo/ui` components must be used (not JS fallbacks) — the goal is native iOS feel
+- The `PillTabBar` (React Native fallback) works correctly — it can be used as interim until the native picker is fixed
+
+**Likely root cause candidates:**
+- `Host` wrapping may intercept or transform touch events before they reach the SwiftUI `Picker`
+- The `expo-glass-effect` `GlassView` containers wrapping the form content may create a gesture conflict
+- The `@expo/ui` canary version (55.0.0-canary-20260128) may have a bug in `Picker` `onSelectionChange` when used with `pickerStyle('segmented')` + `glassEffect`
+- The `GestureHandlerRootView` at the app root may conflict with SwiftUI gesture recognizers
+
+**To investigate next:**
+- Test a minimal `Picker` with `pickerStyle('segmented')` outside of DocumentForm (e.g. directly in a screen) to isolate whether the form hierarchy causes the issue
+- Test without `glassEffect` modifier to determine if it's the glass effect consuming touches
+- Check if the `Animated.ScrollView` (DocumentForm) parent interferes with SwiftUI touch delivery
+- Check expo-ui GitHub issues for known `Picker` + `segmented` + `glassEffect` interactions
+
+### iOS form field styling
+
+Input fields (`inputs.tsx`) use iOS-native form style:
+- No bordered boxes — only `borderBottomWidth: StyleSheet.hairlineWidth` separator
+- Transparent background, flush with form container
+- Textarea and code fields keep a light border (multi-line editing needs visible bounds)
+
+Field labels (`FieldShell.tsx`) use iOS Settings style:
+- Small, uppercase, muted color, tight `letterSpacing: 0.3`
+- `marginBottom: 2` between label and input (tight coupling)
+- `marginBottom: md` (12px) between fields
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink

@@ -104,6 +104,18 @@ Drag-to-reorder summary fields (2026-04-03)
 - `_status` excluded from table summary columns when `hasDrafts` is true (already shown as dedicated status pill column)
 - Graceful fallback: `react-native-reanimated-dnd` is optional-required (`try/catch`); without it, picker renders checkbox-only list
 
+Native iOS liquid glass UI (2026-04-03)
+- Header buttons use `Stack.Toolbar` (expo-router) with SF Symbol icons — native UIKit toolbar items with system liquid glass
+- Sidebar nav items, dashboard cards, account cards, login button all use `GlassView isInteractive` from `expo-glass-effect` on iOS 26+
+- Form structural fields (groups, collapsibles, arrays, blocks) use GlassView containers
+- Input fields use borderless iOS Settings style (hairline bottom separator, transparent bg)
+- Field labels are small, uppercase, muted — iOS form section style
+- Tabs use native `Picker` with `pickerStyle('segmented')` + `glassEffect` interactive — renders as `UISegmentedControl`
+- `TabDepthContext` tracks nesting: nested tabs also use segmented control style
+- **Critical**: SwiftUI modifiers MUST use factory functions from `nativeComponents` registry, NOT object literals. Object literals are silently ignored (missing `$type`).
+- **Critical**: `nativeComponents.glassEffect!({ glass: { variant: 'regular', interactive: true } })` MUST be applied to all native SwiftUI interactive controls
+- 🚨 **UNRESOLVED**: Native `Picker` `onSelectionChange` does not fire despite correct rendering + glass interactive visual feedback. Root cause under investigation. PillTabBar (RN fallback) works as interim. See `013_ui-patterns.md` for full notes.
+
 Relationship picker inline preview (2026-04-03)
 - Long-press on a picker row in the BottomSheet shows an inline DocumentForm preview (pure React, no native context menu)
 - "Select" picks the item, "Back" returns to the list
