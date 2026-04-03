@@ -1,11 +1,11 @@
 /**
  * Account screen – shows the authenticated user info, sync status,
- * and provides logout.
+ * live sync progress, and provides reset/logout actions.
  *
  * On tablet, content is constrained to a comfortable reading width.
  */
-import React from 'react'
-import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native'
+import React, { useEffect, useRef } from 'react'
+import { Alert, Animated, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 
 // Optional: GlassView for liquid glass cards on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -28,6 +28,70 @@ import {
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalDBStatus, usePendingUploads } from '@payload-universal/local-db'
 import { useResponsive } from '@/hooks/useResponsive'
+
+// ---------------------------------------------------------------------------
+// Animated progress bar
+// ---------------------------------------------------------------------------
+
+const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: string | null }> = ({
+  percent,
+  syncing,
+  current,
+}) => {
+  const widthAnim = useRef(new Animated.Value(0)).current
+
+  useEffect(() => {
+    Animated.timing(widthAnim, {
+      toValue: percent,
+      duration: 300,
+      useNativeDriver: false,
+    }).start()
+  }, [percent, widthAnim])
+
+  if (!syncing && percent >= 100) return null
+
+  return (
+    <View style={{ marginTop: 12 }}>
+      {/* Track */}
+      <View
+        style={{
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: 'rgba(0,0,0,0.06)',
+          overflow: 'hidden',
+        }}
+      >
+        {/* Fill */}
+        <Animated.View
+          style={{
+            height: '100%',
+            borderRadius: 3,
+            backgroundColor: syncing ? '#007AFF' : '#34C759',
+            width: widthAnim.interpolate({
+              inputRange: [0, 100],
+              outputRange: ['0%', '100%'],
+              extrapolate: 'clamp',
+            }),
+          }}
+        />
+      </View>
+
+      {/* Label */}
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
+        <Text style={{ fontSize: 11, color: '#888' }}>
+          {current ? `Syncing ${current}...` : syncing ? 'Starting sync...' : 'Sync complete'}
+        </Text>
+        <Text style={{ fontSize: 11, fontVariant: ['tabular-nums'], color: '#888' }}>
+          {percent}%
+        </Text>
+      </View>
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Main screen
+// ---------------------------------------------------------------------------
 
 export default function AccountScreen() {
   const { user, logout } = useAuth()
@@ -53,6 +117,27 @@ export default function AccountScreen() {
     ])
   }
 
+  const handleResetDB = () => {
+    Alert.alert(
+      'Delete Local Data',
+      'This will delete all locally cached data and re-sync everything from the server. Your data on the server is not affected.\n\nAny unsynced local changes will be lost.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete & Re-sync',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await dbStatus.resetAndResync()
+            } catch {
+              Alert.alert('Error', 'Failed to reset the local database. Please restart the app.')
+            }
+          },
+        },
+      ],
+    )
+  }
+
   // Card wrapper: GlassView on iOS 26+, plain View otherwise
   const Card = ({ children, style }: { children: React.ReactNode; style?: any }) =>
     liquidGlassAvailable && GlassView ? (
@@ -69,7 +154,17 @@ export default function AccountScreen() {
     )
 
   // Action button: GlassView interactive on iOS 26+, plain Pressable otherwise
-  const ActionButton = ({ children, onPress, disabled, style }: { children: React.ReactNode; onPress: () => void; disabled?: boolean; style?: any }) =>
+  const ActionButton = ({
+    children,
+    onPress,
+    disabled,
+    style,
+  }: {
+    children: React.ReactNode
+    onPress: () => void
+    disabled?: boolean
+    style?: any
+  }) =>
     liquidGlassAvailable && GlassView ? (
       <Pressable onPress={onPress} disabled={disabled} style={disabled ? { opacity: 0.5 } : undefined}>
         <GlassView
@@ -90,6 +185,9 @@ export default function AccountScreen() {
         {children}
       </Pressable>
     )
+
+  const isSyncing = dbStatus.syncStatus === 'syncing'
+  const progress = dbStatus.syncProgress
 
   return (
     <ScrollView
@@ -113,7 +211,7 @@ export default function AccountScreen() {
           )}
         </Card>
 
-        {/* Sync Status */}
+        {/* Sync Status + Progress */}
         <Card style={{ marginTop: 16 }}>
           <SyncStatusSection
             pendingUploads={uploads.items}
@@ -123,9 +221,23 @@ export default function AccountScreen() {
             onRemoveUpload={(id) => uploads.remove(id)}
             onClearCompleted={() => uploads.clearCompleted()}
           />
-          {dbStatus.isReady && (
+
+          {/* Live sync progress bar */}
+          <SyncProgressBar
+            percent={progress.percent}
+            syncing={isSyncing}
+            current={progress.current}
+          />
+
+          {/* DB status line */}
+          {dbStatus.isReady && !isSyncing && (
             <Text className="mt-2 text-xs text-ink-muted">
-              Local database: ready · {Object.keys(schema?.collections ?? {}).length} collections synced
+              Local database: ready · {progress.completed}/{progress.total} collections synced
+            </Text>
+          )}
+          {dbStatus.isResetting && (
+            <Text className="mt-2 text-xs text-ink-muted">
+              Deleting local data...
             </Text>
           )}
           {dbStatus.error && (
@@ -169,6 +281,22 @@ export default function AccountScreen() {
           <ActionButton onPress={refreshSchema} disabled={isSchemaLoading}>
             <Text className="text-base text-ink">
               {isSchemaLoading ? 'Refreshing...' : 'Refresh Schema'}
+            </Text>
+          </ActionButton>
+
+          <ActionButton
+            onPress={handleResetDB}
+            disabled={dbStatus.isResetting || isSyncing}
+          >
+            <Text className="text-base text-ink">
+              {dbStatus.isResetting
+                ? 'Resetting...'
+                : isSyncing
+                  ? 'Syncing...'
+                  : 'Delete Local Data & Re-sync'}
+            </Text>
+            <Text style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+              Removes cached data and pulls fresh from server
             </Text>
           </ActionButton>
 

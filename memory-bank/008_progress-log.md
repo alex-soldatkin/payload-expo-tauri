@@ -468,7 +468,24 @@ This log captures what has been implemented so far and the current state of the 
 
 **Dependencies**: `react-native-enriched >=0.5.0` added as optional peer dependency (New Architecture/Fabric only, requires dev client build)
 
-### Phase 13 — Codebase modularization (2026-04-03)
+### Phase 13 — Local DB reset & live sync progress (2026-04-03)
+
+**Delete local DB & re-sync without app restart:**
+- `resetLocalDB(storage)` in `database.ts` — destroys running instance, calls `removeRxDatabase()` to wipe persisted SQLite, resets singleton
+- `resetAndResync()` exposed via `LocalDBProvider` context — tears down DB, wipes storage, resets all state, bumps `initVersion` to re-trigger the init effect automatically
+- `useLocalDBStatus()` now returns `resetAndResync` function and `isResetting` flag
+- Account screen "Delete Local Data & Re-sync" button with destructive confirmation alert
+- Button disabled during active sync or reset
+
+**Live sync progress (0-100%):**
+- `SyncProgress` type extended with `percent: number` (0-100)
+- Percentage calculated as `Math.round((completedCollections / totalCollections) * 100)`
+- `SyncProgressBar` animated component on account screen: blue animated fill bar + "Syncing {current}..." label + percentage counter
+- Disappears when sync completes (percent >= 100 and not syncing)
+- `fontVariant: ['tabular-nums']` for non-jittering percentage display
+- DB status line shows "{completed}/{total} collections synced" when idle
+
+### Phase 14 — Codebase modularization (2026-04-03)
 
 **admin-native/src/ reorganization** (highest impact — 13 files moved):
 - `hooks/` — `useDocumentListFilters.ts`, `usePayloadForm.ts`

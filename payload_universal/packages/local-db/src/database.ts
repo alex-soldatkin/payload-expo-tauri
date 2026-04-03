@@ -260,3 +260,28 @@ export const createLocalDB = async ({
   _existingDB = instance
   return instance
 }
+
+/**
+ * Completely wipe the local database and reset the singleton.
+ *
+ * After this call the LocalDBProvider can re-init a fresh database
+ * that re-syncs everything from the server.
+ *
+ * @param storage - The same RxDB storage that was used to create the DB.
+ *                  Required so `removeRxDatabase` can locate persisted data.
+ */
+export const resetLocalDB = async (storage?: any): Promise<void> => {
+  // 1. Destroy the running instance (stops replications, upload queue, WS)
+  if (_existingDB) {
+    try { await _existingDB.destroy() } catch { /* already closed */ }
+    _existingDB = null
+  }
+
+  // 2. Physically remove the persisted SQLite database
+  const resolvedStorage = storage ?? getRxStorageMemory()
+  try {
+    await removeRxDatabase('payload_local', resolvedStorage)
+  } catch {
+    /* May fail if the DB was already removed — safe to ignore */
+  }
+}

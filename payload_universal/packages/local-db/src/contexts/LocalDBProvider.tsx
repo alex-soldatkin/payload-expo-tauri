@@ -7,6 +7,7 @@
  */
 import React, {
   createContext,
+  useCallback,
   useContext,
   useEffect,
   useRef,
@@ -14,7 +15,7 @@ import React, {
 } from 'react'
 
 import type { AdminSchema } from '@payload-universal/admin-schema'
-import { createLocalDB, type PayloadLocalDB } from '../database'
+import { createLocalDB, resetLocalDB, type PayloadLocalDB } from '../database'
 
 export type SyncProgress = {
   /** Total collections being synced */
@@ -23,6 +24,8 @@ export type SyncProgress = {
   completed: number
   /** Currently syncing collection slug (or null if idle) */
   current: string | null
+  /** Overall percentage 0-100 */
+  percent: number
 }
 
 type LocalDBContextValue = {
@@ -32,14 +35,26 @@ type LocalDBContextValue = {
   syncStatus: 'idle' | 'syncing' | 'error' | 'offline'
   /** Granular sync progress during initial replication */
   syncProgress: SyncProgress
+  /**
+   * Destroy the local DB, wipe all persisted data, and re-sync from scratch.
+   * Returns a promise that resolves once the DB has been wiped (re-init
+   * happens automatically via the provider effect).
+   */
+  resetAndResync: () => Promise<void>
+  /** True while a reset is in progress */
+  isResetting: boolean
 }
+
+const EMPTY_PROGRESS: SyncProgress = { total: 0, completed: 0, current: null, percent: 0 }
 
 const LocalDBContext = createContext<LocalDBContextValue>({
   localDB: null,
   isReady: false,
   error: null,
   syncStatus: 'idle',
-  syncProgress: { total: 0, completed: 0, current: null },
+  syncProgress: EMPTY_PROGRESS,
+  resetAndResync: async () => {},
+  isResetting: false,
 })
 
 export const useLocalDB = () => useContext(LocalDBContext).localDB
@@ -50,6 +65,8 @@ export const useLocalDBStatus = () => {
     error: ctx.error,
     syncStatus: ctx.syncStatus,
     syncProgress: ctx.syncProgress,
+    resetAndResync: ctx.resetAndResync,
+    isResetting: ctx.isResetting,
   }
 }
 
@@ -88,17 +105,50 @@ export const LocalDBProvider: React.FC<Props> = ({
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'error' | 'offline'>('idle')
-  const [syncProgress, setSyncProgress] = useState<SyncProgress>({
-    total: 0,
-    completed: 0,
-    current: null,
-  })
+  const [syncProgress, setSyncProgress] = useState<SyncProgress>(EMPTY_PROGRESS)
+  const [isResetting, setIsResetting] = useState(false)
+
+  // Monotonically increasing version counter — bump to force re-init
+  const [initVersion, setInitVersion] = useState(0)
 
   const dbRef = useRef<PayloadLocalDB | null>(null)
   const initRef = useRef(false)
   const tokenRef = useRef(token)
   tokenRef.current = token // always keep ref in sync with latest prop
 
+  // -----------------------------------------------------------------------
+  // resetAndResync: wipe local data, bump version to re-trigger init effect
+  // -----------------------------------------------------------------------
+  const resetAndResync = useCallback(async () => {
+    setIsResetting(true)
+    setError(null)
+
+    // Tear down running instance
+    if (dbRef.current) {
+      try { await dbRef.current.destroy() } catch { /* already closed */ }
+      dbRef.current = null
+    }
+
+    // Physically remove persisted SQLite data
+    await resetLocalDB(storage)
+
+    // Reset state
+    setLocalDB(null)
+    setIsReady(false)
+    setSyncStatus('idle')
+    setSyncProgress(EMPTY_PROGRESS)
+
+    // Allow the init effect to run again
+    initRef.current = false
+
+    // Bump version to re-trigger the init effect
+    setInitVersion((v) => v + 1)
+    setIsResetting(false)
+  }, [storage])
+
+  // -----------------------------------------------------------------------
+  // Main init effect — runs on mount and after each resetAndResync
+  // -----------------------------------------------------------------------
   useEffect(() => {
     if (!schema || !token || initRef.current) return
     initRef.current = true
@@ -136,18 +186,20 @@ export const LocalDBProvider: React.FC<Props> = ({
 
         if (total > 0) {
           setSyncStatus('syncing')
-          const progress: SyncProgress = { total, completed: 0, current: slugs[0] }
+          const progress: SyncProgress = { total, completed: 0, current: slugs[0], percent: 0 }
           setSyncProgress(progress)
           onSyncProgress?.(progress)
 
           // Sync each collection and update progress
+          let completedCount = 0
           for (const slug of slugs) {
             if (cancelled) break
-            const rep = db.replications[slug]
-            const p: SyncProgress = { total, completed: progress.completed, current: slug }
+            const pct = Math.round((completedCount / total) * 100)
+            const p: SyncProgress = { total, completed: completedCount, current: slug, percent: pct }
             setSyncProgress(p)
             onSyncProgress?.(p)
 
+            const rep = db.replications[slug]
             try {
               await rep.awaitInitialReplication()
 
@@ -160,11 +212,11 @@ export const LocalDBProvider: React.FC<Props> = ({
               // Non-fatal — data may be stale but the app is still usable
             }
 
-            progress.completed++
+            completedCount++
           }
 
           if (!cancelled) {
-            const final: SyncProgress = { total, completed: total, current: null }
+            const final: SyncProgress = { total, completed: total, current: null, percent: 100 }
             setSyncProgress(final)
             setSyncStatus('idle')
             onSyncProgress?.(final)
@@ -173,6 +225,7 @@ export const LocalDBProvider: React.FC<Props> = ({
         } else if (wsURL) {
           // WS sync — no polling replications to track, just mark idle
           setSyncStatus('idle')
+          setSyncProgress({ total: 0, completed: 0, current: null, percent: 100 })
           onSyncComplete?.()
         }
 
@@ -189,7 +242,7 @@ export const LocalDBProvider: React.FC<Props> = ({
     return () => {
       cancelled = true
     }
-  }, [schema, token, baseURL, pullInterval, storage, wsURL])
+  }, [schema, token, baseURL, pullInterval, storage, wsURL, initVersion])
 
   // Clean up on unmount (or hot reload)
   useEffect(() => {
@@ -206,7 +259,17 @@ export const LocalDBProvider: React.FC<Props> = ({
   }, [])
 
   return (
-    <LocalDBContext.Provider value={{ localDB, isReady, error, syncStatus, syncProgress }}>
+    <LocalDBContext.Provider
+      value={{
+        localDB,
+        isReady,
+        error,
+        syncStatus,
+        syncProgress,
+        resetAndResync,
+        isResetting,
+      }}
+    >
       {children}
     </LocalDBContext.Provider>
   )

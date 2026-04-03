@@ -34,7 +34,7 @@ export { usePendingUploads } from './hooks/useUploadQueue'
 export type { UsePendingUploadsResult } from './hooks/useUploadQueue'
 
 // Database factory (for advanced usage)
-export { createLocalDB } from './database'
+export { createLocalDB, resetLocalDB } from './database'
 export type { PayloadLocalDB, CreateLocalDBArgs } from './database'
 
 // Schema utilities
