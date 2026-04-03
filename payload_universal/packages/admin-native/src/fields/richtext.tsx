@@ -65,28 +65,23 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
-  // Check if the native Fabric component is registered in the binary BEFORE
-  // importing the JS module. UIManager.hasViewManagerConfig uses
-  // unstable_hasComponent() in Bridgeless/Fabric mode, which checks the C++
-  // Fabric component registry — the only reliable check on New Architecture.
-  //
-  // If we skip this and just require() the module, codegenNativeComponent's
-  // fallback runs requireNativeComponent() which defers the view config
-  // lookup to render time. At render time, ReactNativeViewConfigRegistry.get()
-  // throws an invariant that crashes even through error boundaries on dev builds.
-  const { UIManager } = require('react-native')
-  const hasNative = UIManager.hasViewManagerConfig?.('EnrichedTextInputView')
+  // 1. Import the JS module — this triggers codegenNativeComponent() which
+  //    registers a lazy view config callback in ReactNativeViewConfigRegistry.
+  const enrichedModule = require('react-native-enriched')
 
-  if (hasNative) {
-    const enrichedModule = require('react-native-enriched')
-    EnrichedTextInput = enrichedModule.EnrichedTextInput
-    enrichedAvailable = !!EnrichedTextInput
-  } else {
-    console.log('[richtext] EnrichedTextInputView not in native binary, using fallback')
-  }
+  // 2. Force the lazy view config to resolve NOW (inside this try/catch)
+  //    instead of deferring to render time. If the Codegen JS wasn't generated
+  //    or the native component isn't properly registered, the invariant fires
+  //    here where we can catch it — NOT at render time where it shows a red screen.
+  const ViewConfigRegistry = require('react-native/Libraries/Renderer/shims/ReactNativeViewConfigRegistry')
+  ViewConfigRegistry.get('EnrichedTextInputView')
+
+  // 3. If we reach here, the view config resolved — safe to use
+  EnrichedTextInput = enrichedModule.EnrichedTextInput
+  enrichedAvailable = true
 } catch (e) {
-  // Native code not compiled in — plain-text fallback will be used.
-  console.log('[richtext] react-native-enriched not available:', String(e).slice(0, 100))
+  // View config broken or native code missing — plain-text fallback.
+  console.log('[richtext] EnrichedTextInput unavailable, using fallback:', String(e).slice(0, 120))
 }
 
 // ---------------------------------------------------------------------------
