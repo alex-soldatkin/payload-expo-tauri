@@ -536,8 +536,31 @@ The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextIn
 
 **Zero new type errors** — all pre-existing errors remain unchanged, no import resolution failures.
 
+### Phase 15 — RxDB robustness fixes (2026-04-03 → 2026-04-04)
+
+**DB6/DB8/DB9 auto-recovery in `database.ts`:**
+- DB6 (schema conflict): non-recursive retry — wipes DB with `db.remove()`, re-opens, re-adds all collections in same scope
+- DB8/DB9 (duplicate database): `closeDuplicates: true` on `createRxDatabase()` — auto-closes stale instances. **`ignoreDuplicate: true` THROWS DB9 in non-dev builds** (it only works with RxDBDevModePlugin enabled)
+- `db.remove()` used instead of `db.destroy()` + `removeRxDatabase()` — atomically destroys instance + wipes data + clears RxDB internal name registry
+
+### Phase 16 — Responsive admin.width (2026-04-04)
+
+- `FIELD_WIDTH_BREAKPOINT = 500` — below this, `admin.width` fields stack vertically
+- `useCompactFields()` hook uses `useWindowDimensions().width`
+- `renderSubFieldsWithWidth()` accepts `compact` parameter — when true, width-row groups render as stacked fragments instead of flex rows
+- `RowField` switches between `rowContainer` (horizontal) and `rowContainerCompact` (vertical)
+- `DocumentForm` (both RHF and Legacy) checks window width
+- All structural fields updated: GroupField, CollapsibleFieldNative, CollapsibleFieldFallback, TabContent, ArrayField, BlocksField
+- Matches Payload web admin `@include mid-break { width: 100% !important }`
+
+### Phase 17 — Posts `summary` richText field (2026-04-04)
+
+- Added `summary` richText field to Posts collection at top level (after slug, before tabs)
+- `content` richText already exists in the Content tab
+- Two richText fields for demonstrating EnrichedTextInput, toolbar, and Lexical JSON round-trip
+
 ## Current known gaps
-- Admin-native component translation work remains (see plan in `006_component-translation.md`).
+- EnrichedTextInput rendering depends on UIManager.getViewManagerConfig shim + Metro singleton resolver for deep react-native imports. May need revisiting when RN 0.84+ fixes the Codegen Babel plugin.
 - Tauri uses live Next dev server; static export strategy still TBD.
 - Pre-existing TS errors in admin-native (React 19 `key`/`ref` prop changes, `expo-router` resolution from workspace) and admin-schema (Payload type mismatches) — cosmetic, do not affect runtime.
 - Could switch from MongoDB to Postgres in future (compatible with current architecture).
