@@ -6,7 +6,7 @@
  *
  * Relationship and Upload are platform-agnostic (BottomSheet-based).
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   FlatList,
@@ -16,6 +16,7 @@ import {
   Text,
   TextInput,
   View,
+  useWindowDimensions,
 } from 'react-native'
 // Dynamic import — @react-native-picker/picker requires native module
 // not available in Expo Go. Falls back to a simple Pressable-based picker.
@@ -37,9 +38,19 @@ import { payloadApi } from '../api'
 import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 
-// Dynamic expo-router Link (optional peer dep)
-let Link: any = null
-try { Link = require('expo-router').Link } catch { /* previews disabled */ }
+import { useScrollablePreview } from '../ScrollablePreviewContext'
+import { PreviewContextProvider } from '../PreviewContext'
+
+// Lazy-loaded DocumentForm to avoid circular dep (pickers → DocumentForm → fields → pickers)
+let _DocumentForm: React.ComponentType<any> | null = null
+const getDocumentForm = () => {
+  if (!_DocumentForm) {
+    try { _DocumentForm = require('../DocumentForm').DocumentForm } catch { /* not available */ }
+  }
+  return _DocumentForm
+}
+
+const noopSubmit = async () => {}
 
 // ---------------------------------------------------------------------------
 // Select
@@ -242,12 +253,21 @@ try {
 export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipField>> = ({
   field, value, onChange, disabled, error,
 }) => {
+  const preview = useScrollablePreview()
   const { baseURL, auth, schema } = usePayloadNative()
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+  const previewWidth = Math.round(windowWidth * 0.88)
+  const previewHeight = Math.round(windowHeight * 0.6)
   const [open, setOpen] = useState(false)
   const [search, setSearch] = useState('')
   const [allDocs, setAllDocs] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(false)
   const [displayLabel, setDisplayLabel] = useState<string | null>(null)
+  const [previewItemId, setPreviewItemId] = useState<string | null>(null)
+  // Track whether we need to close the BottomSheet after the native preview
+  // finishes dismissing. This prevents the React tree from mutating while
+  // the native overlay is still animating (which crashes UIKit).
+  const pendingCloseRef = useRef(false)
   const relationTo = Array.isArray(field.relationTo) ? field.relationTo[0] : field.relationTo
 
   const useAsTitle = schema?.menuModel?.collections.find(
@@ -325,7 +345,6 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
   }, [value, baseURL, auth.token, relationTo, useAsTitle, localCollection])
 
   const displayValue = displayLabel || (selectedId ?? null)
-  const selectedHref = selectedId ? `/(admin)/collections/${relationTo}/${selectedId}` : null
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
@@ -334,20 +353,8 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
         onPress={() => !disabled && setOpen(true)}
         disabled={disabled || field.admin?.readOnly}
       >
-        {selectedHref && displayValue && Link?.Trigger ? (
-          <Link href={selectedHref as any} push style={{ flex: 1 }}>
-            <Link.Trigger>
-              <Text style={styles.pickerText} numberOfLines={1}>{String(displayValue)}</Text>
-            </Link.Trigger>
-            <Link.Preview />
-            <Link.Menu>
-              <Link.MenuAction icon="eye" onPress={() => {}}>View {relationTo}</Link.MenuAction>
-              <Link.MenuAction icon="pencil" onPress={() => !disabled && setOpen(true)}>Change</Link.MenuAction>
-              <Link.MenuAction icon="xmark.circle" destructive onPress={() => onChange(null)}>Clear</Link.MenuAction>
-            </Link.Menu>
-          </Link>
-        ) : displayValue ? (
-          <Text style={styles.pickerText} numberOfLines={1}>{String(displayValue)}</Text>
+        {displayValue ? (
+          <Text style={[styles.pickerText, { flex: 1 }]} numberOfLines={1}>{String(displayValue)}</Text>
         ) : (
           <Text style={[styles.pickerText, styles.pickerPlaceholder]}>{`Select ${relationTo}...`}</Text>
         )}
@@ -366,7 +373,75 @@ export const RelationshipField: React.FC<FieldComponentProps<ClientRelationshipF
           keyExtractor={(item) => String(item.id)}
           renderItem={({ item }) => {
             const title = docDisplayTitle(item, useAsTitle)
+            const itemId = String(item.id)
             const isSelected = value === item.id || (typeof value === 'object' && value !== null && (value as Record<string, unknown>).id === item.id)
+            // Wrap with ScrollablePreview for long-press peek
+            const relSchemaMap = schema?.collections?.[relationTo]
+            const DocumentForm = getDocumentForm()
+            if (preview && relSchemaMap && DocumentForm) {
+              const isThisPreviewOpen = previewItemId === itemId
+              const selectItem = () => {
+                setDisplayLabel(title)
+                onChange(item.id)
+                if (previewItemId) {
+                  // Preview is open — don't mutate the React tree yet.
+                  // Let the native dismiss animation finish first;
+                  // onPreviewClose will close the BottomSheet.
+                  pendingCloseRef.current = true
+                } else {
+                  // Simple tap (no preview) — close immediately.
+                  setOpen(false)
+                }
+              }
+              // Use a passive View (not Pressable) so the Trigger's native
+              // tap gesture is the ONLY touch handler. A Pressable here
+              // competes with the gesture recognizer and double-fires.
+              const passiveRow = (
+                <View style={[styles.optionRow, isSelected && styles.optionSelected]}>
+                  <Text style={[styles.optionText, isSelected && styles.optionTextSelected]}>{title}</Text>
+                  {isSelected && <Text style={styles.checkMark}>✓</Text>}
+                </View>
+              )
+              return (
+                <preview.Trigger
+                  previewWidth={previewWidth}
+                  previewHeight={previewHeight}
+                  onPrimaryAction={selectItem}
+                  onPreviewOpen={() => setPreviewItemId(itemId)}
+                  onPreviewClose={() => {
+                    // Fires AFTER native dismiss animation completes
+                    // and the view has been safely reparented.
+                    setPreviewItemId(null)
+                    if (pendingCloseRef.current) {
+                      pendingCloseRef.current = false
+                      setOpen(false)
+                    }
+                  }}
+                >
+                  {passiveRow}
+                  <preview.Content>
+                    <PreviewContextProvider value={true}>
+                      {isThisPreviewOpen ? (
+                        <DocumentForm
+                          schemaMap={relSchemaMap}
+                          slug={relationTo}
+                          initialData={item}
+                          onSubmit={noopSubmit}
+                          disabled
+                        />
+                      ) : null}
+                    </PreviewContextProvider>
+                  </preview.Content>
+                  <preview.Action
+                    title="Select"
+                    icon="checkmark.circle"
+                    onActionPress={selectItem}
+                  />
+                </preview.Trigger>
+              )
+            }
+
+            // No preview available — use interactive Pressable for selection.
             return (
               <Pressable style={[styles.optionRow, isSelected && styles.optionSelected]}
                 onPress={() => { setDisplayLabel(title); onChange(item.id); setOpen(false) }}>

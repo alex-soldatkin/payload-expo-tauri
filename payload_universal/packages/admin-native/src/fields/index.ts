@@ -10,6 +10,7 @@ import { CheckboxField, DateField } from './controls'
 import { RadioField, RelationshipField, SelectField, UploadField } from './pickers'
 import { ArrayField, BlocksField, CollapsibleField, GroupField, RowField, TabsField } from './structural'
 import { RichTextField } from './richtext'
+import { JoinField } from './join'
 import { FallbackField } from './fallback'
 
 // Re-export field components
@@ -18,7 +19,7 @@ export {
   CheckboxField, DateField,
   SelectField, RadioField, RelationshipField, UploadField,
   ArrayField, BlocksField, GroupField, CollapsibleField, RowField, TabsField,
-  RichTextField, FallbackField,
+  RichTextField, JoinField, FallbackField,
 }
 
 // Re-export structural contexts
@@ -55,6 +56,7 @@ export const fieldRegistry: Record<string, React.ComponentType<FieldComponentPro
   row: RowField,
   tabs: TabsField,
   richText: RichTextField,
+  join: JoinField,
 }
 
 /** Look up the component for a given field type, falling back to FallbackField. */

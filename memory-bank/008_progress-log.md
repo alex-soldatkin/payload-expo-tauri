@@ -247,6 +247,33 @@ This log captures what has been implemented so far and the current state of the 
   - **Dynamic behaviour**: Change `icon` in Payload config → restart server → app refreshes schema → icons update. No app rebuild needed.
   - Exported from `admin-native`: `CollectionIcon`, `getSFSymbol`, `getIconComponent`, `isRawSVG`, `registerIcon`, `IconComponent` type
 
+### Phase 8 — Join field native component (2026-04-02)
+- **JoinField component** (`admin-native/src/fields/join.tsx`):
+  - Renders a scrollable table of related documents from the joined collection
+  - Driven entirely by Payload config: `collection`, `on`, `admin.defaultColumns`, `defaultLimit`, `defaultSort`, `where`
+  - **Column configuration**: reads `field.admin.defaultColumns` from Payload config; falls back to `['id', 'createdAt', 'updatedAt']`
+  - **Horizontal scroll**: each row is a horizontally scrollable `ScrollView` for wide tables on mobile
+  - **Tappable rows**: wraps each row in `Link` / `Link.Trigger` / `Link.Preview` for native navigation and iOS peek/pop
+  - **Sort by column**: tap column headers to toggle sort direction (ascending/descending); active column highlighted
+  - **Pagination**: "Load more (N remaining)" button; respects `field.defaultLimit` (default 10)
+  - **Pull-to-refresh**: `FlatList` onRefresh support
+  - **Local-first queries**: queries RxDB with `{ [onField]: { $eq: parentDocId } }` selector; falls back to REST API
+  - **REST API WHERE filter**: `{ [onField]: { equals: parentDocId } }` with polymorphic relationship support
+  - **Pre-populated data**: uses server-provided `{ docs, hasNextPage, totalDocs }` on first render
+  - **Empty states**: "Save this document to see related X" before first save; "No related X found" when no docs
+  - **Polymorphic joins**: shows collection slug badges for multi-collection joins
+  - **Cell formatting**: dates → locale string, booleans → Yes/No, objects → title/name/email/id, null → em dash
+- **FormDataContext** added to `DocumentForm`:
+  - New `FormDataContext` provides `{ formData, slug }` to nested field components
+  - `useFormData()` hook for consuming context (used by JoinField to get parent document ID)
+  - Context wraps the entire form tree (ErrorMapContext → FormDataContext → FieldRendererContext)
+- **Type system updates** (`types.ts`):
+  - Added `ClientJoinField` type with all Payload join config properties: `collection`, `on`, `defaultLimit`, `defaultSort`, `maxDepth`, `orderable`, `where`, `admin.allowCreate`, `admin.defaultColumns`, `admin.disableRowTypes`, `targetField.relationTo`
+  - Added `'join'` to `NativeFieldType` union
+  - Added `ClientJoinField` to `ClientField` union
+- **Field registry**: `join: JoinField` registered in `fieldRegistry` (was previously falling through to FallbackField)
+- **Exports**: `JoinField`, `ClientJoinField`, `FormDataContext`, `useFormData`, `FormDataContextValue` added to package exports
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.

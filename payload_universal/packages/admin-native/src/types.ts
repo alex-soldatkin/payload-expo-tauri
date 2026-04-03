@@ -28,6 +28,7 @@ export type NativeFieldType =
   | 'row'
   | 'tabs'
   | 'richText'
+  | 'join'
   | 'ui'
 
 export type ClientFieldBase = {
@@ -105,6 +106,35 @@ export type ClientTabsField = ClientFieldBase & {
   }>
 }
 export type ClientRichTextField = ClientFieldBase & { type: 'richText' }
+export type ClientJoinField = ClientFieldBase & {
+  type: 'join'
+  /** The collection(s) being joined. Single slug or array for polymorphic joins. */
+  collection: string | string[]
+  /** Dot-path to the relationship/upload field in the joined collection that points back. */
+  on: string
+  /** Default number of docs per page. */
+  defaultLimit?: number
+  /** Default sort field (e.g. '-createdAt'). */
+  defaultSort?: string
+  /** Max population depth. */
+  maxDepth?: number
+  /** Whether reordering is enabled. */
+  orderable?: boolean
+  /** Additional WHERE filter applied to the query. */
+  where?: Record<string, unknown>
+  admin?: ClientFieldBase['admin'] & {
+    /** Whether creating new related docs is allowed from the join view. */
+    allowCreate?: boolean
+    /** Which columns to show in the table. Array of field name strings. */
+    defaultColumns?: string[]
+    /** Hide the row type selector for polymorphic joins. */
+    disableRowTypes?: boolean
+  }
+  /** Resolved target field info (set by Payload's client config builder). */
+  targetField?: {
+    relationTo?: string | string[]
+  }
+}
 export type ClientUIField = ClientFieldBase & { type: 'ui' }
 
 export type ClientField =
@@ -128,6 +158,7 @@ export type ClientField =
   | ClientRowField
   | ClientTabsField
   | ClientRichTextField
+  | ClientJoinField
   | ClientUIField
 
 // ---------------------------------------------------------------------------

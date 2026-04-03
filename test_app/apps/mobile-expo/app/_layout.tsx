@@ -21,6 +21,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler'
 
 import {
   PayloadNativeProvider,
+  ScrollablePreviewProvider,
   ToastProvider,
   useAdminSchema,
   useAuth,
@@ -28,6 +29,7 @@ import {
   usePayloadNative,
   useToast,
 } from '@payload-universal/admin-native'
+import * as ScrollablePreview from '@/modules/scrollable-preview'
 import {
   LocalDBProvider,
   getRxStorageSQLite,
@@ -50,8 +52,8 @@ Notifications.setNotificationHandler({
 const TOKEN_KEY = 'payload_auth_token'
 const BASE_URL_KEY = 'payload_base_url'
 
-const DEFAULT_BASE_URL = __DEV__ ? 'http://localhost:3000' : 'https://your-server.com'
-const DEFAULT_WS_URL = __DEV__ ? 'ws://localhost:3001' : 'wss://your-server.com/ws'
+const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
+const DEFAULT_WS_URL = __DEV__ ? 'ws://192.168.40.114:3001' : 'wss://your-server.com/ws'
 
 // Persistent SQLite storage for RxDB (custom full implementation — no trial limits)
 const sqliteStorage = getRxStorageSQLite({
@@ -211,12 +213,14 @@ export default function RootLayout() {
             initialToken={initialToken}
             onTokenChange={handleTokenChange}
           >
-            <LocalDBGate>
-              <ToastProvider>
-                <StatusBar style="dark" />
-                <AuthGate />
-              </ToastProvider>
-            </LocalDBGate>
+            <ScrollablePreviewProvider value={ScrollablePreview}>
+              <LocalDBGate>
+                <ToastProvider>
+                  <StatusBar style="dark" />
+                  <AuthGate />
+                </ToastProvider>
+              </LocalDBGate>
+            </ScrollablePreviewProvider>
           </PayloadNativeProvider>
         )}
       </SafeAreaProvider>

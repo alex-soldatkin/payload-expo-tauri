@@ -335,8 +335,12 @@ class ScrollablePreviewOverlayVC: UIViewController {
       self.previewContentView.frame = self.originalFrame
       self.previewContentView.isHidden = true
       self.originalParent?.addSubview(self.previewContentView)
-      self.onDismiss?()
-      self.dismiss(animated: false)
+      // Dismiss the overlay VC first, THEN notify JS.
+      // This ensures the overlay is fully removed from the VC stack
+      // before JS triggers the BottomSheet Modal dismiss.
+      self.dismiss(animated: false) {
+        self.onDismiss?()
+      }
     }
   }
 

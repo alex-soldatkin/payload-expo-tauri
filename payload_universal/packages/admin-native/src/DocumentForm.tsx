@@ -22,6 +22,11 @@ import { ErrorMapContext, FieldRendererContext } from './fields/structural'
 import { FieldRenderer } from './FieldRenderer'
 import { useToast } from './Toast'
 import { PayloadAPIError } from './api'
+import { FormDataContext } from './FormDataContext'
+
+// Re-export for backwards compatibility
+export { FormDataContext, useFormData } from './FormDataContext'
+export type { FormDataContextValue } from './FormDataContext'
 
 export type DocumentFormHandle = {
   submit: () => void
@@ -211,7 +216,13 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
       )
     })
 
+  const formDataCtx = useMemo<FormDataContextValue>(
+    () => ({ formData, slug }),
+    [formData, slug],
+  )
+
   return (
+    <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <Animated.ScrollView
@@ -312,6 +323,7 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
       </Animated.ScrollView>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
+    </FormDataContext.Provider>
   )
 })
 

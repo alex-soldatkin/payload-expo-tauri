@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react'
 import {
   Animated,
-  Dimensions,
   Keyboard,
   Modal,
   PanResponder,
@@ -9,7 +8,9 @@ import {
   Pressable,
   StyleSheet,
   View,
+  useWindowDimensions,
 } from 'react-native'
+import { PreviewContextProvider } from './PreviewContext'
 
 // Optional: BlurView for translucent sheet background
 let BlurView: React.ComponentType<{
@@ -33,11 +34,11 @@ type Props = {
   height?: number
 }
 
-const SCREEN_HEIGHT = Dimensions.get('window').height
-
 /**
- * A modal-based bottom sheet that replaces web popovers / dropdowns.
- * Uses only React Native built-ins (Modal + Animated + PanResponder).
+ * Bottom sheet using transparent Modal + Animated slide-up.
+ *
+ * Uses `transparent` mode (not `pageSheet`) so native ScrollablePreview
+ * (UIContextMenuInteraction) works correctly inside the sheet.
  */
 export const BottomSheet: React.FC<Props> = ({
   visible,
@@ -45,8 +46,9 @@ export const BottomSheet: React.FC<Props> = ({
   children,
   height = 0.5,
 }) => {
-  const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current
-  const sheetHeight = SCREEN_HEIGHT * height
+  const { height: screenHeight } = useWindowDimensions()
+  const translateY = useRef(new Animated.Value(screenHeight)).current
+  const sheetHeight = screenHeight * height
 
   useEffect(() => {
     if (visible) {
@@ -58,12 +60,12 @@ export const BottomSheet: React.FC<Props> = ({
       }).start()
     } else {
       Animated.timing(translateY, {
-        toValue: SCREEN_HEIGHT,
+        toValue: screenHeight,
         duration: 200,
         useNativeDriver: true,
       }).start()
     }
-  }, [visible, translateY])
+  }, [visible, translateY, screenHeight])
 
   const panResponder = useRef(
     PanResponder.create({
@@ -100,7 +102,6 @@ export const BottomSheet: React.FC<Props> = ({
         style={[styles.sheet, { height: sheetHeight, transform: [{ translateY }] }]}
         {...panResponder.panHandlers}
       >
-        {/* Translucent blur background (iOS) or solid fallback */}
         {BlurView && Platform.OS === 'ios' ? (
           <BlurView
             style={StyleSheet.absoluteFill}
@@ -113,7 +114,11 @@ export const BottomSheet: React.FC<Props> = ({
         <View style={styles.handleRow}>
           <View style={styles.handleBar} />
         </View>
-        <View style={styles.content}>{children}</View>
+        <View style={styles.content}>
+          <PreviewContextProvider value={true}>
+            {children}
+          </PreviewContextProvider>
+        </View>
       </Animated.View>
     </Modal>
   )

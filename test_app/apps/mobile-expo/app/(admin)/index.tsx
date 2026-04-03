@@ -6,6 +6,8 @@
  *  - Connection status & schema timestamp
  *  - Collection shortcuts (grouped by admin.group from the menuModel)
  *  - Global shortcuts
+ *
+ * On tablet, cards are displayed in a responsive multi-column grid.
  */
 import React from 'react'
 import { Pressable, RefreshControl, ScrollView, Text, View } from 'react-native'
@@ -19,12 +21,16 @@ import {
   useMenuModel,
   usePayloadNative,
 } from '@payload-universal/admin-native'
+import { useResponsive } from '@/hooks/useResponsive'
+
+const GRID_GAP = 8
 
 export default function DashboardScreen() {
   const router = useRouter()
   const { refreshSchema, isSchemaLoading, schemaError } = usePayloadNative()
   const schema = useAdminSchema()
   const menuModel = useMenuModel()
+  const { columns } = useResponsive()
 
   const visibleCollections = menuModel?.collections.filter((c) => !c.hidden) ?? []
   const visibleGlobals = menuModel?.globals.filter((g) => !g.hidden) ?? []
@@ -37,10 +43,18 @@ export default function DashboardScreen() {
     collections: visibleCollections.filter((c) => c.group === group),
   }))
 
+  // Grid helpers – on phone (columns === 1), styles are undefined → normal stacking
+  const gridRow = columns > 1
+    ? { flexDirection: 'row' as const, flexWrap: 'wrap' as const, margin: -(GRID_GAP / 2) }
+    : undefined
+  const gridCell = columns > 1
+    ? { width: `${100 / columns}%` as any, padding: GRID_GAP / 2 }
+    : undefined
+
   return (
     <ScrollView
       className="flex-1 bg-paper"
-      contentContainerClassName="px-5 pb-10 pt-14"
+      contentContainerClassName={`pb-10 pt-14 ${columns > 1 ? 'px-8' : 'px-5'}`}
       refreshControl={
         <RefreshControl refreshing={isSchemaLoading} onRefresh={refreshSchema} />
       }
@@ -65,16 +79,19 @@ export default function DashboardScreen() {
           <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
             Collections
           </Text>
-          {ungrouped.map((col) => (
-            <CollectionCard
-              key={col.slug}
-              slug={col.slug}
-              label={getCollectionLabel(menuModel!, col.slug)}
-              drafts={col.drafts}
-              icon={col.icon}
-              onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
-            />
-          ))}
+          <View style={gridRow}>
+            {ungrouped.map((col) => (
+              <View key={col.slug} style={gridCell}>
+                <CollectionCard
+                  slug={col.slug}
+                  label={getCollectionLabel(menuModel!, col.slug)}
+                  drafts={col.drafts}
+                  icon={col.icon}
+                  onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
+                />
+              </View>
+            ))}
+          </View>
         </View>
       )}
 
@@ -86,16 +103,19 @@ export default function DashboardScreen() {
               <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
                 {group.name}
               </Text>
-              {group.collections.map((col) => (
-                <CollectionCard
-                  key={col.slug}
-                  slug={col.slug}
-                  label={getCollectionLabel(menuModel!, col.slug)}
-                  drafts={col.drafts}
-                  icon={col.icon}
-                  onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
-                />
-              ))}
+              <View style={gridRow}>
+                {group.collections.map((col) => (
+                  <View key={col.slug} style={gridCell}>
+                    <CollectionCard
+                      slug={col.slug}
+                      label={getCollectionLabel(menuModel!, col.slug)}
+                      drafts={col.drafts}
+                      icon={col.icon}
+                      onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
+                    />
+                  </View>
+                ))}
+              </View>
             </View>
           ),
       )}
@@ -106,20 +126,23 @@ export default function DashboardScreen() {
           <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
             Globals
           </Text>
-          {visibleGlobals.map((g) => (
-            <Pressable
-              key={g.slug}
-              className="mb-2 rounded-2xl bg-surface p-4"
-              onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
-            >
-              <Text className="text-base font-semibold text-ink">
-                {getGlobalLabel(menuModel!, g.slug)}
-              </Text>
-              {g.drafts && (
-                <Text className="mt-1 text-xs text-ink-muted">Drafts enabled</Text>
-              )}
-            </Pressable>
-          ))}
+          <View style={gridRow}>
+            {visibleGlobals.map((g) => (
+              <View key={g.slug} style={gridCell}>
+                <Pressable
+                  className="mb-2 rounded-2xl bg-surface p-4"
+                  onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
+                >
+                  <Text className="text-base font-semibold text-ink">
+                    {getGlobalLabel(menuModel!, g.slug)}
+                  </Text>
+                  {g.drafts && (
+                    <Text className="mt-1 text-xs text-ink-muted">Drafts enabled</Text>
+                  )}
+                </Pressable>
+              </View>
+            ))}
+          </View>
         </View>
       )}
 

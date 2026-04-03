@@ -1,5 +1,7 @@
 /**
  * Globals index – lists all visible globals from the menuModel.
+ *
+ * On tablet, globals are displayed in a responsive multi-column grid.
  */
 import React from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
@@ -7,11 +9,15 @@ import { useRouter } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 
 import { getGlobalLabel, useMenuModel } from '@payload-universal/admin-native'
+import { useResponsive } from '@/hooks/useResponsive'
+
+const GRID_GAP = 8
 
 export default function GlobalsIndexScreen() {
   const router = useRouter()
   const menuModel = useMenuModel()
   const headerHeight = useHeaderHeight()
+  const { columns } = useResponsive()
 
   const visibleGlobals = menuModel?.globals.filter((g) => !g.hidden) ?? []
   const groups = menuModel?.groups ?? []
@@ -22,24 +28,35 @@ export default function GlobalsIndexScreen() {
     globals: visibleGlobals.filter((g) => g.group === group),
   }))
 
+  // Grid helpers – on phone (columns === 1), styles are undefined → normal stacking
+  const gridRow = columns > 1
+    ? { flexDirection: 'row' as const, flexWrap: 'wrap' as const, margin: -(GRID_GAP / 2) }
+    : undefined
+  const gridCell = columns > 1
+    ? { width: `${100 / columns}%` as any, padding: GRID_GAP / 2 }
+    : undefined
+
   return (
     <ScrollView
       className="flex-1 bg-paper"
       contentContainerStyle={{ paddingTop: headerHeight + 8 }}
-      contentContainerClassName="px-5 pb-10"
+      contentContainerClassName={`pb-10 ${columns > 1 ? 'px-8' : 'px-5'}`}
     >
-      {ungrouped.map((g) => (
-        <Pressable
-          key={g.slug}
-          className="mb-2 rounded-2xl bg-surface p-4"
-          onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
-        >
-          <Text className="text-base font-semibold text-ink">
-            {getGlobalLabel(menuModel!, g.slug)}
-          </Text>
-          <Text className="mt-0.5 text-xs text-ink-muted">{g.slug}</Text>
-        </Pressable>
-      ))}
+      <View style={gridRow}>
+        {ungrouped.map((g) => (
+          <View key={g.slug} style={gridCell}>
+            <Pressable
+              className="mb-2 rounded-2xl bg-surface p-4"
+              onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
+            >
+              <Text className="text-base font-semibold text-ink">
+                {getGlobalLabel(menuModel!, g.slug)}
+              </Text>
+              <Text className="mt-0.5 text-xs text-ink-muted">{g.slug}</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
 
       {grouped.map(
         (group) =>
@@ -48,18 +65,21 @@ export default function GlobalsIndexScreen() {
               <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
                 {group.name}
               </Text>
-              {group.globals.map((g) => (
-                <Pressable
-                  key={g.slug}
-                  className="mb-2 rounded-2xl bg-surface p-4"
-                  onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
-                >
-                  <Text className="text-base font-semibold text-ink">
-                    {getGlobalLabel(menuModel!, g.slug)}
-                  </Text>
-                  <Text className="mt-0.5 text-xs text-ink-muted">{g.slug}</Text>
-                </Pressable>
-              ))}
+              <View style={gridRow}>
+                {group.globals.map((g) => (
+                  <View key={g.slug} style={gridCell}>
+                    <Pressable
+                      className="mb-2 rounded-2xl bg-surface p-4"
+                      onPress={() => router.push(`/(admin)/globals/${g.slug}`)}
+                    >
+                      <Text className="text-base font-semibold text-ink">
+                        {getGlobalLabel(menuModel!, g.slug)}
+                      </Text>
+                      <Text className="mt-0.5 text-xs text-ink-muted">{g.slug}</Text>
+                    </Pressable>
+                  </View>
+                ))}
+              </View>
             </View>
           ),
       )}

@@ -23,8 +23,8 @@ export type { IconComponent } from './iconRegistry'
 // Core components
 export { BottomSheet } from './BottomSheet'
 export { DocumentActionsMenu } from './DocumentActionsMenu'
-export { DocumentForm } from './DocumentForm'
-export type { DocumentFormHandle } from './DocumentForm'
+export { DocumentForm, FormDataContext, useFormData } from './DocumentForm'
+export type { DocumentFormHandle, FormDataContextValue } from './DocumentForm'
 export { DocumentList } from './DocumentList'
 export { FieldRenderer } from './FieldRenderer'
 export { FilterBottomSheet } from './FilterBottomSheet'
@@ -33,6 +33,13 @@ export { SyncStatusCard } from './SyncStatusCard'
 export { SyncStatusSection } from './SyncStatusSection'
 export { VersionDiff } from './VersionDiff'
 export { VersionsBottomSheet } from './VersionsBottomSheet'
+
+// Preview context — wrap content in PreviewContextProvider to disable Link.Preview in nested fields
+export { PreviewContextProvider, useIsInsidePreview } from './PreviewContext'
+
+// Scrollable preview — host app injects its native module so shared fields can offer long-press previews
+export { ScrollablePreviewProvider, useScrollablePreview } from './ScrollablePreviewContext'
+export type { ScrollablePreviewModule } from './ScrollablePreviewContext'
 
 // Toast notifications
 export { ToastProvider, useToast } from './Toast'
@@ -59,6 +66,7 @@ export {
   EmailField,
   FallbackField,
   GroupField,
+  JoinField,
   JSONField,
   NumberField,
   PointField,
@@ -113,6 +121,7 @@ export type {
   ClientField,
   ClientFieldBase,
   ClientGroupField,
+  ClientJoinField,
   ClientJSONField,
   ClientNumberField,
   ClientPointField,

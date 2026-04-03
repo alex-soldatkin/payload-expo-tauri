@@ -10,6 +10,18 @@ export const Users: CollectionConfig = {
   auth: true,
   fields: [
     // Email added by default
-    // Add more fields as needed
+
+    // Join — shows all posts authored by this user as a scrollable table
+    {
+      name: 'posts',
+      type: 'join',
+      collection: 'posts',
+      on: 'author',
+      admin: {
+        defaultColumns: ['title', 'status', 'publishedDate'],
+      },
+      defaultLimit: 10,
+      defaultSort: '-createdAt',
+    },
   ],
 }

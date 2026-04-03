@@ -23,6 +23,10 @@ try {
     Text: jc.Text,
     tag: null,         // Android Picker uses different API
     pickerStyle: null,
+    BottomSheet: null,  // No native equivalent on Android
+    Group: null,
+    presentationDetents: null,
+    presentationDragIndicator: null,
   }
 } catch {
   registry = emptyRegistry

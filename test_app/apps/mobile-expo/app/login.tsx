@@ -1,6 +1,8 @@
 /**
  * Login screen – authenticates against the Payload /api/users/login endpoint.
  * Stores the JWT token via SecureStore (handled by the provider's onTokenChange).
+ *
+ * On tablet, the form is constrained to a comfortable width and centered.
  */
 import React, { useState } from 'react'
 import {
@@ -14,12 +16,14 @@ import {
 } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
 import { useAuth } from '@payload-universal/admin-native'
+import { useResponsive } from '@/hooks/useResponsive'
 
 const BASE_URL_KEY = 'payload_base_url'
-const DEFAULT_BASE_URL = __DEV__ ? 'http://localhost:3000' : 'https://your-server.com'
+const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
 
 export default function LoginScreen() {
   const { login, isLoading } = useAuth()
+  const { isTablet } = useResponsive()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [serverURL, setServerURL] = useState(DEFAULT_BASE_URL)
@@ -46,7 +50,10 @@ export default function LoginScreen() {
       className="flex-1 bg-paper"
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
-      <View className="flex-1 justify-center px-6">
+      <View
+        className="flex-1 justify-center px-6"
+        style={isTablet ? { maxWidth: 480, alignSelf: 'center', width: '100%' } : undefined}
+      >
         {/* Header */}
         <View className="mb-10">
           <Text className="text-3xl font-bold text-ink">Payload Admin</Text>

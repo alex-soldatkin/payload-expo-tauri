@@ -286,8 +286,8 @@ PODS:
   - hermes-engine (0.14.0):
     - hermes-engine/Pre-built (= 0.14.0)
   - hermes-engine/Pre-built (0.14.0)
-  - libavif/core (0.11.1)
-  - libavif/libdav1d (0.11.1):
+  - libavif/core (1.0.0)
+  - libavif/libdav1d (1.0.0):
     - libavif/core
     - libdav1d (>= 0.6.0)
   - libdav1d (1.2.0)
@@ -2474,9 +2474,11 @@ PODS:
     - ReactCommon/turbomodule/core
     - ReactNativeDependencies
     - Yoga
-  - SDWebImage (5.21.3):
-    - SDWebImage/Core (= 5.21.3)
-  - SDWebImage/Core (5.21.3)
+  - ScrollablePreview (1.0.0):
+    - ExpoModulesCore
+  - SDWebImage (5.21.7):
+    - SDWebImage/Core (= 5.21.7)
+  - SDWebImage/Core (5.21.7)
   - SDWebImageAVIFCoder (0.11.1):
     - libavif/core (>= 0.11.0)
     - SDWebImage (~> 5.10)
@@ -2605,6 +2607,7 @@ DEPENDENCIES:
   - "RNScreens (from `../../../node_modules/.pnpm/react-native-screens@4.20.0_react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9__2e64504977ea78a5a2360e942dede894/node_modules/react-native-screens`)"
   - "RNSVG (from `../../../node_modules/.pnpm/react-native-svg@15.15.1_react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_buf_98529e41c08e1f38ac6fd625b93c127f/node_modules/react-native-svg`)"
   - "RNWorklets (from `../../../node_modules/.pnpm/react-native-worklets@0.7.2_@babel+core@7.27.3_react-native@0.83.1_@babel+core@7.27.3_@_bd31791d8e98c034bcef98ff80f40f03/node_modules/react-native-worklets`)"
+  - ScrollablePreview (from `../modules/scrollable-preview/ios`)
   - "Yoga (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/ReactCommon/yoga`)"
 
 SPEC REPOS:
@@ -2851,6 +2854,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native-svg@15.15.1_react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_buf_98529e41c08e1f38ac6fd625b93c127f/node_modules/react-native-svg"
   RNWorklets:
     :path: "../../../node_modules/.pnpm/react-native-worklets@0.7.2_@babel+core@7.27.3_react-native@0.83.1_@babel+core@7.27.3_@_bd31791d8e98c034bcef98ff80f40f03/node_modules/react-native-worklets"
+  ScrollablePreview:
+    :path: "../modules/scrollable-preview/ios"
   Yoga:
     :path: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@types+react@19.2.9_bufferutil@4.1.0_react@19.2.0_utf-8-validate@6.0.6/node_modules/react-native/ReactCommon/yoga"
 
@@ -2892,7 +2897,7 @@ SPEC CHECKSUMS:
   EXUpdatesInterface: 93413b1b9d85c6cd5a9061bc8937e57cc789ec3d
   FBLazyVector: 3a7ea85f6009224ad89f7daeda516f189e6b5759
   hermes-engine: 12fb99f754a1a9395da352397a5ccb643e7af9fb
-  libavif: 84bbb62fb232c3018d6f1bab79beea87e35de7b7
+  libavif: 5f8e715bea24debec477006f21ef9e95432e254d
   libdav1d: 23581a4d8ec811ff171ed5e2e05cd27bad64c39f
   libwebp: 02b23773aedb6ff1fd38cec7a77b81414c6842a8
   RCTDeprecation: a93fe21ed2fd99e13bf3b011390d1e9769c83d23
@@ -2971,15 +2976,16 @@ SPEC CHECKSUMS:
   RNDateTimePicker: 9c0a849bbe1c256f0854fea255734b715f5ea876
   RNGestureHandler: 0ea8153746a92b3744d4eaadade647debedf646e
   RNReanimated: 964599bc2978fcd69b0d8e2deadf714479a07518
-  RNScreens: a00979e0d17609f1c9b0f97881c34550fc4565bf
+  RNScreens: 77d5ed082f2ae8eb79d5e6124fe8db19577d501f
   RNSVG: bb9dc09f078cafaf09683a67dd5fde641e3e33cb
   RNWorklets: 3519cb9b79cb495a0bd335c759648444a3e2db41
-  SDWebImage: 16309af6d214ba3f77a7c6f6fdda888cb313a50a
+  ScrollablePreview: f2d2f5ec7bab2a6b7eb0023b6e8c90624bc267ff
+  SDWebImage: e9fc87c1aab89a8ab1bbd74eba378c6f53be8abf
   SDWebImageAVIFCoder: afe194a084e851f70228e4be35ef651df0fc5c57
   SDWebImageSVGCoder: 15a300a97ec1c8ac958f009c02220ac0402e936c
   SDWebImageWebPCoder: e38c0a70396191361d60c092933e22c20d5b1380
   Yoga: 35d573dff66536d48493acb65a519482f8219fe8
 
-PODFILE CHECKSUM: 3dc796350990dc69a9b49486f87bc8c8b5963092
+PODFILE CHECKSUM: 5ff7b18152ab107e89c694fd08b232a8a2cb96ac
 
 COCOAPODS: 1.16.2

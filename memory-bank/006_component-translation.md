@@ -15,7 +15,7 @@ Field mapping targets
 - array, blocks: list with add, delete, and reorder controls. Use cards for each row or block.
 - group, row, collapsible: layout wrappers that control spacing and visibility.
 - tabs: top tabs or segmented controls.
-- join: read only panel with navigation to the related collection.
+- join: scrollable table showing related docs from the joined collection, with configurable columns (`admin.defaultColumns`), tappable rows (Link.Preview peek/pop), sort-by-column, pagination, local-first query via RxDB.
 - UI field and custom admin components: use the component registry.
 
 Component registry

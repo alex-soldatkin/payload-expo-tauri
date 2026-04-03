@@ -7,7 +7,7 @@
  * - Link.Preview (long-press peek) rendered inside Expo Router tree
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Alert, Animated, Dimensions, Pressable, View } from 'react-native'
+import { Alert, Animated, Pressable, View, useWindowDimensions } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
 import { useHeaderHeight } from '@react-navigation/elements'
 import AsyncStorage from '@react-native-async-storage/async-storage'
@@ -18,6 +18,7 @@ import {
   DocumentForm,
   DocumentList,
   getCollectionLabel,
+  PreviewContextProvider,
   useAdminSchema,
   useMenuModel,
   useToast,
@@ -147,8 +148,9 @@ export default function CollectionDocumentsScreen() {
   }, [isPreview, localDB, slug, toast])
 
   // Preview dimensions
-  const PREVIEW_W = Math.round(Dimensions.get('window').width * 0.92)
-  const PREVIEW_H = Math.round(Dimensions.get('window').height * 0.65)
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions()
+  const PREVIEW_W = Math.round(windowWidth * 0.92)
+  const PREVIEW_H = Math.round(windowHeight * 0.65)
   const noopSubmit = useCallback(async () => {}, [])
 
   // Track which item's preview is open so only ONE DocumentForm
@@ -171,15 +173,17 @@ export default function CollectionDocumentsScreen() {
         >
           {rowContent}
           <ScrollablePreview.Content>
-            {schemaMap && isThisPreviewOpen ? (
-              <DocumentForm
-                schemaMap={schemaMap}
-                slug={slug}
-                initialData={item}
-                onSubmit={noopSubmit}
-                disabled
-              />
-            ) : null}
+            <PreviewContextProvider value={true}>
+              {schemaMap && isThisPreviewOpen ? (
+                <DocumentForm
+                  schemaMap={schemaMap}
+                  slug={slug}
+                  initialData={item}
+                  onSubmit={noopSubmit}
+                  disabled
+                />
+              ) : null}
+            </PreviewContextProvider>
           </ScrollablePreview.Content>
           <ScrollablePreview.Action
             title="Open"

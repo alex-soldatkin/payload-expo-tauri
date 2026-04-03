@@ -25,6 +25,10 @@ try {
     Text: swiftUI.Text,
     tag: modifiers.tag,
     pickerStyle: modifiers.pickerStyle,
+    BottomSheet: swiftUI.BottomSheet,
+    Group: swiftUI.Group,
+    presentationDetents: modifiers.presentationDetents,
+    presentationDragIndicator: modifiers.presentationDragIndicator,
   }
 } catch {
   registry = emptyRegistry

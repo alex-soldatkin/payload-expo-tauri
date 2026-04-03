@@ -6,9 +6,9 @@
 `Link.Preview` from `expo-router` requires the Expo Router navigation context (`LinkPreviewContextProvider`). Components in shared workspace packages (`admin-native`) resolve `expo-router` from a different module instance than the app, causing "useLinkPreviewContext must be used within a LinkPreviewContextProvider" errors.
 
 ### The Solution
-**Never render `Link` / `Link.Preview` from shared workspace packages.** Always render them from screen files inside the Expo Router tree.
+**Never render `Link` / `Link.Preview` / `useRouter` from shared workspace packages.** Always render them from screen files inside the Expo Router tree.
 
-**Pattern — `renderRow` callback:**
+**Pattern — `renderRow` callback for collection list (works):**
 ```tsx
 // SHARED COMPONENT (admin-native/DocumentList.tsx)
 // Does NOT import expo-router. Accepts a renderRow callback instead.
@@ -19,52 +19,67 @@ type Props = {
     onPress: () => void
   }) => React.ReactElement
 }
-
-// In renderItem:
-if (renderRow) {
-  return renderRow({ item, rowContent, onPress: () => onPress(item) })
-}
-// Fallback: plain Pressable (no preview)
-return <Pressable onPress={() => onPress(item)}>{rowContent}</Pressable>
 ```
 
+**Pattern — ScrollablePreview for collection list items (works):**
 ```tsx
 // SCREEN FILE (inside Expo Router tree — [slug]/index.tsx)
-// Link is imported HERE where the router context is guaranteed.
-import { Link } from 'expo-router'
+// Uses custom native ScrollablePreview module instead of Link.Preview.
+import * as ScrollablePreview from '@/modules/scrollable-preview'
 
-const renderRow = useCallback(({ item, rowContent, onPress }) => (
-  <Link href={`/(admin)/collections/${slug}/${item.id}`} push>
-    <Link.Trigger>{rowContent}</Link.Trigger>
-    <Link.Preview />
-    <Link.Menu>
-      <Link.MenuAction icon="doc.text" onPress={onPress}>Open</Link.MenuAction>
-    </Link.Menu>
-  </Link>
-), [slug])
-
-<DocumentList renderRow={renderRow} ... />
+<ScrollablePreview.Trigger onPrimaryAction={navigate}>
+  {rowContent}
+  <ScrollablePreview.Content>
+    <PreviewContextProvider value={true}>
+      <DocumentForm schemaMap={schemaMap} slug={slug} initialData={item} disabled />
+    </PreviewContextProvider>
+  </ScrollablePreview.Content>
+  <ScrollablePreview.Action title="Open" icon="doc.text" onActionPress={open} />
+</ScrollablePreview.Trigger>
 ```
 
-**For RelationshipField** (inside admin-native):
-Use dynamic `require()` with null fallback so it never crashes:
+### ScrollablePreviewContext (injecting native preview into shared fields)
+The `ScrollablePreviewProvider` lets the app inject the native `ScrollablePreview` module into shared field components so they can offer long-press previews:
 ```tsx
-let Link: any = null
-try { Link = require('expo-router').Link } catch {}
+// App root (_layout.tsx) — provides the module
+import * as ScrollablePreview from '@/modules/scrollable-preview'
+import { ScrollablePreviewProvider } from '@payload-universal/admin-native'
+<ScrollablePreviewProvider value={ScrollablePreview}>...</ScrollablePreviewProvider>
 
-// Guard usage:
-{selectedHref && displayValue && Link?.Trigger ? (
-  <Link href={...}><Link.Trigger>...</Link.Trigger><Link.Preview /></Link>
-) : (
-  <Text>{displayValue}</Text>
-)}
+// Shared field (pickers.tsx) — consumes it
+const preview = useScrollablePreview()
+if (preview) {
+  return <preview.Trigger>...</preview.Trigger>
+}
 ```
+
+### PreviewContext (disabling Link/router in preview overlays)
+`PreviewContextProvider value={true}` wraps content rendered inside overlays (ScrollablePreview, BottomSheet) where Expo Router context is absent. Fields check `useIsInsidePreview()` to skip anything requiring router context.
 
 ### Key Rules
-1. `Link.Preview` does NOT require a manual `LinkPreviewContextProvider` — Expo Router provides it automatically for screens inside the navigation tree
-2. Shared packages outside the Expo Router tree CANNOT use `Link` via static ES import
-3. Use `renderRow` callback pattern to let screen files handle `Link.Preview` rendering
-4. Use `require()` with try/catch for optional `Link` usage in shared packages
+1. **NEVER import expo-router (Link, useRouter, etc.) from shared packages** — not via static import, not via `require()`, not via try/catch. The module instance in the shared package differs from the app's, so hooks (`useRouter`) and components (`Link.Preview`) will always crash with "useLinkPreviewContext must be used within a LinkPreviewContextProvider".
+2. Use the `renderRow` callback pattern so screen files handle navigation rendering
+3. Use `ScrollablePreviewContext` to inject the native preview module into shared fields
+4. Wrap preview overlay content with `<PreviewContextProvider value={true}>` to disable nested previews
+5. `FormDataContext` was extracted to `FormDataContext.ts` to break a require cycle: `DocumentForm → FieldRenderer → fields → join → DocumentForm`
+
+### Open Bug: ScrollablePreview in relationship picker BottomSheet
+**Status:** Unresolved (2026-04-02)
+**Symptom:** App crashes after long-press peeking a relationship picker row inside a BottomSheet, then selecting via the preview action or primary action.
+**What works:** Peeking renders correctly (DocumentForm shows inside preview). The crash happens on DISMISS — when `setOpen(false)` unmounts the BottomSheet Modal while the native ScrollablePreview overlay is still animating/dismissing.
+**What was tried:**
+- Removing all expo-router imports (useRouter, Link) from shared packages ✓ (fixed "useLinkPreviewContext" errors elsewhere)
+- Delaying `setOpen(false)` by 350ms after `setPreviewItemId(null)` — still crashes
+- Using `pageSheet` Modal instead of transparent Modal — breaks ScrollablePreview entirely (UIContextMenuInteraction incompatible with UISheetPresentationController)
+**Root cause hypothesis:** The native `ScrollablePreview` (UIContextMenuInteraction-based) dismissal animation conflicts with the Modal's removal from the view hierarchy. When the BottomSheet Modal is closed, UIKit removes the view tree containing the context menu's sourceView, causing a native crash during the dismiss transition.
+**Potential solutions to try:**
+1. Wait for `onPreviewClose` callback before allowing `setOpen(false)` — ensure native preview is fully dismissed before unmounting the Modal
+2. Move relationship picker to an Expo Router modal screen instead of a BottomSheet Modal — avoids the UIContextMenu + Modal conflict entirely
+3. Use a different preview approach for picker rows (e.g., inline expand/collapse instead of native context menu)
+
+### BottomSheet Implementation
+Uses transparent `Modal` + `Animated` slide-up + `PanResponder` swipe-to-dismiss. Wraps children with `PreviewContextProvider value={true}`.
+**Do NOT use `presentationStyle: 'pageSheet'`** — it breaks native ScrollablePreview (UIContextMenuInteraction) inside the sheet.
 
 ---
 
@@ -243,20 +258,20 @@ if (INTERNAL_SLUGS.has(slug) || slug.startsWith('payload-')) continue
 ## Delete Actions (2026-03-30)
 
 ### Context menu delete (current approach)
-On iOS 26, both legacy `Swipeable` and `ReanimatedSwipeable` cause `PanGestureHandler` crashes. Delete is now handled via the native `Link.Menu` context menu alongside "Open":
+On iOS 26, both legacy `Swipeable` and `ReanimatedSwipeable` cause `PanGestureHandler` crashes. Delete is now handled via native `ScrollablePreview.Action` in the long-press preview menu:
 
 ```tsx
-// In screen file (inside Expo Router tree)
-const renderRow = useCallback(({ item, rowContent, onPress }) => (
-  <Link href={href} push>
-    <Link.Trigger>{rowContent}</Link.Trigger>
-    <Link.Preview />
-    <Link.Menu>
-      <Link.MenuAction icon="doc.text" onPress={onPress}>Open</Link.MenuAction>
-      <Link.MenuAction icon="trash" destructive onPress={() => confirmDelete(item)}>Delete</Link.MenuAction>
-    </Link.Menu>
-  </Link>
-), [slug, handleDelete])
+// In screen file (inside Expo Router tree — [slug]/index.tsx)
+<ScrollablePreview.Trigger onPrimaryAction={navigate}>
+  {rowContent}
+  <ScrollablePreview.Content>
+    <PreviewContextProvider value={true}>
+      <DocumentForm ... disabled />
+    </PreviewContextProvider>
+  </ScrollablePreview.Content>
+  <ScrollablePreview.Action title="Open" icon="doc.text" onActionPress={open} />
+  <ScrollablePreview.Action title="Delete" icon="trash" destructive onActionPress={confirmDelete} />
+</ScrollablePreview.Trigger>
 ```
 
 ### Shake-to-undo (still works)
@@ -481,6 +496,89 @@ Render priority: raw SVG (SvgXml) → lucide component by name → fallback File
 3. Use `@ts-expect-error` in collection configs since Payload's types don't include `icon`
 4. Icons update dynamically on schema refresh — no app rebuild needed
 5. Bundle size impact: ~1MB from imported lucide icons (acceptable for admin app)
+
+---
+
+## Join Field (Native Table View) (2026-04-02)
+
+### Architecture
+The `JoinField` component renders Payload's join field as a native scrollable table on mobile. It's read-only — join fields show related documents from another collection where a relationship field points back to the current document.
+
+### Data flow
+```
+Payload config (join field: collection, on, admin.defaultColumns)
+  → admin schema → client field config
+  → JoinField component reads config
+  → Queries: pre-populated value → local RxDB → REST API fallback
+  → Renders scrollable table with tappable rows
+```
+
+### Parent document ID resolution
+JoinField needs the parent doc's ID to build the WHERE filter (`{ [on]: { equals: parentDocId } }`). Resolution order:
+1. `FormDataContext` (provided by DocumentForm) → `formCtx.formData.id`
+2. Pre-populated value → extract from first doc's `on` field
+3. If neither available → shows "Save this document to see related X"
+
+### FormDataContext
+```tsx
+// Extracted to standalone FormDataContext.ts to break require cycle.
+// DocumentForm re-exports for backwards compatibility.
+import { useFormData } from '../FormDataContext'
+const formCtx = useFormData()
+const parentDocId = formCtx?.formData?.id
+```
+
+### Column configuration
+```typescript
+// In Payload config:
+{
+  name: 'comments',
+  type: 'join',
+  collection: 'comments',
+  on: 'post',
+  admin: {
+    defaultColumns: ['title', 'author', 'createdAt'],  // Controls which columns render
+  },
+  defaultLimit: 10,
+  defaultSort: '-createdAt',
+}
+```
+
+### Local-first query
+```typescript
+// RxDB Mango query with reverse-relationship filter:
+const selector = {
+  _deleted: { $eq: false },
+  [onField]: { $eq: parentDocId },
+}
+const results = await localCollection.find({
+  selector,
+  sort: [{ [sortField]: sortDir }],
+  limit,
+  skip: (pageNum - 1) * limit,
+}).exec()
+```
+
+### REST API fallback
+```typescript
+const where = { [onField]: { equals: parentDocId } }
+// For polymorphic targets:
+const where = { [onField]: { equals: { relationTo: parentSlug, value: parentDocId } } }
+// Merged with field.where if present:
+const mergedWhere = field.where ? { and: [where, field.where] } : where
+```
+
+### Row rendering
+Rows are plain `View` wrappers — **no expo-router imports** (Link, useRouter). Navigation from join field rows is not currently supported from the shared package. If needed, it must be injected via callback prop from the screen file.
+
+### Key rules
+1. Join fields are **read-only** — `onChange` is not used
+2. **No expo-router imports** — no Link, no useRouter, no require('expo-router')
+3. Always show "Save this document" placeholder for unsaved docs (no parent ID)
+4. Pre-populated value from the API is preferred on first render (avoids extra query)
+5. Column headers are tappable for sort — active column shows ▲/▼ indicator
+6. Cell values are auto-formatted: dates → locale string, booleans → Yes/No, objects → title/name/email/id
+7. Horizontal scroll on each row handles wide tables on narrow mobile screens
 
 ---
 

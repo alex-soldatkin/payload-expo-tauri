@@ -65,6 +65,26 @@ export type NativeComponentRegistry = {
 
   /** Modifier factory: creates a `pickerStyle` modifier. */
   pickerStyle: ((style: string) => { $type: string; style: string }) | null
+
+  /** Native bottom sheet (SwiftUI .sheet presentation). */
+  BottomSheet: React.ComponentType<{
+    isPresented: boolean
+    onIsPresentedChange: (isPresented: boolean) => void
+    fitToContents?: boolean
+    children?: React.ReactNode
+  }> | null
+
+  /** Group wrapper for applying SwiftUI modifiers to children. */
+  Group: React.ComponentType<{
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  /** Modifier factory: creates presentationDetents modifier. */
+  presentationDetents: ((detents: Array<'medium' | 'large' | { fraction: number } | { height: number }>) => any) | null
+
+  /** Modifier factory: creates presentationDragIndicator modifier. */
+  presentationDragIndicator: ((visibility: 'automatic' | 'visible' | 'hidden') => any) | null
 }
 
 /** Empty registry — all components null, nothing available. */
@@ -78,4 +98,8 @@ export const emptyRegistry: NativeComponentRegistry = {
   Text: null,
   tag: null,
   pickerStyle: null,
+  BottomSheet: null,
+  Group: null,
+  presentationDetents: null,
+  presentationDragIndicator: null,
 }

@@ -71,6 +71,16 @@ Dynamic collection icons (2026-04-02)
 - Tab menu, collections index, and dashboard all use dynamic icons from the schema.
 - Icons change dynamically when Payload config is updated and schema is refreshed — no app rebuild needed.
 
+Join field support (2026-04-02)
+- `JoinField` component renders Payload's join field as a native scrollable table.
+- Configurable columns via `admin.defaultColumns` from Payload config.
+- Tappable rows navigate to the related document (Link.Preview peek/pop on iOS).
+- Sort by column header tap, pagination with "Load more", pull-to-refresh.
+- Local-first: queries RxDB with `{ [onField]: { $eq: parentDocId } }`; falls back to REST API.
+- `FormDataContext` added to DocumentForm so JoinField can access parent document ID.
+- Polymorphic joins supported (multiple collection slugs with badge display).
+- Pre-populated data from the API used on first render to avoid unnecessary queries.
+
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.
 - Reuse packages/admin-core for form state, validation, schema maps, and API calls.

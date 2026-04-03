@@ -31,6 +31,8 @@ Local workspace references
 - payload_universal/packages/local-db/src/replication.ts for HTTP replication to Payload REST API.
 - payload_universal/packages/local-db/src/hooks.ts for useLocalCollection, useLocalDocument, useLocalQuery.
 - payload_universal/packages/admin-native/ for React Native admin UI components.
+- payload_universal/packages/admin-native/src/fields/join.tsx for the native JoinField component.
+- payload_universal/packages/admin-native/src/DocumentForm.tsx for FormDataContext (provides parent doc ID to nested fields like JoinField).
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.
 - test_app/apps/mobile-expo/app/_layout.tsx for the Expo root layout (auth, local DB, storage init).
 - test_app/.env for PAYLOAD_SECRET and DATABASE_URL.

@@ -1,6 +1,8 @@
 /**
  * Collections index – lists all visible collections from the menuModel,
  * grouped by admin.group just like the web admin sidebar.
+ *
+ * On tablet, collections are displayed in a responsive multi-column grid.
  */
 import React, { useMemo } from 'react'
 import { Animated, Pressable, Text, View } from 'react-native'
@@ -14,12 +16,16 @@ import {
 } from '@payload-universal/admin-native'
 
 import { useHeaderScrollY } from '@/components/HeaderScrollContext'
+import { useResponsive } from '@/hooks/useResponsive'
+
+const GRID_GAP = 8
 
 export default function CollectionsIndexScreen() {
   const router = useRouter()
   const menuModel = useMenuModel()
   const headerHeight = useHeaderHeight()
   const scrollY = useHeaderScrollY()
+  const { columns } = useResponsive()
 
   const scrollHandler = useMemo(
     () =>
@@ -39,30 +45,41 @@ export default function CollectionsIndexScreen() {
     collections: visibleCollections.filter((c) => c.group === group),
   }))
 
+  // Grid helpers – on phone (columns === 1), styles are undefined → normal stacking
+  const gridRow = columns > 1
+    ? { flexDirection: 'row' as const, flexWrap: 'wrap' as const, margin: -(GRID_GAP / 2) }
+    : undefined
+  const gridCell = columns > 1
+    ? { width: `${100 / columns}%` as any, padding: GRID_GAP / 2 }
+    : undefined
+
   return (
     <Animated.ScrollView
       className="flex-1 bg-paper"
       contentContainerStyle={{ paddingTop: headerHeight + 8 }}
-      contentContainerClassName="px-5 pb-10"
+      contentContainerClassName={`pb-10 ${columns > 1 ? 'px-8' : 'px-5'}`}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
     >
       {/* Ungrouped */}
-      {ungrouped.map((col) => (
-        <Pressable
-          key={col.slug}
-          className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
-          onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
-        >
-          <CollectionIcon icon={col.icon} size={22} color="#555" />
-          <View>
-            <Text className="text-base font-semibold text-ink">
-              {getCollectionLabel(menuModel!, col.slug)}
-            </Text>
-            <Text className="mt-0.5 text-xs text-ink-muted">{col.slug}</Text>
+      <View style={gridRow}>
+        {ungrouped.map((col) => (
+          <View key={col.slug} style={gridCell}>
+            <Pressable
+              className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
+              onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
+            >
+              <CollectionIcon icon={col.icon} size={22} color="#555" />
+              <View>
+                <Text className="text-base font-semibold text-ink">
+                  {getCollectionLabel(menuModel!, col.slug)}
+                </Text>
+                <Text className="mt-0.5 text-xs text-ink-muted">{col.slug}</Text>
+              </View>
+            </Pressable>
           </View>
-        </Pressable>
-      ))}
+        ))}
+      </View>
 
       {/* Grouped */}
       {grouped.map(
@@ -72,21 +89,24 @@ export default function CollectionsIndexScreen() {
               <Text className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-muted">
                 {group.name}
               </Text>
-              {group.collections.map((col) => (
-                <Pressable
-                  key={col.slug}
-                  className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
-                  onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
-                >
-                  <CollectionIcon icon={col.icon} size={22} color="#555" />
-                  <View>
-                    <Text className="text-base font-semibold text-ink">
-                      {getCollectionLabel(menuModel!, col.slug)}
-                    </Text>
-                    <Text className="mt-0.5 text-xs text-ink-muted">{col.slug}</Text>
+              <View style={gridRow}>
+                {group.collections.map((col) => (
+                  <View key={col.slug} style={gridCell}>
+                    <Pressable
+                      className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
+                      onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
+                    >
+                      <CollectionIcon icon={col.icon} size={22} color="#555" />
+                      <View>
+                        <Text className="text-base font-semibold text-ink">
+                          {getCollectionLabel(menuModel!, col.slug)}
+                        </Text>
+                        <Text className="mt-0.5 text-xs text-ink-muted">{col.slug}</Text>
+                      </View>
+                    </Pressable>
                   </View>
-                </Pressable>
-              ))}
+                ))}
+              </View>
             </View>
           ),
       )}

@@ -191,13 +191,17 @@ export const LocalDBProvider: React.FC<Props> = ({
     }
   }, [schema, token, baseURL, pullInterval, storage, wsURL])
 
-  // Clean up on unmount
+  // Clean up on unmount (or hot reload)
   useEffect(() => {
     return () => {
       if (dbRef.current) {
         dbRef.current.destroy().catch(() => {})
         dbRef.current = null
       }
+      // Reset so the init effect can re-run after a hot reload
+      initRef.current = false
+      setLocalDB(null)
+      setIsReady(false)
     }
   }, [])
 
