@@ -134,6 +134,10 @@ export const createLocalDB = async (
     name: 'payload_local',
     storage: resolvedStorage,
     multiInstance: false,
+    // ignoreDuplicate prevents DB8 when re-creating after a DB6 schema
+    // conflict recovery or resetLocalDB() — RxDB's internal name registry
+    // may still hold 'payload_local' even after destroy + removeRxDatabase.
+    ignoreDuplicate: true,
   })
 
   const collections: Record<string, RxCollection<PayloadDoc>> = {}
