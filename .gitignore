@@ -69,6 +69,15 @@ test_app/apps/mobile-expo/dist/
 !.env.emulated
 
 # ========================
+# Signing credentials
+# ========================
+credentials.json
+credentials/
+*.p12
+*.mobileprovision
+*.provisionprofile
+
+# ========================
 # Databases
 # ========================
 *.db
