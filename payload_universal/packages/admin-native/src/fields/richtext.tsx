@@ -65,11 +65,80 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
-  // react-native-enriched is a Fabric-only component (interfaceOnly: true).
-  // It requires @react-native/babel-plugin-codegen in the app's Babel config
-  // to transform codegenNativeComponent() into an inline JS view config at
-  // bundle time. Without the plugin, the runtime fallback fails in Bridgeless
-  // mode because there's no Paper ViewManager to query.
+  // react-native-enriched uses interfaceOnly: true (Fabric-only, no Paper
+  // ViewManager). The Codegen Babel plugin should generate the JS view config
+  // at bundle time, but it crashes with @babel/traverse 7.29 on RN 0.83.
+  //
+  // Fix: register the view config MANUALLY before the module is loaded.
+  // This is what the Codegen plugin would generate. The config must be
+  // registered before require('react-native-enriched') runs, because that
+  // module's codegenNativeComponent() call tries to register the same name
+  // and would fail if it runs first with a broken fallback path.
+  const ViewConfigRegistry = require('react-native/Libraries/Renderer/shims/ReactNativeViewConfigRegistry')
+
+  // Only register if not already registered (prevents double-registration on HMR)
+  let alreadyRegistered = false
+  try {
+    ViewConfigRegistry.get('EnrichedTextInputView')
+    alreadyRegistered = true
+  } catch { /* not registered yet — expected */ }
+
+  if (!alreadyRegistered) {
+    const { processColorArray } = require('react-native/Libraries/StyleSheet/processStyles')
+    const processColor = require('react-native/Libraries/StyleSheet/processColor').default
+      ?? require('react-native/Libraries/StyleSheet/processColor')
+
+    ViewConfigRegistry.register('EnrichedTextInputView', () => ({
+      uiViewClassName: 'EnrichedTextInputView',
+      bubblingEventTypes: {
+        onSubmitEditing: { registrationName: 'onSubmitEditing' },
+      },
+      directEventTypes: {
+        onInputFocus: { registrationName: 'onInputFocus' },
+        onInputBlur: { registrationName: 'onInputBlur' },
+        onChangeText: { registrationName: 'onChangeText' },
+        onChangeHtml: { registrationName: 'onChangeHtml' },
+        onChangeState: { registrationName: 'onChangeState' },
+        onLinkDetected: { registrationName: 'onLinkDetected' },
+        onMentionDetected: { registrationName: 'onMentionDetected' },
+        onMention: { registrationName: 'onMention' },
+        onChangeSelection: { registrationName: 'onChangeSelection' },
+        onRequestHtmlResult: { registrationName: 'onRequestHtmlResult' },
+        onInputKeyPress: { registrationName: 'onInputKeyPress' },
+        onPasteImages: { registrationName: 'onPasteImages' },
+        onContextMenuItemPress: { registrationName: 'onContextMenuItemPress' },
+      },
+      validAttributes: {
+        autoFocus: true,
+        editable: true,
+        defaultValue: true,
+        placeholder: true,
+        placeholderTextColor: { process: processColor },
+        mentionIndicators: true,
+        cursorColor: { process: processColor },
+        selectionColor: { process: processColor },
+        autoCapitalize: true,
+        htmlStyle: true,
+        scrollEnabled: true,
+        linkRegex: true,
+        contextMenuItems: true,
+        returnKeyType: true,
+        returnKeyLabel: true,
+        submitBehavior: true,
+        color: { process: processColor },
+        fontSize: true,
+        lineHeight: true,
+        fontFamily: true,
+        fontWeight: true,
+        fontStyle: true,
+        isOnChangeHtmlSet: true,
+        isOnChangeTextSet: true,
+        androidExperimentalSynchronousEvents: true,
+        useHtmlNormalizer: true,
+      },
+    }))
+  }
+
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
   enrichedAvailable = !!EnrichedTextInput
