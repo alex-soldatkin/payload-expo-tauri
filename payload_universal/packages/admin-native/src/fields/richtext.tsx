@@ -67,17 +67,7 @@ let enrichedAvailable = false
 try {
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
-  // Verify the native view is actually registered — the JS module may
-  // resolve but the native Fabric component won't exist without a dev
-  // client build that includes react-native-enriched's native code.
-  const { UIManager, Platform } = require('react-native')
-  if (Platform.OS === 'ios' || Platform.OS === 'android') {
-    const hasNative = UIManager.getViewManagerConfig?.('EnrichedTextInputView')
-      ?? UIManager.getViewManagerConfig?.('RCTEnrichedTextInput')
-    enrichedAvailable = !!EnrichedTextInput && !!hasNative
-  } else {
-    enrichedAvailable = !!EnrichedTextInput
-  }
+  enrichedAvailable = !!EnrichedTextInput
 } catch {
   /* not installed — will use plain-text fallback */
 }
@@ -392,6 +382,21 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
 }
 
 // ---------------------------------------------------------------------------
+// Error boundary — catches native view registration failures at render time
+// and falls back to plain-text gracefully (e.g. Expo Go without native code).
+// ---------------------------------------------------------------------------
+
+class RichTextErrorBoundary extends React.Component<
+  { children: React.ReactNode; fallback: React.ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  componentDidCatch() { /* logged by React */ }
+  render() { return this.state.hasError ? this.props.fallback : this.props.children }
+}
+
+// ---------------------------------------------------------------------------
 // Plain-text fallback (when react-native-enriched is not installed)
 // ---------------------------------------------------------------------------
 
@@ -475,7 +480,13 @@ const RichTextFieldFallback: React.FC<FieldComponentProps<ClientRichTextField>> 
 // ---------------------------------------------------------------------------
 
 export const RichTextField: React.FC<FieldComponentProps<ClientRichTextField>> = (props) =>
-  enrichedAvailable ? <RichTextFieldEnriched {...props} /> : <RichTextFieldFallback {...props} />
+  enrichedAvailable ? (
+    <RichTextErrorBoundary fallback={<RichTextFieldFallback {...props} />}>
+      <RichTextFieldEnriched {...props} />
+    </RichTextErrorBoundary>
+  ) : (
+    <RichTextFieldFallback {...props} />
+  )
 
 // ---------------------------------------------------------------------------
 // Styles
