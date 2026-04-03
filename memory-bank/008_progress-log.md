@@ -274,11 +274,36 @@ This log captures what has been implemented so far and the current state of the 
 - **Field registry**: `join: JoinField` registered in `fieldRegistry` (was previously falling through to FallbackField)
 - **Exports**: `JoinField`, `ClientJoinField`, `FormDataContext`, `useFormData`, `FormDataContextValue` added to package exports
 
+### Phase 9a — iPad responsive layout + relationship picker fix (2026-04-03)
+- **Responsive layout refactoring** (`useResponsive.ts`):
+  - `isTablet` now uses `Platform.isPad` on iOS for reliable detection even in iPadOS Split View
+  - New `showSidebar` flag (replaces `isTablet` for layout switching): requires `width >= 1024`
+  - iPad portrait → bottom tabs (no sidebar); only iPad landscape full-screen → sidebar
+  - `contentWidth` computed as window width minus sidebar when visible
+  - Grid columns based on content area width, not raw window width; max 2 cols with sidebar
+  - New `isLandscape` property exposed
+- **Relationship picker preview rework** (`pickers.tsx`):
+  - Replaced native ScrollablePreview with pure-React inline preview inside BottomSheet
+  - Removed `useScrollablePreview` import — no longer uses native context menu in BottomSheet
+  - Long-press on picker row → `setPreviewItem(item)` → BottomSheet switches to inline DocumentForm
+  - "Select" and "Back" action buttons in preview mode
+  - **Fixes the UIKit crash** when native ScrollablePreview dismissed inside a BottomSheet Modal
+- **iPad layout fixes**:
+  - `_layout.tsx`: `isTablet` → `showSidebar` for sidebar/tab-bar decisions; `alignSelf: 'stretch'` on content container
+  - `DocumentList.tsx`: added `width: '100%'` + `alignSelf: 'stretch'` to fill available width in sidebar layout
+  - Screen files (`index.tsx`, `collections/index.tsx`, `globals/index.tsx`, `account.tsx`): replaced NativeWind `className` with inline `StyleSheet` for reliable iPad padding/layout; `flexGrow: 1` on contentContainerStyle
+  - Sidebar item padding tightened (12→10); label gets `flex: 1` + `overflow: hidden`
+- **Debug logging** added for development:
+  - `BottomSheet.tsx`: console.log on visibility changes
+  - `ScrollablePreviewView.swift`: NSLog for tap, preview open, action press, dismiss lifecycle
+  - `pickers.tsx`: console.log for canPreview state
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.
 - Pre-existing TS errors in admin-native (React 19 `key`/`ref` prop changes, `expo-router` resolution from workspace) and admin-schema (Payload type mismatches) — cosmetic, do not affect runtime.
 - Could switch from MongoDB to Postgres in future (compatible with current architecture).
+- Debug console.log / NSLog statements in BottomSheet, ScrollablePreviewView.swift, and pickers.tsx should be removed before production.
 
 ### Phase 9 — ScrollablePreview native module + progressive blur header (2026-04-03)
 - **ScrollablePreview native module**:

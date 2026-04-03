@@ -81,6 +81,20 @@ Join field support (2026-04-02)
 - Polymorphic joins supported (multiple collection slugs with badge display).
 - Pre-populated data from the API used on first render to avoid unnecessary queries.
 
+iPad responsive layout (2026-04-03)
+- `useResponsive()` hook (`hooks/useResponsive.ts`) provides: `isTablet`, `isLandscape`, `showSidebar`, `columns`, `contentWidth`
+- `isTablet` uses `Platform.isPad` on iOS (reliable even in iPadOS Split View); Android falls back to `min(width, height) >= 600`
+- `showSidebar` = true when `isTablet && width >= 1024` — iPad landscape full-screen only; portrait and split-view use bottom tabs
+- Grid columns based on content area width (after subtracting sidebar), not raw window width; max 2 cols when sidebar is showing
+- `_layout.tsx` switches between sidebar and bottom tab bar based on `showSidebar`
+- Screen files use inline styles instead of NativeWind className for reliable iPad layout (padding, flexGrow)
+- Sidebar is 280px wide, shows grouped and ungrouped collections + globals + account
+
+Relationship picker inline preview (2026-04-03)
+- Long-press on a picker row in the BottomSheet shows an inline DocumentForm preview (pure React, no native context menu)
+- "Select" picks the item, "Back" returns to the list
+- Avoids the native ScrollablePreview UIKit crash inside BottomSheet Modals (see 013_ui-patterns.md)
+
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.
 - Reuse packages/admin-core for form state, validation, schema maps, and API calls.

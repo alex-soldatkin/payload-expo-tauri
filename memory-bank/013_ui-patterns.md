@@ -63,19 +63,16 @@ if (preview) {
 4. Wrap preview overlay content with `<PreviewContextProvider value={true}>` to disable nested previews
 5. `FormDataContext` was extracted to `FormDataContext.ts` to break a require cycle: `DocumentForm → FieldRenderer → fields → join → DocumentForm`
 
-### Open Bug: ScrollablePreview in relationship picker BottomSheet
-**Status:** Unresolved (2026-04-02)
-**Symptom:** App crashes after long-press peeking a relationship picker row inside a BottomSheet, then selecting via the preview action or primary action.
-**What works:** Peeking renders correctly (DocumentForm shows inside preview). The crash happens on DISMISS — when `setOpen(false)` unmounts the BottomSheet Modal while the native ScrollablePreview overlay is still animating/dismissing.
-**What was tried:**
-- Removing all expo-router imports (useRouter, Link) from shared packages ✓ (fixed "useLinkPreviewContext" errors elsewhere)
-- Delaying `setOpen(false)` by 350ms after `setPreviewItemId(null)` — still crashes
-- Using `pageSheet` Modal instead of transparent Modal — breaks ScrollablePreview entirely (UIContextMenuInteraction incompatible with UISheetPresentationController)
-**Root cause hypothesis:** The native `ScrollablePreview` (UIContextMenuInteraction-based) dismissal animation conflicts with the Modal's removal from the view hierarchy. When the BottomSheet Modal is closed, UIKit removes the view tree containing the context menu's sourceView, causing a native crash during the dismiss transition.
-**Potential solutions to try:**
-1. Wait for `onPreviewClose` callback before allowing `setOpen(false)` — ensure native preview is fully dismissed before unmounting the Modal
-2. Move relationship picker to an Expo Router modal screen instead of a BottomSheet Modal — avoids the UIContextMenu + Modal conflict entirely
-3. Use a different preview approach for picker rows (e.g., inline expand/collapse instead of native context menu)
+### Resolved Bug: ScrollablePreview in relationship picker BottomSheet
+**Status:** Fixed (2026-04-03) — replaced native preview with pure-React inline preview
+**Original symptom:** App crashed after long-press peeking a relationship picker row inside a BottomSheet, then selecting via the preview action or primary action. The native `ScrollablePreview` (UIContextMenuInteraction-based) dismissal animation conflicted with the BottomSheet Modal's removal from the view hierarchy.
+**Fix:** Replaced native ScrollablePreview inside BottomSheet with a pure-React inline preview:
+- Long-press on a picker row sets `previewItem` state → BottomSheet content switches from list to inline DocumentForm
+- "Select" and "Back" buttons replace native context menu actions
+- No native view reparenting needed → no UIKit crash
+- `useScrollablePreview` import removed from `pickers.tsx`
+- BottomSheet height increases to 0.75 when preview is active (from 0.6)
+**Rule: Do NOT use native ScrollablePreview inside BottomSheet Modals** — the UIContextMenuInteraction view lifecycle conflicts with React Native Modal teardown. Use inline React previews instead.
 
 ### BottomSheet Implementation
 Uses transparent `Modal` + `Animated` slide-up + `PanResponder` swipe-to-dismiss. Wraps children with `PreviewContextProvider value={true}`.
