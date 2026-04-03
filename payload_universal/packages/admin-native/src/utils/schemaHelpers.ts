@@ -1,4 +1,4 @@
-import type { ClientField, SerializedSchemaMap } from './types'
+import type { ClientField, SerializedSchemaMap } from '../types'
 
 /** Deserialize schema entries back to a Map. */
 export const deserializeSchemaMap = <T>(entries: SerializedSchemaMap<T>): Map<string, T> =>

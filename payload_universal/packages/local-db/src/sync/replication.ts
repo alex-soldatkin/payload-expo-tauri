@@ -12,7 +12,7 @@ import { replicateRxCollection } from 'rxdb/plugins/replication'
 import type { RxCollection, RxReplicationState } from 'rxdb'
 import { Subject, interval as rxInterval } from 'rxjs'
 import { map } from 'rxjs/operators'
-import type { PayloadDoc } from './schemaFromPayload'
+import type { PayloadDoc } from '../utils/schemaFromPayload'
 
 export type ReplicationConfig = {
   baseURL: string

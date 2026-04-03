@@ -5,7 +5,7 @@
 import React from 'react'
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 
-import type { ActiveFilter } from './useDocumentListFilters'
+import type { ActiveFilter } from './hooks/useDocumentListFilters'
 import { defaultTheme as t } from './theme'
 
 type Props = {

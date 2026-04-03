@@ -15,8 +15,8 @@
  */
 
 import React, { useCallback, useMemo, useState } from 'react'
-import type { ClientField, FormErrors } from './types'
-import { payloadFieldsToZod } from './validation'
+import type { ClientField, FormErrors } from '../types'
+import { payloadFieldsToZod } from '../utils/validation'
 
 // ---------------------------------------------------------------------------
 // Lazy RHF import — the package is optional

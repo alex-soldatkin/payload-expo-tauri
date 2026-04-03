@@ -18,7 +18,7 @@ import type {
   FieldComponentProps,
 } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 import { FieldShell } from './shared'
 
 // ---------------------------------------------------------------------------

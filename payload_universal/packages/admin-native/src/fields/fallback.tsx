@@ -6,7 +6,7 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import type { FieldComponentProps } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldLabel } from '../schemaHelpers'
+import { getFieldLabel } from '../utils/schemaHelpers'
 
 export const FallbackField: React.FC<FieldComponentProps> = ({ field }) => (
   <View style={styles.container}>

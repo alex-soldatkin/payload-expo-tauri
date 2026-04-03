@@ -28,10 +28,10 @@ import {
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
-import { extractRootFields, getDocumentTitle, getFieldLabel } from './schemaHelpers'
+import { extractRootFields, getDocumentTitle, getFieldLabel } from './utils/schemaHelpers'
 import { usePayloadNative } from './PayloadNativeProvider'
-import { payloadApi } from './api'
-import { useDocumentListFilters } from './useDocumentListFilters'
+import { payloadApi } from './utils/api'
+import { useDocumentListFilters } from './hooks/useDocumentListFilters'
 import { FilterChips } from './FilterChips'
 import { FilterBottomSheet } from './FilterBottomSheet'
 import { BottomSheet } from './BottomSheet'

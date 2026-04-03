@@ -9,7 +9,7 @@ import { StyleSheet, Text, TextInput, View } from 'react-native'
 
 import type { ClientRichTextField, FieldComponentProps } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 
 /**
  * Extract plain-text from a Lexical / Slate JSON tree (best-effort).

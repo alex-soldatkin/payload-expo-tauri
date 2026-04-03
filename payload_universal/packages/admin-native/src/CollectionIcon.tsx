@@ -10,7 +10,7 @@
  * Falls back to a generic "File" icon when the name is not recognised.
  */
 import React from 'react'
-import { getIconComponent, isRawSVG } from './iconRegistry'
+import { getIconComponent, isRawSVG } from './utils/iconRegistry'
 
 // Optional: SvgXml for raw SVG string rendering
 let SvgXml: React.ComponentType<{

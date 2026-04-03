@@ -32,14 +32,14 @@ import type {
   FieldComponentProps,
 } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel, normalizeOption } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel, normalizeOption } from '../utils/schemaHelpers'
 import { BottomSheet } from '../BottomSheet'
 import { usePayloadNative } from '../PayloadNativeProvider'
-import { payloadApi } from '../api'
+import { payloadApi } from '../utils/api'
 import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 
-import { PreviewContextProvider } from '../PreviewContext'
+import { PreviewContextProvider } from '../contexts/PreviewContext'
 
 // Lazy-loaded DocumentForm to avoid circular dep (pickers → DocumentForm → fields → pickers)
 let _DocumentForm: React.ComponentType<any> | null = null

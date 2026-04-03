@@ -10,7 +10,7 @@
  * This avoids the infinite loop caused by having two independent push paths.
  */
 import type { RxCollection } from 'rxdb'
-import type { PayloadDoc } from './schemaFromPayload'
+import type { PayloadDoc } from '../utils/schemaFromPayload'
 
 export type SyncReplicationConfig = {
   baseURL: string

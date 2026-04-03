@@ -9,8 +9,8 @@
     "./fields": "./src/fields/index.ts",
     "./provider": "./src/PayloadNativeProvider.tsx",
     "./toast": "./src/Toast.tsx",
-    "./validation": "./src/validation.ts",
-    "./form": "./src/usePayloadForm.ts"
+    "./validation": "./src/utils/validation.ts",
+    "./form": "./src/hooks/usePayloadForm.ts"
   },
   "peerDependencies": {
     "@expo/ui": ">=55.0.0",

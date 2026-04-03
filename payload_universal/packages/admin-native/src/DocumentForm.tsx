@@ -31,22 +31,22 @@ try {
 
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
-import { extractRootFields, getByPath, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './schemaHelpers'
+import { extractRootFields, getByPath, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
 import { ErrorMapContext, FieldRendererContext } from './fields/structural'
 import { FieldRenderer } from './FieldRenderer'
 import { useToast } from './Toast'
-import { PayloadAPIError } from './api'
-import { FormDataContext } from './FormDataContext'
-import { validateFormData } from './validation'
+import { PayloadAPIError } from './utils/api'
+import { FormDataContext } from './contexts/FormDataContext'
+import { validateFormData } from './utils/validation'
 import {
   FormProvider,
   isRHFAvailable,
   usePayloadForm,
-} from './usePayloadForm'
+} from './hooks/usePayloadForm'
 
 // Re-export for backwards compatibility
-export { FormDataContext, useFormData } from './FormDataContext'
-export type { FormDataContextValue } from './FormDataContext'
+export { FormDataContext, useFormData } from './contexts/FormDataContext'
+export type { FormDataContextValue } from './contexts/FormDataContext'
 
 export type DocumentFormHandle = {
   submit: () => void

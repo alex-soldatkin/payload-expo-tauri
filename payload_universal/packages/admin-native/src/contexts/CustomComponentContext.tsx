@@ -17,7 +17,7 @@ import type {
   ComponentSlot,
   CustomComponentRegistry,
   CustomFieldEntry,
-} from './types'
+} from '../types'
 
 // ---------------------------------------------------------------------------
 // Context

@@ -27,19 +27,34 @@ Local workspace references
 - payload_universal/packages/client-validators/src/builtinValidators.ts for built-in validators ported from Payload.
 - payload_universal/packages/client-validators/src/runValidation.ts for the schema-walking validation runner.
 - payload_universal/packages/client-validators/src/runHooks.ts for beforeValidate/beforeChange/afterChange/afterRead hook runners.
-- payload_universal/packages/local-db/src/validatedHooks.ts for useValidatedMutations (validates before writing to RxDB).
-- payload_universal/packages/local-db/src/ClientValidatorContext.tsx for ClientValidatorProvider context.
+- payload_universal/packages/local-db/src/hooks/validatedHooks.ts for useValidatedMutations (validates before writing to RxDB).
+- payload_universal/packages/local-db/src/contexts/ClientValidatorContext.tsx for ClientValidatorProvider context.
 - test_app/apps/mobile-expo/src/validators/index.ts for the test app's custom client-side validators and hooks.
 - payload_universal/packages/schema/src/createPayloadConfig.ts for the shared Payload config builder.
 - payload_universal/packages/admin-schema/src/index.ts for admin schema generation.
 - payload_universal/packages/local-db/src/database.ts for the RxDB database factory (createLocalDB).
 - payload_universal/packages/local-db/src/storage/index.ts for the custom RxDB SQLite storage (getRxStorageSQLite).
 - payload_universal/packages/local-db/src/storage/mango-to-sql.ts for Mango query to SQL WHERE conversion.
-- payload_universal/packages/local-db/src/replication.ts for HTTP replication to Payload REST API.
-- payload_universal/packages/local-db/src/hooks.ts for useLocalCollection, useLocalDocument, useLocalQuery.
+- payload_universal/packages/local-db/src/sync/replication.ts for HTTP replication to Payload REST API.
+- payload_universal/packages/local-db/src/sync/syncReplication.ts for WebSocket sync replication.
+- payload_universal/packages/local-db/src/hooks/hooks.ts for useLocalCollection, useLocalDocument, useLocalQuery.
+- payload_universal/packages/local-db/src/hooks/useUploadQueue.ts for usePendingUploads.
+- payload_universal/packages/local-db/src/queue/uploadQueue.ts for UploadQueueManager.
+- payload_universal/packages/local-db/src/utils/schemaFromPayload.ts for buildRxSchema, extractFieldDefs.
+- payload_universal/packages/local-db/src/contexts/LocalDBProvider.tsx for LocalDBProvider context.
 - payload_universal/packages/admin-native/ for React Native admin UI components.
 - payload_universal/packages/admin-native/src/fields/join.tsx for the native JoinField component.
-- payload_universal/packages/admin-native/src/DocumentForm.tsx for FormDataContext (provides parent doc ID to nested fields like JoinField).
+- payload_universal/packages/admin-native/src/DocumentForm.tsx for DocumentForm component.
+- payload_universal/packages/admin-native/src/contexts/FormDataContext.ts for FormDataContext (provides parent doc ID to nested fields like JoinField).
+- payload_universal/packages/admin-native/src/hooks/usePayloadForm.ts for React Hook Form integration.
+- payload_universal/packages/admin-native/src/utils/schemaHelpers.ts for schema map helpers.
+- payload_universal/packages/admin-native/src/utils/api.ts for Payload REST API client.
+- payload_universal/packages/admin-native/src/utils/validation.ts for Zod validation from Payload fields.
+- payload_universal/packages/admin-native/src/utils/iconRegistry.ts for lucide icon registry + SF Symbol mappings.
+- payload_universal/packages/admin-native/src/contexts/CustomComponentContext.tsx for custom component overrides.
+- payload_universal/packages/admin-native/src/contexts/PreviewContext.ts for preview context (Link.Preview control).
+- payload_universal/packages/admin-native/src/theme/index.ts for design tokens and theming.
+- payload_universal/packages/admin-native/src/types/index.ts for shared TypeScript types.
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.
 - test_app/apps/mobile-expo/app/_layout.tsx for the Expo root layout (auth, local DB, storage init).
 - test_app/.env for PAYLOAD_SECRET and DATABASE_URL.

@@ -32,7 +32,7 @@ import type {
   FormErrors,
 } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel, groupFieldsByWidth } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel, groupFieldsByWidth } from '../utils/schemaHelpers'
 import { nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
 

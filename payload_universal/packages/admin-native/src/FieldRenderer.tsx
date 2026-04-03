@@ -12,9 +12,9 @@
 import React from 'react'
 
 import type { ClientField, FieldValue } from './types'
-import { isFieldHidden } from './schemaHelpers'
+import { isFieldHidden } from './utils/schemaHelpers'
 import { getFieldComponent } from './fields'
-import { useCustomComponent, useCustomFieldSlots } from './CustomComponentContext'
+import { useCustomComponent, useCustomFieldSlots } from './contexts/CustomComponentContext'
 
 type Props = {
   field: ClientField

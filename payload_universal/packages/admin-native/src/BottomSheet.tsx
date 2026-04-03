@@ -10,7 +10,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native'
-import { PreviewContextProvider } from './PreviewContext'
+import { PreviewContextProvider } from './contexts/PreviewContext'
 
 // Optional: BlurView for translucent sheet background
 let BlurView: React.ComponentType<{

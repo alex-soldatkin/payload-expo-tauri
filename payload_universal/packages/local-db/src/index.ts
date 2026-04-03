@@ -13,8 +13,8 @@
  */
 
 // Provider & status hooks
-export { LocalDBProvider, useLocalDB, useLocalDBStatus } from './LocalDBProvider'
-export type { SyncProgress } from './LocalDBProvider'
+export { LocalDBProvider, useLocalDB, useLocalDBStatus } from './contexts/LocalDBProvider'
+export type { SyncProgress } from './contexts/LocalDBProvider'
 
 // React hooks for data access
 export {
@@ -22,47 +22,47 @@ export {
   useLocalDocument,
   useLocalQuery,
   useLocalMutations,
-} from './hooks'
+} from './hooks/hooks'
 export type {
   UseLocalCollectionResult,
   UseLocalDocumentResult,
   UseLocalMutationsResult,
-} from './hooks'
+} from './hooks/hooks'
 
 // Upload queue hook
-export { usePendingUploads } from './useUploadQueue'
-export type { UsePendingUploadsResult } from './useUploadQueue'
+export { usePendingUploads } from './hooks/useUploadQueue'
+export type { UsePendingUploadsResult } from './hooks/useUploadQueue'
 
 // Database factory (for advanced usage)
 export { createLocalDB } from './database'
 export type { PayloadLocalDB, CreateLocalDBArgs } from './database'
 
 // Schema utilities
-export { buildRxSchema, extractFieldDefs } from './schemaFromPayload'
-export type { PayloadDoc, PayloadFieldDef, PayloadCollectionMeta } from './schemaFromPayload'
+export { buildRxSchema, extractFieldDefs } from './utils/schemaFromPayload'
+export type { PayloadDoc, PayloadFieldDef, PayloadCollectionMeta } from './utils/schemaFromPayload'
 
 // Replication
-export { startReplication } from './replication'
-export type { ReplicationConfig } from './replication'
+export { startReplication } from './sync/replication'
+export type { ReplicationConfig } from './sync/replication'
 
 // WebSocket sync replication
-export { startSyncReplication } from './syncReplication'
-export type { SyncReplicationConfig, SyncReplicationState } from './syncReplication'
+export { startSyncReplication } from './sync/syncReplication'
+export type { SyncReplicationConfig, SyncReplicationState } from './sync/syncReplication'
 
 // Upload queue
-export { UploadQueueManager, UPLOAD_QUEUE_COLLECTION } from './uploadQueue'
-export type { PendingUploadItem, UploadStatus, EnqueueArgs } from './uploadQueue'
+export { UploadQueueManager, UPLOAD_QUEUE_COLLECTION } from './queue/uploadQueue'
+export type { PendingUploadItem, UploadStatus, EnqueueArgs } from './queue/uploadQueue'
 
 // Client-side validation & hooks
-export { ClientValidatorProvider, useClientValidatorConfig } from './ClientValidatorContext'
-export type { ClientValidatorProviderProps } from './ClientValidatorContext'
-export { useValidatedMutations } from './validatedHooks'
+export { ClientValidatorProvider, useClientValidatorConfig } from './contexts/ClientValidatorContext'
+export type { ClientValidatorProviderProps } from './contexts/ClientValidatorContext'
+export { useValidatedMutations } from './hooks/validatedHooks'
 export type {
   UseValidatedMutationsResult,
   ValidatedMutationResult,
   ValidatedMutationSuccess,
   ValidatedMutationFailure,
-} from './validatedHooks'
+} from './hooks/validatedHooks'
 
 // SQLite storage (drop-in replacement for rxdb trial)
 export { getRxStorageSQLite, getSQLiteBasicsExpoSQLiteAsync } from './storage'

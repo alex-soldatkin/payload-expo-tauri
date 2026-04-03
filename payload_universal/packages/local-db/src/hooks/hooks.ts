@@ -9,8 +9,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import type { MangoQuery, RxCollection, RxDocument } from 'rxdb'
-import type { PayloadDoc } from './schemaFromPayload'
-import type { PayloadLocalDB } from './database'
+import type { PayloadDoc } from '../utils/schemaFromPayload'
+import type { PayloadLocalDB } from '../database'
 
 import { getRandomBytes } from 'expo-crypto'
 

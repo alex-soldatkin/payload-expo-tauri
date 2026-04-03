@@ -23,8 +23,8 @@ import {
 import type { ClientHooksConfig, ValidationErrors } from '@payload-universal/client-validators'
 
 import { useLocalMutations } from './hooks'
-import { useClientValidatorConfig } from './ClientValidatorContext'
-import type { PayloadLocalDB } from './database'
+import { useClientValidatorConfig } from '../contexts/ClientValidatorContext'
+import type { PayloadLocalDB } from '../database'
 
 // ---------------------------------------------------------------------------
 // AnyField shape (minimal to avoid importing admin-native types)

@@ -28,10 +28,10 @@ import {
 
 import type { ClientJoinField, FieldComponentProps, PaginatedDocs } from '../types'
 import { defaultTheme as t } from '../theme'
-import { getFieldDescription, getFieldLabel } from '../schemaHelpers'
+import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 import { usePayloadNative } from '../PayloadNativeProvider'
-import { useFormData } from '../FormDataContext'
-import { payloadApi } from '../api'
+import { useFormData } from '../contexts/FormDataContext'
+import { payloadApi } from '../utils/api'
 import { FieldShell } from './shared'
 
 // No expo-router imports — shared packages must never use router hooks directly.

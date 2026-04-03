@@ -25,8 +25,8 @@ import { ArrowLeft, Check, RotateCcw } from 'lucide-react-native'
 
 import { BottomSheet } from './BottomSheet'
 import { VersionDiff } from './VersionDiff'
-import { payloadApi, type PayloadAPIConfig, type VersionDoc } from './api'
-import { extractRootFields } from './schemaHelpers'
+import { payloadApi, type PayloadAPIConfig, type VersionDoc } from './utils/api'
+import { extractRootFields } from './utils/schemaHelpers'
 import { defaultTheme as t } from './theme'
 import type { ClientField, SerializedSchemaMap } from './types'
 

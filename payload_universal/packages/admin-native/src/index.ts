@@ -17,8 +17,8 @@ export {
 
 // Icons
 export { CollectionIcon } from './CollectionIcon'
-export { getIconComponent, getSFSymbol, isRawSVG, registerIcon } from './iconRegistry'
-export type { IconComponent } from './iconRegistry'
+export { getIconComponent, getSFSymbol, isRawSVG, registerIcon } from './utils/iconRegistry'
+export type { IconComponent } from './utils/iconRegistry'
 
 // Core components
 export { BottomSheet } from './BottomSheet'
@@ -42,29 +42,29 @@ export {
   useCustomComponentRegistry,
   useCustomFieldSlots,
   useCustomView,
-} from './CustomComponentContext'
+} from './contexts/CustomComponentContext'
 
 // WebView fallback bridge
 export { WebViewFieldBridge } from './WebViewFieldBridge'
 export type { WebViewFieldBridgeProps } from './WebViewFieldBridge'
 
 // Preview context — wrap content in PreviewContextProvider to disable Link.Preview in nested fields
-export { PreviewContextProvider, useIsInsidePreview } from './PreviewContext'
+export { PreviewContextProvider, useIsInsidePreview } from './contexts/PreviewContext'
 
 // Scrollable preview — host app injects its native module so shared fields can offer long-press previews
-export { ScrollablePreviewProvider, useScrollablePreview } from './ScrollablePreviewContext'
-export type { ScrollablePreviewModule } from './ScrollablePreviewContext'
+export { ScrollablePreviewProvider, useScrollablePreview } from './contexts/ScrollablePreviewContext'
+export type { ScrollablePreviewModule } from './contexts/ScrollablePreviewContext'
 
 // Toast notifications
 export { ToastProvider, useToast } from './Toast'
 
 // Search & filter hooks
-export { useDocumentListFilters } from './useDocumentListFilters'
-export type { ActiveFilter } from './useDocumentListFilters'
+export { useDocumentListFilters } from './hooks/useDocumentListFilters'
+export type { ActiveFilter } from './hooks/useDocumentListFilters'
 
 // Filter utilities
-export { getOperatorsForFieldType, isFieldFilterable, getFilterableFieldTypes } from './filterOperators'
-export type { FilterOperator } from './filterOperators'
+export { getOperatorsForFieldType, isFieldFilterable, getFilterableFieldTypes } from './utils/filterOperators'
+export type { FilterOperator } from './utils/filterOperators'
 
 // Field registry
 export { fieldRegistry, getFieldComponent, FieldRendererContext } from './fields'
@@ -96,9 +96,9 @@ export {
 } from './fields'
 
 // API client
-export { payloadApi } from './api'
-export { PayloadAPIError } from './api'
-export type { PayloadAPIConfig, VersionDoc } from './api'
+export { payloadApi } from './utils/api'
+export { PayloadAPIError } from './utils/api'
+export type { PayloadAPIConfig, VersionDoc } from './utils/api'
 
 // Schema helpers
 export {
@@ -116,11 +116,11 @@ export {
   normalizeOption,
   setByPath,
   splitFieldsBySidebar,
-} from './schemaHelpers'
-export type { FieldWidthGroup } from './schemaHelpers'
+} from './utils/schemaHelpers'
+export type { FieldWidthGroup } from './utils/schemaHelpers'
 
 // Validation (Phase 1 — Zod schema from Payload fields)
-export { payloadFieldsToZod, validateFormData } from './validation'
+export { payloadFieldsToZod, validateFormData } from './utils/validation'
 
 // React Hook Form integration (Phase 2 + 3)
 export {
@@ -128,13 +128,13 @@ export {
   usePayloadField,
   usePayloadForm,
   usePayloadFormContext,
-} from './usePayloadForm'
+} from './hooks/usePayloadForm'
 export type {
   PayloadFieldProps,
   PayloadFieldReturn,
   PayloadFormConfig,
   PayloadFormReturn,
-} from './usePayloadForm'
+} from './hooks/usePayloadForm'
 
 // Theme
 export { defaultTheme } from './theme'

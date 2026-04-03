@@ -57,15 +57,15 @@ import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder'
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema'
 
 import type { AdminSchema } from '@payload-universal/admin-schema'
-import { buildRxSchema, extractFieldDefs, type PayloadDoc } from './schemaFromPayload'
-import { startReplication } from './replication'
-import { startSyncReplication, type SyncReplicationState } from './syncReplication'
+import { buildRxSchema, extractFieldDefs, type PayloadDoc } from './utils/schemaFromPayload'
+import { startReplication } from './sync/replication'
+import { startSyncReplication, type SyncReplicationState } from './sync/syncReplication'
 import {
   UPLOAD_QUEUE_COLLECTION,
   UploadQueueManager,
   uploadQueueSchema,
   type PendingUploadItem,
-} from './uploadQueue'
+} from './queue/uploadQueue'
 
 // Add plugins (dev-mode plugin omitted — it requires a storage validator wrapper
 // which adds overhead and provides little value with our permissive JSON schemas)

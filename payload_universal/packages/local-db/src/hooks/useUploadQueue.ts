@@ -4,8 +4,8 @@
  */
 import { useCallback, useContext, useEffect, useState } from 'react'
 import type { RxDocument } from 'rxdb'
-import type { PendingUploadItem } from './uploadQueue'
-import type { PayloadLocalDB } from './database'
+import type { PendingUploadItem } from '../queue/uploadQueue'
+import type { PayloadLocalDB } from '../database'
 
 export type UsePendingUploadsResult = {
   items: PendingUploadItem[]

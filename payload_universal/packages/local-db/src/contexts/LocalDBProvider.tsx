@@ -14,7 +14,7 @@ import React, {
 } from 'react'
 
 import type { AdminSchema } from '@payload-universal/admin-schema'
-import { createLocalDB, type PayloadLocalDB } from './database'
+import { createLocalDB, type PayloadLocalDB } from '../database'
 
 export type SyncProgress = {
   /** Total collections being synced */

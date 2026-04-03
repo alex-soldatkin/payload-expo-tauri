@@ -430,6 +430,39 @@ This log captures what has been implemented so far and the current state of the 
 - `zod ^3.23.0` — production dependency (small, tree-shakeable)
 - `react-hook-form ^7.54.0` — optional dependency. If not installed, everything falls back gracefully.
 
+### Phase 12 — Codebase modularization (2026-04-03)
+
+**admin-native/src/ reorganization** (highest impact — 13 files moved):
+- `hooks/` — `useDocumentListFilters.ts`, `usePayloadForm.ts`
+- `contexts/` — `CustomComponentContext.tsx`, `FormDataContext.ts`, `PreviewContext.ts`, `ScrollablePreviewContext.tsx`
+- `utils/` — `api.ts`, `schemaHelpers.ts`, `filterOperators.ts`, `validation.ts`, `iconRegistry.ts`
+- `theme/index.ts` — renamed from `theme.ts` (directory index pattern, so `from './theme'` still resolves)
+- `types/index.ts` — renamed from `types.ts` (same pattern)
+- Root retains UI components: `BottomSheet`, `CollectionIcon`, `DocumentActionsMenu`, `DocumentForm`, `DocumentList`, `FieldRenderer`, `FilterBottomSheet`, `FilterChips`, `PayloadNativeProvider`, `SyncStatusCard`, `SyncStatusSection`, `Toast`, `VersionDiff`, `VersionsBottomSheet`, `WebViewFieldBridge`
+- `fields/` subdirectory unchanged (already well-organized with `shared/`)
+
+**local-db/src/ reorganization** (9 files moved):
+- `hooks/` — `hooks.ts`, `validatedHooks.ts`, `useUploadQueue.ts`
+- `contexts/` — `ClientValidatorContext.tsx`, `LocalDBProvider.tsx`
+- `sync/` — `replication.ts`, `syncReplication.ts`
+- `utils/` — `schemaFromPayload.ts`
+- `queue/` — `uploadQueue.ts`
+- Root retains: `database.ts` (core entry point), `index.ts` (barrel)
+- `storage/` unchanged
+
+**Package exports preserved** — all external consumers (`@payload-universal/admin-native`, `@payload-universal/local-db`) use barrel `index.ts` or `package.json` subpath exports. No external import changes needed. Subpath exports updated in admin-native `package.json`: `./validation` → `src/utils/validation.ts`, `./form` → `src/hooks/usePayloadForm.ts`.
+
+**Conventions established:**
+- `hooks/` — React hooks
+- `contexts/` — React context providers
+- `utils/` — Pure helper functions, API clients, schema helpers
+- `types/` — TypeScript type definitions (directory index pattern)
+- `theme/` — Design tokens and theming (directory index pattern)
+- `sync/` — Replication and sync logic
+- `queue/` — Background job queues
+
+**Zero new type errors** — all pre-existing errors remain unchanged, no import resolution failures.
+
 ## Current known gaps
 - Admin-native component translation work remains (see plan in `006_component-translation.md`).
 - Tauri uses live Next dev server; static export strategy still TBD.

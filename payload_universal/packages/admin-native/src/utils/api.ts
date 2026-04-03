@@ -1,4 +1,4 @@
-import type { PaginatedDocs } from './types'
+import type { PaginatedDocs } from '../types'
 
 export type PayloadAPIConfig = {
   baseURL: string

@@ -28,7 +28,7 @@ import type {
   ClientTextField,
   ClientTextareaField,
   ClientUploadField,
-} from './types'
+} from '../types'
 import { normalizeOption } from './schemaHelpers'
 
 // ---------------------------------------------------------------------------

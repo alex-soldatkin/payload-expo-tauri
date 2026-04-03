@@ -13,7 +13,7 @@ import React, { useMemo, useState } from 'react'
 import { ScrollView, StyleSheet, Switch, Text, View } from 'react-native'
 
 import type { ClientField } from './types'
-import { getFieldLabel } from './schemaHelpers'
+import { getFieldLabel } from './utils/schemaHelpers'
 import { defaultTheme as t } from './theme'
 
 type Props = {

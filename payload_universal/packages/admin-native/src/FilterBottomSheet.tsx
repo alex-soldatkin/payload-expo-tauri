@@ -17,9 +17,9 @@ import {
 
 import type { ClientField } from './types'
 import { defaultTheme as t } from './theme'
-import { getFieldLabel, normalizeOption } from './schemaHelpers'
-import { getOperatorsForFieldType, isFieldFilterable } from './filterOperators'
-import type { FilterOperator } from './filterOperators'
+import { getFieldLabel, normalizeOption } from './utils/schemaHelpers'
+import { getOperatorsForFieldType, isFieldFilterable } from './utils/filterOperators'
+import type { FilterOperator } from './utils/filterOperators'
 import { BottomSheet } from './BottomSheet'
 
 type ApplyPayload = {
