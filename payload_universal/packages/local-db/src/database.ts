@@ -109,20 +109,14 @@ export type CreateLocalDBArgs = {
   wsURL?: string
 }
 
-export const createLocalDB = async (
-  args: CreateLocalDBArgs,
-  /** @internal Retry count — prevents infinite recursion on persistent DB6. */
-  _retryCount = 0,
-): Promise<PayloadLocalDB> => {
-  const {
-    schema,
-    baseURL,
-    token,
-    pullInterval = 30_000,
-    storage,
-    wsURL,
-  } = args
-
+export const createLocalDB = async ({
+  schema,
+  baseURL,
+  token,
+  pullInterval = 30_000,
+  storage,
+  wsURL,
+}: CreateLocalDBArgs): Promise<PayloadLocalDB> => {
   // If a previous instance exists (e.g. hot reload), destroy it first to avoid DB9.
   if (_existingDB) {
     try { await _existingDB.destroy() } catch { /* already closed */ }
@@ -130,15 +124,18 @@ export const createLocalDB = async (
   }
 
   const resolvedStorage = storage ?? getRxStorageMemory()
-  const db = await createRxDatabase({
-    name: 'payload_local',
-    storage: resolvedStorage,
-    multiInstance: false,
-    // ignoreDuplicate prevents DB8 when re-creating after a DB6 schema
-    // conflict recovery or resetLocalDB() — RxDB's internal name registry
-    // may still hold 'payload_local' even after destroy + removeRxDatabase.
-    ignoreDuplicate: true,
-  })
+
+  // Helper: create (or re-create) the RxDatabase. Uses ignoreDuplicate so
+  // RxDB's in-memory name registry doesn't block us after a destroy/retry.
+  const openDB = () =>
+    createRxDatabase({
+      name: 'payload_local',
+      storage: resolvedStorage,
+      multiInstance: false,
+      ignoreDuplicate: true,
+    })
+
+  let db = await openDB()
 
   const collections: Record<string, RxCollection<PayloadDoc>> = {}
   const replications: Record<string, RxReplicationState<PayloadDoc, any>> = {}
@@ -153,40 +150,55 @@ export const createLocalDB = async (
     '_sync_tombstones',
   ])
 
-  // Create an RxDB collection for each user-facing Payload collection.
-  // If schema version changed (e.g. after an app update), the old collection
-  // is silently removed and re-created with the new schema.
+  // Prepare the list of collection schemas we need to create
+  const collectionEntries: Array<{ slug: string; rxSchema: any }> = []
   for (const [slug, serializedMap] of Object.entries(schema.collections)) {
     if (INTERNAL_SLUGS.has(slug) || slug.startsWith('payload-')) continue
     const fieldDefs = extractFieldDefs(serializedMap as Array<[string, unknown]>, slug)
-    const rxSchema = buildRxSchema(slug, fieldDefs)
+    collectionEntries.push({ slug, rxSchema: buildRxSchema(slug, fieldDefs) })
+  }
 
+  // Try to add all collections. On DB6 (schema conflict), wipe everything
+  // and retry ONCE with a fresh database — no recursive call needed.
+  let needsRetry = false
+  for (const { slug, rxSchema } of collectionEntries) {
     try {
       const created = await db.addCollections({
-        [slug]: {
-          schema: rxSchema,
-          migrationStrategies: {},
-          autoMigrate: true,
-        },
+        [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true },
       })
       collections[slug] = created[slug]
     } catch (err: any) {
-      if (typeof err === 'object' && err !== null && String(err).includes('DB6')) {
-        console.warn(`[local-db] Schema conflict (DB6) for "${slug}". Wiping DB and retrying...`)
-
-        // Destroy the half-initialised database
-        try { await db.destroy() } catch { /* ignore */ }
-        // Physically remove persisted SQLite data
-        try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
-
-        // Auto-retry once — the fresh DB will have no schema conflicts
-        if (_retryCount < 1) {
-          return createLocalDB(args, _retryCount + 1)
-        }
-        // Safety valve: if retry also fails, throw a clear error
-        throw new Error(`Persistent schema conflict in "${slug}" after DB reset. Please clear app data.`)
+      const errStr = String(err)
+      if (errStr.includes('DB6')) {
+        console.warn(`[local-db] Schema conflict (DB6) for "${slug}". Will wipe and retry...`)
+        needsRetry = true
+        break
       } else {
         console.warn(`[local-db] Failed to create collection "${slug}":`, err)
+      }
+    }
+  }
+
+  // DB6 recovery: destroy the half-built DB, wipe persisted SQLite,
+  // open a brand-new database, and add all collections from scratch.
+  if (needsRetry) {
+    try { await db.destroy() } catch { /* ignore */ }
+    try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
+
+    // Clear collected state from the failed attempt
+    for (const key of Object.keys(collections)) delete collections[key]
+
+    // Re-open fresh
+    db = await openDB()
+
+    for (const { slug, rxSchema } of collectionEntries) {
+      try {
+        const created = await db.addCollections({
+          [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true },
+        })
+        collections[slug] = created[slug]
+      } catch (retryErr) {
+        console.warn(`[local-db] Failed to create collection "${slug}" after DB reset:`, retryErr)
       }
     }
   }
