@@ -84,10 +84,6 @@ try {
   } catch { /* not registered yet — expected */ }
 
   if (!alreadyRegistered) {
-    const { processColorArray } = require('react-native/Libraries/StyleSheet/processStyles')
-    const processColor = require('react-native/Libraries/StyleSheet/processColor').default
-      ?? require('react-native/Libraries/StyleSheet/processColor')
-
     ViewConfigRegistry.register('EnrichedTextInputView', () => ({
       uiViewClassName: 'EnrichedTextInputView',
       bubblingEventTypes: {
@@ -113,10 +109,10 @@ try {
         editable: true,
         defaultValue: true,
         placeholder: true,
-        placeholderTextColor: { process: processColor },
+        placeholderTextColor: true,
         mentionIndicators: true,
-        cursorColor: { process: processColor },
-        selectionColor: { process: processColor },
+        cursorColor: true,
+        selectionColor: true,
         autoCapitalize: true,
         htmlStyle: true,
         scrollEnabled: true,
@@ -125,7 +121,7 @@ try {
         returnKeyType: true,
         returnKeyLabel: true,
         submitBehavior: true,
-        color: { process: processColor },
+        color: true,
         fontSize: true,
         lineHeight: true,
         fontFamily: true,
