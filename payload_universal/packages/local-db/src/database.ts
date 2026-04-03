@@ -117,16 +117,19 @@ export const createLocalDB = async ({
   storage,
   wsURL,
 }: CreateLocalDBArgs): Promise<PayloadLocalDB> => {
-  // If a previous instance exists (e.g. hot reload), destroy it first to avoid DB9.
+  // If a previous instance exists (e.g. hot reload), fully remove it
+  // (destroy + wipe data) so there's no stale DB in RxDB's registry.
   if (_existingDB) {
-    try { await _existingDB.destroy() } catch { /* already closed */ }
+    try { await _existingDB.db.remove() } catch {
+      try { await _existingDB.destroy() } catch { /* already closed */ }
+    }
     _existingDB = null
   }
 
   const resolvedStorage = storage ?? getRxStorageMemory()
 
-  // Helper: create (or re-create) the RxDatabase. Uses ignoreDuplicate so
-  // RxDB's in-memory name registry doesn't block us after a destroy/retry.
+  // Helper: create the RxDatabase. ignoreDuplicate prevents DB8 if the
+  // internal name registry wasn't fully cleaned up by a prior remove().
   const openDB = () =>
     createRxDatabase({
       name: 'payload_local',
@@ -179,11 +182,14 @@ export const createLocalDB = async ({
     }
   }
 
-  // DB6 recovery: destroy the half-built DB, wipe persisted SQLite,
-  // open a brand-new database, and add all collections from scratch.
+  // DB6 recovery: remove the half-built DB (destroy + wipe data in one
+  // atomic call that also clears RxDB's internal registry), then re-open.
   if (needsRetry) {
-    try { await db.destroy() } catch { /* ignore */ }
-    try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
+    try { await db.remove() } catch {
+      // Fallback if .remove() fails: destroy + wipe separately
+      try { await db.destroy() } catch { /* ignore */ }
+      try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
+    }
 
     // Clear collected state from the failed attempt
     for (const key of Object.keys(collections)) delete collections[key]
@@ -300,13 +306,27 @@ export const createLocalDB = async ({
  *                  Required so `removeRxDatabase` can locate persisted data.
  */
 export const resetLocalDB = async (storage?: any): Promise<void> => {
-  // 1. Destroy the running instance (stops replications, upload queue, WS)
+  // 1. Stop replications, upload queue, WS sync
   if (_existingDB) {
-    try { await _existingDB.destroy() } catch { /* already closed */ }
+    // db.remove() = destroy + wipe data + clear RxDB registry in one call
+    try {
+      await _existingDB.uploadQueue.destroy()
+      _existingDB.syncState?.destroy()
+      for (const rep of Object.values(_existingDB.replications)) {
+        try { await rep.cancel() } catch { /* ignore */ }
+      }
+      await _existingDB.db.remove()
+    } catch {
+      // Fallback: destroy instance + wipe separately
+      try { await _existingDB.destroy() } catch { /* ignore */ }
+      const resolvedStorage = storage ?? getRxStorageMemory()
+      try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
+    }
     _existingDB = null
+    return
   }
 
-  // 2. Physically remove the persisted SQLite database
+  // 2. No running instance — just wipe persisted data
   const resolvedStorage = storage ?? getRxStorageMemory()
   try {
     await removeRxDatabase('payload_local', resolvedStorage)

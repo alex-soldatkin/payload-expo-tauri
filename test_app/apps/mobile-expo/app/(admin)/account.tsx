@@ -48,7 +48,8 @@ const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: st
     }).start()
   }, [percent, widthAnim])
 
-  if (!syncing && percent >= 100) return null
+  // Only show during active sync — hide when idle (whether at 0% or 100%)
+  if (!syncing) return null
 
   return (
     <View style={{ marginTop: 12 }}>
