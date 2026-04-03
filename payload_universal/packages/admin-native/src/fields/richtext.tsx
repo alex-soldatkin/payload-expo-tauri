@@ -65,22 +65,19 @@ type EditorRef = {
 
 let enrichedAvailable = false
 try {
-  // First check if the native Fabric view is registered. codegenNativeComponent
-  // calls getNativeComponentAttributes() which throws "View config getter callback
-  // for component 'EnrichedTextInputView' must be a function" if the native code
-  // isn't compiled into the binary. This crashes BEFORE React render, so error
-  // boundaries can't catch it. We probe it here at module load time instead.
-  const RN = require('react-native')
-  const registry = RN.getNativeComponentAttributes ?? RN.UIManager?.getViewManagerConfig
-  if (registry) {
-    registry('EnrichedTextInputView') // throws if native code missing
-  }
-
+  // react-native-enriched is a Fabric-only native component. When its JS module
+  // loads, codegenNativeComponent('EnrichedTextInputView') fires immediately and
+  // throws if the native view isn't compiled into the binary. This try/catch
+  // catches that throw and falls back to plain-text. The require MUST be the
+  // only thing inside this block — no other imports that could mask the error.
   const enrichedModule = require('react-native-enriched')
   EnrichedTextInput = enrichedModule.EnrichedTextInput
   enrichedAvailable = !!EnrichedTextInput
-} catch {
-  /* Native view not available — will use plain-text fallback */
+} catch (e) {
+  // Native code not compiled in — plain-text fallback will be used.
+  // Common when running an Expo Go build or a dev client that was built
+  // before react-native-enriched was added to the project's dependencies.
+  console.log('[richtext] react-native-enriched not available, using fallback:', String(e).slice(0, 100))
 }
 
 // ---------------------------------------------------------------------------
