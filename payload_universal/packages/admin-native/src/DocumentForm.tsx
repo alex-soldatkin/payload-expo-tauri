@@ -16,7 +16,7 @@
  * Exposes a ref with { submit() } so the parent can trigger save from a header button.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Animated, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Animated, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 // Optional: GlassView for liquid glass containers on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -32,7 +32,7 @@ try {
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
 import { extractRootFields, getByPath, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
-import { ErrorMapContext, FieldRendererContext } from './fields/structural'
+import { ErrorMapContext, FieldRendererContext, FIELD_WIDTH_BREAKPOINT } from './fields/structural'
 import { FieldRenderer } from './FieldRenderer'
 import { useToast } from './Toast'
 import { PayloadAPIError } from './utils/api'
@@ -132,6 +132,9 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
   const [scrollToError, setScrollToError] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
   const toast = useToast()
+
+  const { width: windowWidth } = useWindowDimensions()
+  const compact = windowWidth < FIELD_WIDTH_BREAKPOINT
 
   const { mainFields, sidebarFields } = useMemo(
     () => splitFieldsBySidebar(rootFields),
@@ -240,6 +243,17 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     const groups = groupFieldsByWidth(fields)
     return groups.map((group, gi) => {
       if (group.type === 'width-row') {
+        if (compact) {
+          // Small screen: render each field full-width, stacked vertically
+          return (
+            <React.Fragment key={`wrow-${gi}`}>
+              {group.fields.map((f) => {
+                const path = f.name ?? `wf-${gi}`
+                return <React.Fragment key={path}>{renderField(f, path)}</React.Fragment>
+              })}
+            </React.Fragment>
+          )
+        }
         return (
           <View key={`wrow-${gi}`} style={styles.widthRow}>
             {group.fields.map((f) => {
@@ -402,6 +416,9 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
   const scrollViewRef = useRef<ScrollView>(null)
   const toast = useToast()
 
+  const { width: windowWidthLegacy } = useWindowDimensions()
+  const compactLegacy = windowWidthLegacy < FIELD_WIDTH_BREAKPOINT
+
   const { mainFields, sidebarFields } = useMemo(
     () => splitFieldsBySidebar(rootFields),
     [rootFields],
@@ -506,6 +523,16 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     const groups = groupFieldsByWidth(fields)
     return groups.map((group, gi) => {
       if (group.type === 'width-row') {
+        if (compactLegacy) {
+          return (
+            <React.Fragment key={`wrow-${gi}`}>
+              {group.fields.map((f) => {
+                const path = f.name ?? `wf-${gi}`
+                return <React.Fragment key={path}>{renderField(f, path)}</React.Fragment>
+              })}
+            </React.Fragment>
+          )
+        }
         return (
           <View key={`wrow-${gi}`} style={styles.widthRow}>
             {group.fields.map((f) => {

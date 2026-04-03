@@ -17,6 +17,7 @@ import {
   StyleSheet,
   Text,
   UIManager,
+  useWindowDimensions,
   View,
 } from 'react-native'
 
@@ -111,18 +112,52 @@ const subPath = (basePath: string, fieldName?: string): string =>
   `${basePath ? basePath + '.' : ''}${fieldName ?? ''}`
 
 /**
+ * Breakpoint (px) below which admin.width is treated as guidance —
+ * fields stack vertically to avoid cramped layouts on small phones.
+ * Above this, widths are honoured as flex ratios (tablet / landscape).
+ * Matches Payload web admin's `@include mid-break` behaviour.
+ */
+export const FIELD_WIDTH_BREAKPOINT = 500
+
+/**
+ * Hook that returns whether the current screen is too narrow to
+ * honour admin.width values. Uses window width directly.
+ */
+export const useCompactFields = (): boolean => {
+  const { width } = useWindowDimensions()
+  return width < FIELD_WIDTH_BREAKPOINT
+}
+
+/**
  * Render sub-fields, grouping consecutive fields with `admin.width` into
  * flex rows so they lay out side-by-side (e.g. two 50% fields in one row).
+ *
+ * When `compact` is true (small screens), width-grouped fields are rendered
+ * stacked vertically instead of in rows, treating admin.width as guidance.
  */
 const renderSubFieldsWithWidth = (
   fields: ClientField[],
   buildPath: (field: ClientField) => string,
   renderFn: RenderFieldFn,
   keyPrefix: string,
+  compact = false,
 ): React.ReactNode[] => {
   const groups = groupFieldsByWidth(fields)
   return groups.map((group, gi) => {
     if (group.type === 'width-row') {
+      if (compact) {
+        // On small screens: render each field full-width, stacked vertically
+        return (
+          <React.Fragment key={`${keyPrefix}-wrow-${gi}`}>
+            {group.fields.map((sub) => (
+              <React.Fragment key={sub.name || `${keyPrefix}-wf-${gi}`}>
+                {renderFn(sub, buildPath(sub))}
+              </React.Fragment>
+            ))}
+          </React.Fragment>
+        )
+      }
+      // On wide screens: render side-by-side with proportional flex
       return (
         <View key={`${keyPrefix}-wrow-${gi}`} style={styles.widthRow}>
           {group.fields.map((sub) => (
@@ -150,11 +185,12 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
   field, path,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
   const subFields = field.fields ?? []
   const description = getFieldDescription(field)
 
   if (!field.name) {
-    return <>{renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'group')}</>
+    return <>{renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'group', compact)}</>
   }
 
   const content = (
@@ -166,7 +202,7 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
         </View>
       )}
       <View style={styles.groupBody}>
-        {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${sub.name ?? ''}`, renderField, 'grp')}
+        {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${sub.name ?? ''}`, renderField, 'grp', compact)}
       </View>
     </>
   )
@@ -197,6 +233,7 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
   field, path,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
   const DisclosureGroup = nativeComponents.DisclosureGroup!
   const [expanded, setExpanded] = useState(!(field.admin?.initCollapsed ?? false))
   const subFields = field.fields ?? []
@@ -220,7 +257,7 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'coln')}
+          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'coln', compact)}
         </View>
       )}
     </Container>
@@ -231,6 +268,7 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
   field, path,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
   const [expanded, setExpanded] = useState(!(field.admin?.initCollapsed ?? false))
   const subFields = field.fields ?? []
   const description = getFieldDescription(field)
@@ -270,7 +308,7 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'colf')}
+          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'colf', compact)}
         </View>
       )}
     </Wrapper>
@@ -290,10 +328,18 @@ export const RowField: React.FC<FieldComponentProps<ClientRowField>> = ({
   field, path,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
+
   return (
-    <View style={styles.rowContainer}>
+    <View style={compact ? styles.rowContainerCompact : styles.rowContainer}>
       {(field.fields ?? []).map((sub, i) => (
-        <View key={sub.name || `row-${i}`} style={[styles.rowItem, sub.admin?.width ? { flex: parseFloat(sub.admin.width) / 100 } : { flex: 1 }]}>
+        <View
+          key={sub.name || `row-${i}`}
+          style={compact
+            ? undefined  // full-width stacked
+            : [styles.rowItem, sub.admin?.width ? { flex: parseFloat(sub.admin.width) / 100 } : { flex: 1 }]
+          }
+        >
           {renderField(sub, subPath(path, sub.name))}
         </View>
       ))}
@@ -329,6 +375,7 @@ const TabContent: React.FC<{
   depth: number
   renderField: RenderFieldFn
 }> = ({ activeTab, path, depth, renderField }) => {
+  const compact = useCompactFields()
   if (!activeTab) return null
   return (
     <TabDepthContext.Provider value={depth + 1}>
@@ -338,6 +385,7 @@ const TabContent: React.FC<{
           (sub: ClientField) => activeTab.name ? `${subPath(path, activeTab.name)}.${sub.name ?? ''}` : subPath(path, sub.name),
           renderField,
           activeTab.name || 'tab',
+          compact,
         )}
       </View>
     </TabDepthContext.Provider>
@@ -432,6 +480,7 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
   field, value, onChange, path, disabled, error,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
   const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
   const subFields = field.fields ?? []
   const singularLabel = field.labels?.singular || getFieldLabel(field)
@@ -465,7 +514,7 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
               <Text style={styles.arrayRowTitle}>{singularLabel} {index + 1}</Text>
               {!disabled && <Pressable onPress={() => removeRow(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
             </View>
-            {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`)}
+            {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`, compact)}
           </>
         )
         return liquidGlassAvailable && GlassView ? (
@@ -502,6 +551,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
   field, value, onChange, path, disabled, error,
 }) => {
   const renderField = useRenderField()
+  const compact = useCompactFields()
   const items = Array.isArray(value) ? (value as Array<Record<string, unknown> & { blockType?: string }>) : []
   const blocks = field.blocks ?? []
   const [showPicker, setShowPicker] = useState(false)
@@ -534,7 +584,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
               <Text style={styles.blockTypeLabel}>{block?.labels?.singular || item.blockType || 'Block'}</Text>
               {!disabled && <Pressable onPress={() => removeBlock(index)}><Text style={styles.removeText}>Remove</Text></Pressable>}
             </View>
-            {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`)}
+            {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`, compact)}
           </>
         )
         return liquidGlassAvailable && GlassView ? (
@@ -658,6 +708,7 @@ const styles = StyleSheet.create({
 
   // Row
   rowContainer: { flexDirection: 'row', gap: t.spacing.md },
+  rowContainerCompact: { flexDirection: 'column', gap: 0 },
   rowItem: { flex: 1 },
 
   // Tabs
