@@ -1,14 +1,19 @@
 /**
- * RichTextToolbar -- Apple Notes-style formatting toolbar with glass effect.
+ * RichTextToolbar — Apple Notes-style formatting toolbar with native glass effect.
  *
- * Two rows of formatting actions rendered in a compact bar that sits above
- * the keyboard. Each button reflects the current style state reported by
+ * Uses expo-glass-effect GlassView for:
+ *   - Outer container: frosted glass background (regular)
+ *   - Each button: GlassView isInteractive for native press feedback
+ *
+ * Two rows of formatting actions reflecting live style state from
  * EnrichedTextInput via `onChangeState`.
  *
- * Row 1 (inline): Bold, Italic, Underline, Strikethrough, InlineCode | Link, Mention
+ * Row 1 (inline): Bold, Italic, Underline, Strikethrough, InlineCode | Link, @Mention
  * Row 2 (block):  H1, H2, H3 | Quote, CodeBlock | BulletList, NumberedList, CheckList
+ *
+ * Falls back to plain Pressable + View when expo-glass-effect is unavailable.
  */
-import React, { useMemo } from 'react'
+import React from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import {
   AtSign,
@@ -63,16 +68,17 @@ export type StyleState = {
   mention: StyleStateEntry
 }
 
-// Optional glass effect -- falls back to semi-transparent background
+// ---------------------------------------------------------------------------
+// Optional native glass effect (iOS 26+)
+// ---------------------------------------------------------------------------
+
 let GlassView: React.ComponentType<any> | null = null
 let liquidGlassAvailable = false
 try {
   const glassModule = require('expo-glass-effect')
   GlassView = glassModule.GlassView
   liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
-} catch {
-  /* not available */
-}
+} catch { /* not available */ }
 
 // ---------------------------------------------------------------------------
 // Props
@@ -99,8 +105,11 @@ export type RichTextToolbarProps = {
 }
 
 // ---------------------------------------------------------------------------
-// Individual toolbar button
+// Individual toolbar button — native glass or plain Pressable
 // ---------------------------------------------------------------------------
+
+const BUTTON_SIZE = 36
+const ICON_SIZE = 18
 
 type ToolbarButtonProps = {
   icon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }>
@@ -109,10 +118,42 @@ type ToolbarButtonProps = {
   onPress: () => void
 }
 
-const BUTTON_SIZE = 36
-const ICON_SIZE = 18
+/** Native glass button: GlassView isInteractive wraps each button for iOS liquid glass press effect */
+const ToolbarButtonGlass: React.FC<ToolbarButtonProps> = ({
+  icon: Icon,
+  active = false,
+  blocked = false,
+  onPress,
+}) => {
+  const Glass = GlassView as React.ComponentType<any>
+  return (
+    <Pressable onPress={onPress} disabled={blocked} hitSlop={4}>
+      <Glass
+        style={[
+          styles.button,
+          active && styles.buttonActiveGlass,
+          blocked && styles.buttonDisabled,
+        ]}
+        isInteractive
+        glassEffectStyle="regular"
+        tintColor={active ? t.colors.primary : undefined}
+      >
+        <Icon
+          size={ICON_SIZE}
+          color={
+            blocked ? t.colors.textPlaceholder
+              : active ? t.colors.primary
+              : t.colors.text
+          }
+          strokeWidth={active ? 2.5 : 1.8}
+        />
+      </Glass>
+    </Pressable>
+  )
+}
 
-const ToolbarButton: React.FC<ToolbarButtonProps> = ({
+/** Fallback button: plain Pressable with opacity feedback */
+const ToolbarButtonFallback: React.FC<ToolbarButtonProps> = ({
   icon: Icon,
   active = false,
   blocked = false,
@@ -121,7 +162,7 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
   <Pressable
     style={({ pressed }) => [
       styles.button,
-      active && styles.buttonActive,
+      active && styles.buttonActiveFallback,
       blocked && styles.buttonDisabled,
       pressed && !blocked && styles.buttonPressed,
     ]}
@@ -132,25 +173,26 @@ const ToolbarButton: React.FC<ToolbarButtonProps> = ({
     <Icon
       size={ICON_SIZE}
       color={
-        blocked
-          ? t.colors.textPlaceholder
-          : active
-            ? t.colors.primary
-            : t.colors.textMuted
+        blocked ? t.colors.textPlaceholder
+          : active ? t.colors.primary
+          : t.colors.textMuted
       }
       strokeWidth={active ? 2.5 : 2}
     />
   </Pressable>
 )
 
+// Pick the right button based on glass availability
+const ToolbarButton = liquidGlassAvailable && GlassView ? ToolbarButtonGlass : ToolbarButtonFallback
+
 // ---------------------------------------------------------------------------
-// Separator
+// Separator — hairline between button groups
 // ---------------------------------------------------------------------------
 
 const Separator: React.FC = () => <View style={styles.separator} />
 
 // ---------------------------------------------------------------------------
-// Main component
+// Main toolbar component
 // ---------------------------------------------------------------------------
 
 export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
@@ -176,7 +218,7 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
 
   const s = styleState
 
-  const content = (
+  const rows = (
     <View style={styles.toolbarInner}>
       {/* Row 1: Inline formatting */}
       <ScrollView
@@ -216,15 +258,17 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
     </View>
   )
 
+  // Native glass container on iOS 26+
   if (liquidGlassAvailable && GlassView) {
     return (
-      <GlassView style={styles.toolbarContainer} glassEffectStyle="regular">
-        {content}
+      <GlassView style={styles.toolbarContainerGlass} glassEffectStyle="regular">
+        {rows}
       </GlassView>
     )
   }
 
-  return <View style={styles.toolbarContainerFallback}>{content}</View>
+  // Fallback: semi-transparent background
+  return <View style={styles.toolbarContainerFallback}>{rows}</View>
 }
 
 // ---------------------------------------------------------------------------
@@ -232,45 +276,68 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  toolbarContainer: {
-    borderRadius: t.borderRadius.md,
+  // Glass container (iOS 26+)
+  toolbarContainerGlass: {
+    borderRadius: 14,
     overflow: 'hidden',
     marginBottom: t.spacing.xs,
   },
+
+  // Fallback container (older iOS / Android)
   toolbarContainerFallback: {
     backgroundColor: Platform.OS === 'ios' ? 'rgba(245, 245, 245, 0.92)' : '#f5f5f5',
-    borderRadius: t.borderRadius.md,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: t.colors.separator,
     marginBottom: t.spacing.xs,
   },
+
+  // Inner wrapper
   toolbarInner: {
-    paddingVertical: t.spacing.xs,
-    paddingHorizontal: t.spacing.xs,
+    paddingVertical: 6,
+    paddingHorizontal: 6,
     gap: 2,
   },
+
+  // Row of buttons
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
+    gap: 3,
     paddingHorizontal: 2,
   },
+
+  // Button base — used by both glass and fallback
   button: {
     width: BUTTON_SIZE,
     height: BUTTON_SIZE,
-    borderRadius: t.borderRadius.sm,
+    borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  buttonActive: {
-    backgroundColor: Platform.OS === 'ios' ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.06)',
+
+  // Glass active — tinted glass
+  buttonActiveGlass: {
+    // GlassView tintColor handles the tint; keep shape consistent
+    borderRadius: 8,
   },
+
+  // Fallback active — subtle background tint
+  buttonActiveFallback: {
+    backgroundColor: Platform.OS === 'ios' ? 'rgba(0, 122, 255, 0.1)' : 'rgba(0, 0, 0, 0.06)',
+  },
+
+  // Disabled / blocked
   buttonDisabled: {
-    opacity: 0.35,
+    opacity: 0.3,
   },
+
+  // Fallback press state
   buttonPressed: {
     opacity: 0.5,
   },
+
+  // Separator between button groups
   separator: {
     width: StyleSheet.hairlineWidth,
     height: 20,

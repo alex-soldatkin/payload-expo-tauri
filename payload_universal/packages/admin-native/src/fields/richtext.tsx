@@ -30,6 +30,15 @@ import { FieldShell } from './shared'
 import { RichTextToolbar, type StyleState } from './RichTextToolbar'
 import { MentionPicker } from './MentionPicker'
 
+// Optional: GlassView for the editor container (iOS 26+)
+let EditorGlassView: React.ComponentType<any> | null = null
+let editorGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  EditorGlassView = glassModule.GlassView
+  editorGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch { /* not available */ }
+
 // ---------------------------------------------------------------------------
 // Optional EnrichedTextInput — try/catch for graceful fallback
 // ---------------------------------------------------------------------------
@@ -390,40 +399,64 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
         visible={focused}
       />
 
-      <View
-        style={[
-          styles.editorContainer,
-          isDisabled && styles.editorDisabled,
-          error && styles.editorError,
-        ]}
-      >
-        <EnrichedTextInput
-          ref={editorRef}
-          defaultValue={defaultHtml}
-          placeholder="Start writing..."
-          placeholderTextColor={t.colors.textPlaceholder}
-          editable={!isDisabled}
-          scrollEnabled
-          onFocus={handleFocus}
-          onBlur={handleBlur}
-          onChangeState={handleChangeState}
-          onChangeSelection={handleChangeSelection}
-          onLinkDetected={handleLinkDetected}
-          mentionIndicators={['@']}
-          onStartMention={handleStartMention}
-          onChangeMention={handleChangeMention}
-          onEndMention={handleEndMention}
-          htmlStyle={htmlStyle}
-          style={styles.editor}
-          contextMenuItems={[
-            {
-              text: 'Mention Document',
-              onPress: () => editorRef.current?.startMention('@'),
-              visible: true,
-            },
-          ]}
-        />
-      </View>
+      {(() => {
+        const editorElement = (
+          <EnrichedTextInput
+            ref={editorRef}
+            defaultValue={defaultHtml}
+            placeholder="Start writing..."
+            placeholderTextColor={t.colors.textPlaceholder}
+            editable={!isDisabled}
+            scrollEnabled
+            onFocus={handleFocus}
+            onBlur={handleBlur}
+            onChangeState={handleChangeState}
+            onChangeSelection={handleChangeSelection}
+            onLinkDetected={handleLinkDetected}
+            mentionIndicators={['@']}
+            onStartMention={handleStartMention}
+            onChangeMention={handleChangeMention}
+            onEndMention={handleEndMention}
+            htmlStyle={htmlStyle}
+            style={styles.editor}
+            contextMenuItems={[
+              {
+                text: 'Mention Document',
+                onPress: () => editorRef.current?.startMention('@'),
+                visible: true,
+              },
+            ]}
+          />
+        )
+
+        if (editorGlassAvailable && EditorGlassView) {
+          const Glass = EditorGlassView as React.ComponentType<any>
+          return (
+            <Glass
+              style={[
+                styles.editorContainerGlass,
+                isDisabled && styles.editorDisabled,
+                error && styles.editorError,
+              ]}
+              glassEffectStyle="regular"
+            >
+              {editorElement}
+            </Glass>
+          )
+        }
+
+        return (
+          <View
+            style={[
+              styles.editorContainer,
+              isDisabled && styles.editorDisabled,
+              error && styles.editorError,
+            ]}
+          >
+            {editorElement}
+          </View>
+        )
+      })()}
 
       <MentionPicker
         visible={mentionVisible}
@@ -552,6 +585,11 @@ const styles = StyleSheet.create({
     borderColor: t.colors.border,
     borderRadius: t.borderRadius.sm,
     backgroundColor: t.colors.surface,
+    minHeight: 160,
+    overflow: 'hidden',
+  },
+  editorContainerGlass: {
+    borderRadius: 14,
     minHeight: 160,
     overflow: 'hidden',
   },

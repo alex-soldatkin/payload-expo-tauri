@@ -559,6 +559,14 @@ The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextIn
 - `content` richText already exists in the Content tab
 - Two richText fields for demonstrating EnrichedTextInput, toolbar, and Lexical JSON round-trip
 
+### Phase 18 — EnrichedTextInput confirmed working (2026-04-04)
+
+- **EnrichedTextInput renders on iPad** with full formatting toolbar (Bold, Italic, Underline, Strikethrough, InlineCode, Link, @Mention, H1-H3, Quote, CodeBlock, BulletList, NumberedList, CheckList)
+- Posts `summary` richText field visible at top level, `content` in Content tab
+- Lexical JSON ↔ HTML conversion working: data round-trips through local RxDB
+- UIManager shim + Metro singleton resolver + `closeDuplicates: true` = stable init
+- **Next**: upgrade toolbar to use native @expo/ui glass effect components per 013_ui-patterns.md
+
 ## Current known gaps
 - EnrichedTextInput rendering depends on UIManager.getViewManagerConfig shim + Metro singleton resolver for deep react-native imports. May need revisiting when RN 0.84+ fixes the Codegen Babel plugin.
 - Tauri uses live Next dev server; static export strategy still TBD.
