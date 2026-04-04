@@ -8,7 +8,7 @@
  * Two rows of formatting actions reflecting live style state from
  * EnrichedTextInput via `onChangeState`.
  *
- * Row 1 (inline): Bold, Italic, Underline, Strikethrough, InlineCode | Link, @Mention
+ * Row 1 (inline): Bold, Italic, Underline, Strikethrough, InlineCode | Link, Image, @Mention
  * Row 2 (block):  H1, H2, H3 | Quote, CodeBlock | BulletList, NumberedList, CheckList
  *
  * Falls back to plain Pressable + View when expo-glass-effect is unavailable.
@@ -23,6 +23,7 @@ import {
   Heading1,
   Heading2,
   Heading3,
+  ImagePlus,
   Italic,
   Link,
   List,
@@ -100,6 +101,7 @@ export type RichTextToolbarProps = {
   onToggleUnorderedList: () => void
   onToggleCheckboxList: () => void
   onInsertLink: () => void
+  onInsertImage: () => void
   onInsertMention: () => void
   visible: boolean
 }
@@ -211,6 +213,7 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
   onToggleUnorderedList,
   onToggleCheckboxList,
   onInsertLink,
+  onInsertImage,
   onInsertMention,
   visible,
 }) => {
@@ -234,6 +237,7 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
         <ToolbarButton icon={Code} active={s?.inlineCode.isActive} blocked={s?.inlineCode.isBlocking} onPress={onToggleInlineCode} />
         <Separator />
         <ToolbarButton icon={Link} active={s?.link.isActive} blocked={s?.link.isBlocking} onPress={onInsertLink} />
+        <ToolbarButton icon={ImagePlus} active={s?.image.isActive} blocked={s?.image.isBlocking} onPress={onInsertImage} />
         <ToolbarButton icon={AtSign} active={s?.mention.isActive} blocked={s?.mention.isBlocking} onPress={onInsertMention} />
       </ScrollView>
 

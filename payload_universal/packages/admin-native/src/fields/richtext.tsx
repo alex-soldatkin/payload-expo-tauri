@@ -10,6 +10,19 @@
  *   2. Live: onChangeState feeds the RichTextToolbar active-state indicators
  *   3. Blur/save: ref.getHTML() → htmlToLexical(html) → onChange(lexicalJson)
  *
+ * Markdown shortcuts (Notion-style):
+ *   - Typing `# ` / `## ` / `### ` toggles headings
+ *   - `- ` or `* ` toggles unordered list; `1. ` toggles ordered list
+ *   - `> ` toggles blockquote; ``` `` ` ``` + newline toggles code block
+ *   - `[] ` / `[ ] ` toggles unchecked checkbox; `[x] ` toggles checked
+ *   - After toggling, the markdown prefix is removed from the HTML content
+ *
+ * Image support:
+ *   - Toolbar ImagePlus button / context menu: ActionSheet → camera or library
+ *   - onPasteImages handles pasted images from clipboard
+ *   - Images are inserted via ref.setImage(uri, w, h)
+ *   - Optional background upload via local-db uploadQueue
+ *
  * Mention support:
  *   - mentionIndicators={['@']} triggers mention lifecycle events
  *   - MentionPicker queries all user-facing collections from local RxDB
@@ -20,7 +33,7 @@
  *   - onLinkDetected populates existing URL; onChangeSelection tracks range
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import { Alert, Platform, StyleSheet, Text, TextInput, View } from 'react-native'
+import { ActionSheetIOS, Alert, Keyboard, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native'
 import type { NativeSyntheticEvent } from 'react-native'
 
 import type { ClientRichTextField, FieldComponentProps } from '../types'
@@ -38,6 +51,18 @@ try {
   EditorGlassView = glassModule.GlassView
   editorGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
 } catch { /* not available */ }
+
+// Optional: expo-image-picker for inline image insertion
+let ImagePicker: typeof import('expo-image-picker') | null = null
+try {
+  ImagePicker = require('expo-image-picker')
+} catch { /* not available */ }
+
+// Optional: local-db upload queue for background image uploads
+let _useLocalDB: (() => any) | null = null
+try {
+  _useLocalDB = require('@payload-universal/local-db').useLocalDB
+} catch { /* local-db not available */ }
 
 // ---------------------------------------------------------------------------
 // Optional EnrichedTextInput — try/catch for graceful fallback
@@ -198,6 +223,12 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
     url: string; text: string; start: number; end: number
   } | null>(null)
 
+  // Previous text for markdown shortcut detection
+  const prevTextRef = useRef('')
+
+  // Optional local-db for upload queue
+  const localDB = _useLocalDB ? _useLocalDB() : null
+
   // ---------- Convert initial value once ----------
   const defaultHtml = useMemo(() => {
     if (!value) return ''
@@ -214,6 +245,165 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
     } catch { /* ignore */ }
   }, 600)
 
+  // ---------- Markdown shortcuts (Notion-style) ----------
+
+  const handleChangeText = useCallback(
+    (e: NativeSyntheticEvent<{ value: string }>) => {
+      const text = e.nativeEvent.value
+      const prev = prevTextRef.current
+      prevTextRef.current = text
+
+      // Only check when exactly one character was added (space or newline trigger)
+      if (text.length !== prev.length + 1) return
+      const lastChar = text[text.length - 1]
+      if (lastChar !== ' ' && lastChar !== '\n') return
+
+      // Find the start of the current line
+      const cursorPos = text.length - 1 // position of the space/newline just typed
+      const lineStart = text.lastIndexOf('\n', cursorPos - 1) + 1
+      const line = text.slice(lineStart, cursorPos) // text before the trigger char
+
+      // Match markdown patterns
+      let matched = false
+      if (line === '#') { editorRef.current?.toggleH1(); matched = true }
+      else if (line === '##') { editorRef.current?.toggleH2(); matched = true }
+      else if (line === '###') { editorRef.current?.toggleH3(); matched = true }
+      else if (line === '-' || line === '*') { editorRef.current?.toggleUnorderedList(); matched = true }
+      else if (line === '1.') { editorRef.current?.toggleOrderedList(); matched = true }
+      else if (line === '>') { editorRef.current?.toggleBlockQuote(); matched = true }
+      else if (line === '[]' || line === '[ ]') { editorRef.current?.toggleCheckboxList(false); matched = true }
+      else if (line === '[x]' || line === '[X]') { editorRef.current?.toggleCheckboxList(true); matched = true }
+      else if (line === '```' && lastChar === '\n') { editorRef.current?.toggleCodeBlock(); matched = true }
+
+      if (matched) {
+        // Remove the markdown prefix from the HTML content after toggle takes effect
+        const prefix = line + (lastChar === ' ' ? ' ' : '\n')
+        requestAnimationFrame(async () => {
+          try {
+            if (!editorRef.current) return
+            const html = await editorRef.current.getHTML()
+            // The prefix text is now inside the formatted element (e.g. <h1># text</h1>).
+            // Remove the first occurrence of the prefix (plain text, not HTML-escaped).
+            const cleaned = html.replace(line, '')
+            if (cleaned !== html) {
+              editorRef.current.setValue(cleaned)
+            }
+          } catch { /* ignore */ }
+        })
+      }
+
+      // Trigger debounced sync
+      debouncedSync()
+    },
+    [debouncedSync],
+  )
+
+  // ---------- Image insertion ----------
+
+  const handleInsertImage = useCallback(() => {
+    if (!ImagePicker) {
+      Alert.alert('Unavailable', 'Image picker is not available on this device.')
+      return
+    }
+
+    const insertImage = async (asset: { uri: string; width: number; height: number; fileName?: string | null; mimeType?: string | null }) => {
+      editorRef.current?.setImage(asset.uri, asset.width || 300, asset.height || 200)
+
+      // Queue background upload if local-db is available
+      if (localDB?.uploadQueue) {
+        try {
+          await localDB.uploadQueue.enqueue({
+            localUri: asset.uri,
+            fileName: asset.fileName || `image-${Date.now()}.jpg`,
+            mimeType: asset.mimeType || 'image/jpeg',
+            targetCollection: 'media',
+          })
+        } catch { /* queue not available */ }
+      }
+
+      debouncedSync()
+    }
+
+    const pickFromLibrary = async () => {
+      try {
+        const { status } = await ImagePicker!.requestMediaLibraryPermissionsAsync()
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Permission to access media library was denied.')
+          return
+        }
+        const result = await ImagePicker!.launchImageLibraryAsync({
+          mediaTypes: ['images'],
+          quality: 0.8,
+        })
+        if (result.canceled || !result.assets?.[0]) return
+        const asset = result.assets[0]
+        await insertImage(asset)
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to pick image')
+      }
+    }
+
+    const takePhoto = async () => {
+      try {
+        const { status } = await ImagePicker!.requestCameraPermissionsAsync()
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Permission to access camera was denied.')
+          return
+        }
+        const result = await ImagePicker!.launchCameraAsync({ quality: 0.8 })
+        if (result.canceled || !result.assets?.[0]) return
+        const asset = result.assets[0]
+        await insertImage(asset)
+      } catch (err) {
+        Alert.alert('Error', err instanceof Error ? err.message : 'Failed to take photo')
+      }
+    }
+
+    if (Platform.OS === 'ios') {
+      ActionSheetIOS.showActionSheetWithOptions(
+        {
+          options: ['Take Photo', 'Choose from Library', 'Cancel'],
+          cancelButtonIndex: 2,
+        },
+        (buttonIndex) => {
+          if (buttonIndex === 0) takePhoto()
+          else if (buttonIndex === 1) pickFromLibrary()
+        },
+      )
+    } else {
+      // Android: use Alert as action sheet
+      Alert.alert('Insert Image', '', [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Library', onPress: pickFromLibrary },
+        { text: 'Cancel', style: 'cancel' },
+      ])
+    }
+  }, [localDB, debouncedSync])
+
+  // ---------- Paste images handler ----------
+
+  const handlePasteImages = useCallback(
+    (e: NativeSyntheticEvent<{ images: Array<{ uri: string; width: number; height: number }> }>) => {
+      const images = e.nativeEvent.images
+      if (!images?.length) return
+      for (const img of images) {
+        editorRef.current?.setImage(img.uri, img.width || 300, img.height || 200)
+
+        // Queue background upload
+        if (localDB?.uploadQueue) {
+          localDB.uploadQueue.enqueue({
+            localUri: img.uri,
+            fileName: `paste-${Date.now()}.jpg`,
+            mimeType: 'image/jpeg',
+            targetCollection: 'media',
+          }).catch(() => {})
+        }
+      }
+      debouncedSync()
+    },
+    [localDB, debouncedSync],
+  )
+
   // ---------- Event handlers ----------
 
   const handleBlur = useCallback(async () => {
@@ -227,6 +417,18 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
   }, [onChange])
 
   const handleFocus = useCallback(() => setFocused(true), [])
+
+  // Dismiss keyboard when tapping outside — subscribe to keyboard hide event
+  // so EnrichedTextInput (native Fabric) properly syncs its focused state
+  React.useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      if (editorRef.current) {
+        editorRef.current.blur()
+        setFocused(false)
+      }
+    })
+    return () => sub.remove()
+  }, [])
 
   const handleChangeState = useCallback(
     (e: NativeSyntheticEvent<StyleState>) => setStyleState(e.nativeEvent),
@@ -395,6 +597,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
         onToggleUnorderedList={() => editorRef.current?.toggleUnorderedList()}
         onToggleCheckboxList={() => editorRef.current?.toggleCheckboxList(false)}
         onInsertLink={handleInsertLink}
+        onInsertImage={handleInsertImage}
         onInsertMention={handleInsertMention}
         visible={focused}
       />
@@ -410,9 +613,11 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
             scrollEnabled
             onFocus={handleFocus}
             onBlur={handleBlur}
+            onChangeText={handleChangeText}
             onChangeState={handleChangeState}
             onChangeSelection={handleChangeSelection}
             onLinkDetected={handleLinkDetected}
+            onPasteImages={handlePasteImages}
             mentionIndicators={['@']}
             onStartMention={handleStartMention}
             onChangeMention={handleChangeMention}
@@ -420,6 +625,11 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
             htmlStyle={htmlStyle}
             style={styles.editor}
             contextMenuItems={[
+              {
+                text: 'Insert Image',
+                onPress: handleInsertImage,
+                visible: true,
+              },
               {
                 text: 'Mention Document',
                 onPress: () => editorRef.current?.startMention('@'),
