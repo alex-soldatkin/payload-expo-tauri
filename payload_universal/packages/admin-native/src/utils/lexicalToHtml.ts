@@ -69,6 +69,37 @@ export interface LexicalElementNode {
   id?: string
 }
 
+export interface LexicalTableCellNode {
+  type: 'tablecell'
+  children: LexicalNode[]
+  direction?: string
+  format?: string | number
+  indent?: number
+  version?: number
+  headerState?: number
+  colSpan?: number
+  rowSpan?: number
+  backgroundColor?: string
+}
+
+export interface LexicalTableRowNode {
+  type: 'tablerow'
+  children: LexicalNode[]
+  direction?: string
+  format?: string | number
+  indent?: number
+  version?: number
+}
+
+export interface LexicalTableNode {
+  type: 'table'
+  children: LexicalNode[]
+  direction?: string
+  format?: string | number
+  indent?: number
+  version?: number
+}
+
 export interface LexicalUploadNode {
   type: 'upload'
   relationTo?: string
@@ -94,6 +125,9 @@ export type LexicalNode =
   | LexicalElementNode
   | LexicalUploadNode
   | LexicalRelationshipNode
+  | LexicalTableNode
+  | LexicalTableRowNode
+  | LexicalTableCellNode
 
 export interface LexicalEditorState {
   root: {
@@ -220,6 +254,26 @@ function serializeNode(node: LexicalNode): string {
 
       const payload = JSON.stringify({ collection, id })
       return `<mention indicator="@" data-payload='${escapeHtml(payload)}'>${escapeHtml(title)}</mention>`
+    }
+
+    // ---- Table nodes ----
+    case 'table': {
+      const rows = (node.children || []).map(serializeNode).join('')
+      return `<table>${rows}</table>`
+    }
+    case 'tablerow': {
+      const cells = (node.children || []).map(serializeNode).join('')
+      return `<tr>${cells}</tr>`
+    }
+    case 'tablecell': {
+      const tag = (node.headerState && node.headerState > 0) ? 'th' : 'td'
+      const content = (node.children || []).map(serializeNode).join('')
+      const attrs: string[] = []
+      if (node.colSpan && node.colSpan > 1) attrs.push(`colspan="${node.colSpan}"`)
+      if (node.rowSpan && node.rowSpan > 1) attrs.push(`rowspan="${node.rowSpan}"`)
+      if (node.backgroundColor) attrs.push(`style="background-color:${node.backgroundColor}"`)
+      const attrStr = attrs.length ? ' ' + attrs.join(' ') : ''
+      return `<${tag}${attrStr}>${content}</${tag}>`
     }
 
     // ---- Horizontal rule ----

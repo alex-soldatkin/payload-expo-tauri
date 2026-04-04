@@ -119,6 +119,22 @@ export interface LexicalUploadNode {
   version: 1
 }
 
+export interface LexicalTableCellNode extends LexicalElementNodeBase {
+  type: 'tablecell'
+  headerState: number
+  colSpan: number
+  rowSpan: number
+  backgroundColor?: string
+}
+
+export interface LexicalTableRowNode extends LexicalElementNodeBase {
+  type: 'tablerow'
+}
+
+export interface LexicalTableNode extends LexicalElementNodeBase {
+  type: 'table'
+}
+
 export type LexicalAnyNode =
   | LexicalTextNode
   | LexicalLinebreakNode
@@ -133,6 +149,9 @@ export type LexicalAnyNode =
   | LexicalHorizontalRuleNode
   | LexicalRelationshipNode
   | LexicalUploadNode
+  | LexicalTableNode
+  | LexicalTableRowNode
+  | LexicalTableCellNode
 
 export interface LexicalEditorState {
   root: {
@@ -238,6 +257,36 @@ function relationshipNode(collection: string, id: string | number): LexicalRelat
     format: '',
     version: 1,
   }
+}
+
+function tableNode(children: LexicalAnyNode[]): LexicalTableNode {
+  return { type: 'table', children, direction: 'ltr', format: '', indent: 0, version: 1 }
+}
+
+function tableRowNode(children: LexicalAnyNode[]): LexicalTableRowNode {
+  return { type: 'tablerow', children, direction: 'ltr', format: '', indent: 0, version: 1 }
+}
+
+function tableCellNode(
+  children: LexicalAnyNode[],
+  headerState: number = 0,
+  colSpan: number = 1,
+  rowSpan: number = 1,
+  backgroundColor?: string,
+): LexicalTableCellNode {
+  const node: LexicalTableCellNode = {
+    type: 'tablecell',
+    headerState,
+    colSpan,
+    rowSpan,
+    children,
+    direction: 'ltr',
+    format: '',
+    indent: 0,
+    version: 1,
+  }
+  if (backgroundColor) node.backgroundColor = backgroundColor
+  return node
 }
 
 // ---------------------------------------------------------------------------
@@ -436,6 +485,7 @@ const BLOCK_TAGS = new Set([
   'hr',
   'codeblock',
   'div',
+  'table', 'tbody', 'thead', 'tr', 'td', 'th',
 ])
 
 /**
@@ -678,6 +728,30 @@ function convertSingleBlock(el: HtmlElement): LexicalAnyNode | LexicalAnyNode[] 
     return lines.map((line) => paragraphNode([textNode(line, IS_CODE)], IS_CODE))
   }
 
+  // --- Table ---
+  if (tag === 'table') {
+    return convertTable(el)
+  }
+
+  // --- tbody / thead wrappers (if encountered at top-level, extract rows) ---
+  if (tag === 'tbody' || tag === 'thead') {
+    // Shouldn't normally appear outside a <table>, but handle gracefully
+    const rows = convertTableRows(el.children)
+    if (rows.length > 0) return tableNode(rows)
+    return null
+  }
+
+  // --- tr outside table context (shouldn't happen, handle gracefully) ---
+  if (tag === 'tr') {
+    return convertTableRow(el)
+  }
+
+  // --- td / th outside table context (shouldn't happen, wrap in paragraph) ---
+  if (tag === 'td' || tag === 'th') {
+    const children = convertCellContent(el)
+    return paragraphNode(children.length > 0 ? children : [textNode('', 0)])
+  }
+
   // --- Div / unknown block ---
   if (tag === 'div') {
     // Check if it contains block children
@@ -738,6 +812,93 @@ function convertListItem(el: HtmlElement, value: number, isCheckList: boolean): 
     value,
     checked,
   )
+}
+
+// ---------------------------------------------------------------------------
+// Table conversion helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a background-color value from a style attribute string.
+ */
+function parseBgColor(style: string | undefined): string | undefined {
+  if (!style) return undefined
+  const m = style.match(/background-color:\s*([^;]+)/)
+  return m ? m[1].trim() : undefined
+}
+
+/**
+ * Convert the content of a table cell (<td>/<th>) to Lexical children.
+ * Cell children in Lexical are typically paragraphs containing text nodes.
+ */
+function convertCellContent(el: HtmlElement): LexicalAnyNode[] {
+  // Check if the cell contains block-level elements
+  const hasBlocks = el.children.some(isBlockElement)
+  if (hasBlocks) {
+    return convertBlockNodes(el.children) as LexicalAnyNode[]
+  }
+  // Inline-only content: wrap in a paragraph
+  const inlineChildren = convertInlineNodes(el.children, 0)
+  if (inlineChildren.length > 0) {
+    return [paragraphNode(inlineChildren)]
+  }
+  return [paragraphNode([textNode('', 0)])]
+}
+
+/**
+ * Convert a <td> or <th> element to a Lexical tablecell node.
+ */
+function convertTableCell(el: HtmlElement): LexicalTableCellNode {
+  const isHeader = el.tag === 'th'
+  // headerState: 1 = row header, 2 = column header; use 1 for <th> by default
+  const headerState = isHeader ? 1 : 0
+  const colSpan = el.attrs.colspan ? parseInt(el.attrs.colspan, 10) || 1 : 1
+  const rowSpan = el.attrs.rowspan ? parseInt(el.attrs.rowspan, 10) || 1 : 1
+  const backgroundColor = parseBgColor(el.attrs.style)
+  const children = convertCellContent(el)
+  return tableCellNode(children, headerState, colSpan, rowSpan, backgroundColor)
+}
+
+/**
+ * Convert a <tr> element to a Lexical tablerow node.
+ */
+function convertTableRow(el: HtmlElement): LexicalTableRowNode {
+  const cells: LexicalAnyNode[] = []
+  for (const child of el.children) {
+    if (child.kind === 'element' && (child.tag === 'td' || child.tag === 'th')) {
+      cells.push(convertTableCell(child))
+    } else if (child.kind === 'text' && child.text.trim().length === 0) {
+      // Skip whitespace between cells
+    }
+  }
+  return tableRowNode(cells)
+}
+
+/**
+ * Extract <tr> elements from children, skipping <tbody>/<thead> wrappers.
+ */
+function convertTableRows(children: HtmlNode[]): LexicalAnyNode[] {
+  const rows: LexicalAnyNode[] = []
+  for (const child of children) {
+    if (child.kind === 'text' && child.text.trim().length === 0) continue
+    if (child.kind !== 'element') continue
+
+    if (child.tag === 'tr') {
+      rows.push(convertTableRow(child))
+    } else if (child.tag === 'tbody' || child.tag === 'thead') {
+      // Unwrap -- recurse into the wrapper to find <tr> children
+      rows.push(...convertTableRows(child.children))
+    }
+  }
+  return rows
+}
+
+/**
+ * Convert a <table> element to a Lexical table node.
+ */
+function convertTable(el: HtmlElement): LexicalTableNode {
+  const rows = convertTableRows(el.children)
+  return tableNode(rows)
 }
 
 // ---------------------------------------------------------------------------
