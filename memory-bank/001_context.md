@@ -53,6 +53,12 @@ Local workspace references
 - payload_universal/packages/admin-native/src/utils/iconRegistry.ts for lucide icon registry + SF Symbol mappings.
 - payload_universal/packages/admin-native/src/contexts/CustomComponentContext.tsx for custom component overrides.
 - payload_universal/packages/admin-native/src/contexts/PreviewContext.ts for preview context (Link.Preview control).
+- payload_universal/packages/admin-native/src/fields/richtext.tsx for full EnrichedTextInput rich text editor with Lexical JSON round-trip.
+- payload_universal/packages/admin-native/src/fields/RichTextToolbar.tsx for single-row pill-toggle formatting toolbar with glass effect.
+- payload_universal/packages/admin-native/src/fields/MentionPicker.tsx for document mention picker (queries all collections from local RxDB).
+- payload_universal/packages/admin-native/src/fields/TableEditor.tsx for native editable table grid (Lexical table node round-trip).
+- payload_universal/packages/admin-native/src/utils/lexicalToHtml.ts for Lexical JSON → enriched HTML converter.
+- payload_universal/packages/admin-native/src/utils/htmlToLexical.ts for enriched HTML → Lexical JSON parser (zero dependencies).
 - payload_universal/packages/admin-native/src/theme/index.ts for design tokens and theming.
 - payload_universal/packages/admin-native/src/types/index.ts for shared TypeScript types.
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.

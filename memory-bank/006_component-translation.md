@@ -10,7 +10,7 @@ Field mapping targets
 - select, radio: Picker or a modal list with single select and multi select.
 - relationship, upload: modal list with search and pagination. Use file picker for uploads.
 - date: native date and time picker.
-- richText: native `EnrichedTextInput` from `react-native-enriched` (Fabric/New Architecture). Bidirectional Lexical JSON ↔ HTML converters (`lexicalToHtml.ts`, `htmlToLexical.ts`). Apple Notes-style glass toolbar with live style detection. Document mentions (`@`) queryable from all user-facing collections via local RxDB. Falls back to plain-text TextInput when library not installed.
+- richText: native `EnrichedTextInput` from `react-native-enriched` (Fabric/New Architecture). Bidirectional Lexical JSON ↔ HTML converters (`lexicalToHtml.ts`, `htmlToLexical.ts`). Single-row scrollable pill-toggle toolbar with GlassView per button (iOS 26+). Notion-style markdown shortcuts (block-level). Image insertion via `expo-image-picker` with local-first upload queue. Native table editor (`TableEditor.tsx`) with editable grid of TextInput cells, header toggle, add/remove rows/columns. Document mentions (`@`) queryable from all user-facing collections via local RxDB. Falls back to plain-text TextInput when library not installed. Keyboard dismisses on outside tap via `keyboardDidHide` listener.
 - code, json: multiline editor with monospaced font. Add syntax help later.
 - array, blocks: list with add, delete, and reorder controls. Use cards for each row or block.
 - group, row, collapsible: layout wrappers that control spacing and visibility.

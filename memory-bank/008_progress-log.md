@@ -561,11 +561,73 @@ The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextIn
 
 ### Phase 18 — EnrichedTextInput confirmed working (2026-04-04)
 
-- **EnrichedTextInput renders on iPad** with full formatting toolbar (Bold, Italic, Underline, Strikethrough, InlineCode, Link, @Mention, H1-H3, Quote, CodeBlock, BulletList, NumberedList, CheckList)
+- **EnrichedTextInput renders on iPad** with full formatting toolbar
 - Posts `summary` richText field visible at top level, `content` in Content tab
 - Lexical JSON ↔ HTML conversion working: data round-trips through local RxDB
 - UIManager shim + Metro singleton resolver + `closeDuplicates: true` = stable init
-- **Next**: upgrade toolbar to use native @expo/ui glass effect components per 013_ui-patterns.md
+
+### Phase 19 — Glass effect toolbar + markdown shortcuts + images (2026-04-04)
+
+**Native glass effect toolbar** (`RichTextToolbar.tsx`):
+- Per-button `GlassView isInteractive` with `tintColor` for active state — native iOS liquid glass press feedback
+- Outer container `GlassView glassEffectStyle="regular"` — frosted glass background
+- Editor container also uses GlassView on iOS 26+
+- Falls back to plain Pressable + semi-transparent View on older iOS and Android
+
+**Notion-style markdown shortcuts** (block-level, triggered on space/enter):
+- `# ` → H1, `## ` → H2, `### ` → H3
+- `- ` or `* ` → bullet list, `1. ` → numbered list
+- `> ` → blockquote, `[] ` → checkbox, `[x] ` → checked checkbox
+- ` ``` ` + enter → code block
+- Prefix auto-removed via async `getHTML()` + `setValue()` cycle after formatting toggle
+- Detection via `onChangeText`: tracks `prevTextRef`, checks if exactly one char (space/newline) was appended, matches line-start patterns
+
+**Image insertion** (local-first):
+- ActionSheet: "Take Photo" / "Choose from Library" (via `expo-image-picker`)
+- `ref.setImage(localUri, width, height)` for immediate inline display
+- Background upload queued via `UploadQueueManager` targeting Media collection
+- `onPasteImages` handles clipboard paste with same flow
+- `ImagePlus` button in toolbar + "Insert Image" in native context menu
+
+**Keyboard dismiss**:
+- Listens for `keyboardDidHide` → blurs `EnrichedTextInput` + syncs focused state
+
+### Phase 20 — Native table editor (2026-04-04)
+
+**TableEditor component** (`fields/TableEditor.tsx`):
+- Native grid of `TextInput` cells with hairline borders
+- Header row toggle: bold text + subtle tinted background (via `headerState`)
+- `+` buttons to add rows (bottom) and columns (right edge)
+- `−` buttons beside rows and above columns for removal
+- `GlassView` container + `isInteractive` action buttons on iOS 26+
+- Minimum cell width 100px, horizontal scroll for wide tables
+- Focused cell gets primary color border highlight
+
+**Helpers exported**: `createEmptyTable(rows, cols)`, `getCellText(cell)`, `setCellText(cell, text)`, `addRow/Column`, `removeRow/Column`, `toggleHeaderRow`
+
+**Lexical JSON round-trip**:
+- `lexicalToHtml.ts`: table/tablerow/tablecell → `<table><tr><td>/<th>` with colSpan, rowSpan, backgroundColor
+- `htmlToLexical.ts`: parses `<table>/<tbody>/<thead>/<tr>/<td>/<th>` back to Lexical table nodes with headerState, colSpan, rowSpan, bgColor
+- `tableCellNode()`, `tableRowNode()`, `tableNode()` constructors
+
+**Integration in richtext.tsx**:
+- Lexical JSON split into text `ContentBlock`s and table `ContentBlock`s at mount time
+- Tables rendered as separate `TableEditor` components below the `EnrichedTextInput`
+- `mergeAndSave()` interleaves text nodes and table nodes back into one Lexical state on save
+- Table insertion: `Table2` toolbar button → `Alert.prompt` for rows×columns (e.g. "3x4") → `createEmptyTable(rows, cols)`
+- Table changes debounced and synced via the same `debouncedSync` path
+
+**Note**: `react-native-enriched-markdown` (separate package) has GFM table RENDERING (read-only via `EnrichedMarkdownText flavor="github"`) but NOT editing. Our native `TableEditor` is needed for the editing use case. Nightly versions (0.5.0-nightly, 0.6.0-nightly) don't add table editing.
+
+### Phase 21 — Toolbar redesign: single-row pill toggles (2026-04-04)
+
+- Replaced two-row toolbar with single horizontal `ScrollView` of pill-shaped toggle buttons
+- Multiselect: multiple pills can be active simultaneously (e.g. bold + italic + H2)
+- Groups separated by hairline dividers: `B I U S <>` | `Link Image @` | `H1 H2 H3` | `Quote Code` | `• 1. ☑` | `Table`
+- Each pill: circular 34px, `GlassView isInteractive` with `tintColor` on iOS 26+, filled `Pressable` fallback
+- Active state: tinted glass (iOS 26+) or solid `t.colors.primary` fill with white icon
+- Blocked state: 25% opacity
+- Note: `@expo/ui` Picker with `pickerStyle('segmented')` is single-select only — can't be used for multiselect formatting toggles
 
 ## Current known gaps
 - EnrichedTextInput rendering depends on UIManager.getViewManagerConfig shim + Metro singleton resolver for deep react-native imports. May need revisiting when RN 0.84+ fixes the Codegen Babel plugin.
