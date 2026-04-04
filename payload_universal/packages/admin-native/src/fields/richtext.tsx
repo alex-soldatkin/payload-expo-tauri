@@ -42,6 +42,7 @@ import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 import { FieldShell } from './shared'
 import { RichTextToolbar, type StyleState } from './RichTextToolbar'
 import { MentionPicker } from './MentionPicker'
+import { TableEditor, createEmptyTable, type TableNode } from './TableEditor'
 
 // Optional: GlassView for the editor container (iOS 26+)
 let EditorGlassView: React.ComponentType<any> | null = null
@@ -229,20 +230,103 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
   // Optional local-db for upload queue
   const localDB = _useLocalDB ? _useLocalDB() : null
 
-  // ---------- Convert initial value once ----------
-  const defaultHtml = useMemo(() => {
-    if (!value) return ''
-    try { return lexicalToHtml(value) } catch { return '' }
+  // ---------- Split Lexical JSON into text blocks + table blocks ----------
+  // EnrichedTextInput can't render <table>. We extract tables from the Lexical
+  // tree and render them as separate TableEditor components.
+  type ContentBlock =
+    | { type: 'text'; nodes: any[] }
+    | { type: 'table'; index: number; node: TableNode }
+
+  const { contentBlocks, initialTables } = useMemo(() => {
+    if (!value || typeof value !== 'object' || !('root' in (value as any))) {
+      return { contentBlocks: [{ type: 'text' as const, nodes: [] }], initialTables: [] as TableNode[] }
+    }
+    const root = (value as any).root
+    const children: any[] = root?.children ?? []
+    const blocks: ContentBlock[] = []
+    const tables: TableNode[] = []
+    let textBuf: any[] = []
+
+    for (const child of children) {
+      if (child.type === 'table') {
+        if (textBuf.length > 0) {
+          blocks.push({ type: 'text', nodes: [...textBuf] })
+          textBuf = []
+        }
+        blocks.push({ type: 'table', index: tables.length, node: child })
+        tables.push(child)
+      } else {
+        textBuf.push(child)
+      }
+    }
+    if (textBuf.length > 0 || blocks.length === 0) {
+      blocks.push({ type: 'text', nodes: textBuf })
+    }
+
+    return { contentBlocks: blocks, initialTables: tables }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ---------- Debounced onChange sync ----------
-  const debouncedSync = useDebouncedCallback(async () => {
+  // Table state — mutable array of TableNode
+  const [tables, setTables] = useState<TableNode[]>(initialTables)
+
+  // Convert text-only nodes to HTML for EnrichedTextInput
+  const defaultHtml = useMemo(() => {
+    // Build a Lexical state with only the non-table nodes
+    const textNodes = contentBlocks
+      .filter((b): b is { type: 'text'; nodes: any[] } => b.type === 'text')
+      .flatMap((b) => b.nodes)
+
+    if (textNodes.length === 0) return ''
+    const fakeState = { root: { type: 'root', children: textNodes, direction: 'ltr', format: '', indent: 0, version: 1 } }
+    try { return lexicalToHtml(fakeState) } catch { return '' }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---------- Merge text + tables back into one Lexical state ----------
+  const mergeAndSave = useCallback(async () => {
     if (!editorRef.current) return
     try {
       const html = await editorRef.current.getHTML()
-      const lexical = htmlToLexical(html)
-      if (lexical) onChange(lexical)
+      const lexical = htmlToLexical(html) as any
+      if (!lexical?.root?.children) return
+
+      // Rebuild the children array interleaving text and tables
+      const textNodes = lexical.root.children
+      const merged: any[] = []
+      let textIdx = 0
+
+      for (const block of contentBlocks) {
+        if (block.type === 'table') {
+          // Insert all accumulated text nodes before this table
+          // (we approximate: text blocks map to the original order)
+          merged.push(tables[block.index])
+        } else {
+          // Push text nodes from the parsed HTML
+          // Each text block corresponds to a chunk of non-table nodes
+          while (textIdx < textNodes.length) {
+            const node = textNodes[textIdx]
+            textIdx++
+            merged.push(node)
+            // If we've consumed enough text nodes for this block, break
+            // Simple heuristic: consume the same number as the original block had
+            if (textIdx >= textNodes.length ||
+                (block.nodes.length > 0 && merged.filter(n => n.type !== 'table').length >= block.nodes.length)) break
+          }
+        }
+      }
+      // Append any remaining text nodes
+      while (textIdx < textNodes.length) {
+        merged.push(textNodes[textIdx++])
+      }
+
+      onChange({
+        root: { ...lexical.root, children: merged },
+      })
     } catch { /* ignore */ }
+  }, [onChange, tables, contentBlocks])
+
+  // ---------- Debounced onChange sync ----------
+  const debouncedSync = useDebouncedCallback(async () => {
+    await mergeAndSave()
   }, 600)
 
   // ---------- Markdown shortcuts (Notion-style) ----------
@@ -404,17 +488,49 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
     [localDB, debouncedSync],
   )
 
+  // ---------- Table insertion ----------
+
+  const handleInsertTable = useCallback(() => {
+    Alert.prompt(
+      'Insert Table',
+      'Enter rows × columns (e.g. 3x4):',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Insert',
+          onPress: (input?: string) => {
+            const match = input?.match(/(\d+)\s*[x×X]\s*(\d+)/)
+            if (!match) return
+            const rows = Math.max(1, Math.min(20, parseInt(match[1], 10)))
+            const cols = Math.max(1, Math.min(10, parseInt(match[2], 10)))
+            const newTable = createEmptyTable(rows, cols)
+            setTables((prev) => [...prev, newTable])
+            // Add a table block at the end of contentBlocks
+            contentBlocks.push({ type: 'table', index: tables.length, node: newTable })
+            debouncedSync()
+          },
+        },
+      ],
+      'plain-text',
+      '3x3',
+    )
+  }, [tables, contentBlocks, debouncedSync])
+
+  const handleTableChange = useCallback((index: number, newData: TableNode) => {
+    setTables((prev) => {
+      const next = [...prev]
+      next[index] = newData
+      return next
+    })
+    debouncedSync()
+  }, [debouncedSync])
+
   // ---------- Event handlers ----------
 
   const handleBlur = useCallback(async () => {
     setFocused(false)
-    if (!editorRef.current) return
-    try {
-      const html = await editorRef.current.getHTML()
-      const lexical = htmlToLexical(html)
-      if (lexical) onChange(lexical)
-    } catch { /* ignore */ }
-  }, [onChange])
+    await mergeAndSave()
+  }, [mergeAndSave])
 
   const handleFocus = useCallback(() => setFocused(true), [])
 
@@ -598,6 +714,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
         onToggleCheckboxList={() => editorRef.current?.toggleCheckboxList(false)}
         onInsertLink={handleInsertLink}
         onInsertImage={handleInsertImage}
+        onInsertTable={handleInsertTable}
         onInsertMention={handleInsertMention}
         visible={focused}
       />
@@ -667,6 +784,17 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
           </View>
         )
       })()}
+
+      {/* Render tables as separate native grid editors */}
+      {tables.map((table, i) => (
+        <View key={`table-${i}`} style={styles.tableWrapper}>
+          <TableEditor
+            data={table}
+            onChange={(newData) => handleTableChange(i, newData)}
+            disabled={isDisabled}
+          />
+        </View>
+      ))}
 
       <MentionPicker
         visible={mentionVisible}
@@ -802,6 +930,9 @@ const styles = StyleSheet.create({
     borderRadius: 14,
     minHeight: 160,
     overflow: 'hidden',
+  },
+  tableWrapper: {
+    marginTop: t.spacing.sm,
   },
   editor: {
     flex: 1,

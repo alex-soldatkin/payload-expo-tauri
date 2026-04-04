@@ -31,6 +31,7 @@ import {
   ListOrdered,
   Quote,
   Strikethrough,
+  Table2,
   Underline,
 } from 'lucide-react-native'
 import { defaultTheme as t } from '../theme'
@@ -102,6 +103,7 @@ export type RichTextToolbarProps = {
   onToggleCheckboxList: () => void
   onInsertLink: () => void
   onInsertImage: () => void
+  onInsertTable: () => void
   onInsertMention: () => void
   visible: boolean
 }
@@ -214,6 +216,7 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
   onToggleCheckboxList,
   onInsertLink,
   onInsertImage,
+  onInsertTable,
   onInsertMention,
   visible,
 }) => {
@@ -258,6 +261,8 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
         <ToolbarButton icon={List} active={s?.unorderedList.isActive} blocked={s?.unorderedList.isBlocking} onPress={onToggleUnorderedList} />
         <ToolbarButton icon={ListOrdered} active={s?.orderedList.isActive} blocked={s?.orderedList.isBlocking} onPress={onToggleOrderedList} />
         <ToolbarButton icon={ListChecks} active={s?.checkboxList.isActive} blocked={s?.checkboxList.isBlocking} onPress={onToggleCheckboxList} />
+        <Separator />
+        <ToolbarButton icon={Table2} onPress={onInsertTable} />
       </ScrollView>
     </View>
   )
