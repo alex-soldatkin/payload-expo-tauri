@@ -16,7 +16,7 @@
  * Exposes a ref with { submit() } so the parent can trigger save from a header button.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Animated, Modal, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
 
 // Optional: GlassView for liquid glass containers on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -492,52 +492,89 @@ try {
   BlurView = require('expo-blur').BlurView
 } catch { /* not available */ }
 
-const INSPECTOR_WIDTH = 340
+const INSPECTOR_WIDTH = 320
+const INSPECTOR_MARGIN = 12
+const DISMISS_THRESHOLD = 100 // px swipe right to dismiss
 
+/**
+ * Floating inspector panel — hovers over form content.
+ * - No backdrop: content behind remains interactive
+ * - Draggable: PanResponder lets user reposition horizontally
+ * - Swipe right to dismiss
+ * - Glass/blur background with rounded corners on all sides
+ * - Positioned within the content area (parent View, not full-screen)
+ */
 const InspectorPanel: React.FC<{
   visible: boolean
   onClose: () => void
   renderFields: (fields: ClientField[]) => React.ReactNode
   sidebarFields: ClientField[]
 }> = ({ visible, onClose, renderFields, sidebarFields }) => {
-  const translateX = useRef(new Animated.Value(INSPECTOR_WIDTH)).current
-  const backdropOpacity = useRef(new Animated.Value(0)).current
+  const { width: screenWidth } = useWindowDimensions()
+  const defaultX = screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN
+  const panX = useRef(new Animated.Value(screenWidth)).current // start offscreen right
+  const lastX = useRef(defaultX)
   const [mounted, setMounted] = useState(false)
 
+  // Snap to default position when visible changes
   useEffect(() => {
+    const target = screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN
+    lastX.current = target
     if (visible) {
       setMounted(true)
-      Animated.parallel([
-        Animated.spring(translateX, {
-          toValue: 0,
-          useNativeDriver: true,
-          damping: 22,
-          stiffness: 220,
-          mass: 0.9,
-        }),
-        Animated.timing(backdropOpacity, {
-          toValue: 1,
-          duration: 200,
-          useNativeDriver: true,
-        }),
-      ]).start()
+      Animated.spring(panX, {
+        toValue: target,
+        useNativeDriver: true,
+        damping: 24,
+        stiffness: 200,
+        mass: 0.8,
+      }).start()
     } else {
-      Animated.parallel([
-        Animated.spring(translateX, {
-          toValue: INSPECTOR_WIDTH,
-          useNativeDriver: true,
-          damping: 22,
-          stiffness: 220,
-          mass: 0.9,
-        }),
-        Animated.timing(backdropOpacity, {
-          toValue: 0,
-          duration: 150,
-          useNativeDriver: true,
-        }),
-      ]).start(() => setMounted(false))
+      Animated.spring(panX, {
+        toValue: screenWidth,
+        useNativeDriver: true,
+        damping: 24,
+        stiffness: 200,
+        mass: 0.8,
+      }).start(() => setMounted(false))
     }
-  }, [visible, translateX, backdropOpacity])
+  }, [visible, screenWidth, panX])
+
+  // PanResponder for drag + swipe-to-dismiss
+  const panResponder = useRef(
+    PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dx) > 10 && Math.abs(gs.dx) > Math.abs(gs.dy),
+      onPanResponderGrant: () => {
+        panX.stopAnimation((val) => { lastX.current = val })
+        panX.setOffset(lastX.current)
+        panX.setValue(0)
+      },
+      onPanResponderMove: Animated.event([null, { dx: panX }], { useNativeDriver: false }),
+      onPanResponderRelease: (_, gs) => {
+        panX.flattenOffset()
+        const finalX = lastX.current + gs.dx
+
+        // Swipe right past threshold → dismiss
+        if (gs.dx > DISMISS_THRESHOLD || gs.vx > 0.5) {
+          onClose()
+          return
+        }
+
+        // Clamp to screen bounds
+        const clamped = Math.max(INSPECTOR_MARGIN, Math.min(finalX, screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN))
+        lastX.current = clamped
+        Animated.spring(panX, {
+          toValue: clamped,
+          useNativeDriver: true,
+          damping: 24,
+          stiffness: 200,
+          mass: 0.8,
+        }).start()
+      },
+    }),
+  ).current
 
   if (!mounted) return null
 
@@ -547,70 +584,77 @@ const InspectorPanel: React.FC<{
         glassEffectStyle: 'regular',
       })
     : BlurView
-      ? <BlurView style={StyleSheet.absoluteFill} intensity={40} tint="systemUltraThinMaterial" />
+      ? <BlurView style={StyleSheet.absoluteFill} intensity={50} tint="systemChromeMaterial" />
       : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(249, 249, 249, 0.95)' }]} />
 
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
-      {/* Backdrop — tap to close */}
-      <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
-        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.2)' }]} onPress={onClose} />
-      </Animated.View>
-
-      {/* Floating panel */}
-      <Animated.View style={[
+    <Animated.View
+      style={[
         inspectorStyles.panel,
-        { width: INSPECTOR_WIDTH, transform: [{ translateX }] },
-      ]}>
-        {panelBg}
+        { width: INSPECTOR_WIDTH, transform: [{ translateX: panX }] },
+      ]}
+      pointerEvents="box-none"
+      {...panResponder.panHandlers}
+    >
+      {panelBg}
 
-        {/* Header */}
-        <View style={inspectorStyles.header}>
-          <Text style={inspectorStyles.headerTitle}>Details</Text>
-          <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={inspectorStyles.closeButton}>Done</Text>
-          </Pressable>
-        </View>
+      {/* Drag handle */}
+      <View style={inspectorStyles.dragHandle}>
+        <View style={inspectorStyles.dragPill} />
+      </View>
 
-        {/* Scrollable content */}
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={inspectorStyles.content}
-          keyboardShouldPersistTaps="handled"
-        >
-          <FormSection>
-            {renderFields(sidebarFields)}
-          </FormSection>
-        </ScrollView>
-      </Animated.View>
-    </View>
+      {/* Header */}
+      <View style={inspectorStyles.header}>
+        <Text style={inspectorStyles.headerTitle}>Details</Text>
+        <Pressable onPress={onClose} hitSlop={12}>
+          <Text style={inspectorStyles.closeButton}>Done</Text>
+        </Pressable>
+      </View>
+
+      {/* Scrollable content */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={inspectorStyles.content}
+        keyboardShouldPersistTaps="handled"
+      >
+        <FormSection>
+          {renderFields(sidebarFields)}
+        </FormSection>
+      </ScrollView>
+    </Animated.View>
   )
 }
 
 const inspectorStyles = StyleSheet.create({
   panel: {
     position: 'absolute',
-    right: 0,
-    top: 0,
-    bottom: 0,
+    top: INSPECTOR_MARGIN,
+    bottom: INSPECTOR_MARGIN,
     overflow: 'hidden',
-    borderTopLeftRadius: 14,
-    borderBottomLeftRadius: 14,
+    borderRadius: 14,
     shadowColor: '#000',
-    shadowOffset: { width: -4, height: 0 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.18,
+    shadowRadius: 16,
     elevation: 24,
+  },
+  dragHandle: {
+    alignItems: 'center',
+    paddingTop: 8,
+    paddingBottom: 4,
+  },
+  dragPill: {
+    width: 36,
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: 'rgba(0, 0, 0, 0.15)',
   },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingTop: 16,
     paddingBottom: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
   },
   headerTitle: {
     fontSize: 17,
@@ -624,7 +668,7 @@ const inspectorStyles = StyleSheet.create({
   },
   content: {
     paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingTop: 4,
     paddingBottom: 40,
   },
 })
