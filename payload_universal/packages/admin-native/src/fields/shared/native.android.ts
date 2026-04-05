@@ -28,6 +28,16 @@ try {
     Group: null,
     presentationDetents: null,
     presentationDragIndicator: null,
+    Button: null,       // No SwiftUI Button on Android
+    buttonStyle: null,
+    controlSize: null,
+    tint: null,
+    ControlGroup: null, // No SwiftUI ControlGroup on Android
+    Form: null,
+    Section: null,
+    LabeledContent: null,
+    formStyle: null,
+    listSectionSpacing: null,
   }
 } catch {
   registry = emptyRegistry

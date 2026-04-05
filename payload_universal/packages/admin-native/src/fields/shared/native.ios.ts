@@ -23,13 +23,23 @@ try {
     Picker: swiftUI.Picker,
     DisclosureGroup: swiftUI.DisclosureGroup,
     Text: swiftUI.Text,
+    Button: swiftUI.Button,
     tag: modifiers.tag,
     pickerStyle: modifiers.pickerStyle,
     glassEffect: modifiers.glassEffect,
+    buttonStyle: modifiers.buttonStyle,
+    controlSize: modifiers.controlSize,
+    tint: modifiers.tint,
     BottomSheet: swiftUI.BottomSheet,
     Group: swiftUI.Group,
+    ControlGroup: swiftUI.ControlGroup,
+    Form: swiftUI.Form,
+    Section: swiftUI.Section,
+    LabeledContent: swiftUI.LabeledContent,
     presentationDetents: modifiers.presentationDetents,
     presentationDragIndicator: modifiers.presentationDragIndicator,
+    formStyle: modifiers.formStyle ?? null,
+    listSectionSpacing: modifiers.listSectionSpacing ?? null,
   }
 } catch {
   registry = emptyRegistry

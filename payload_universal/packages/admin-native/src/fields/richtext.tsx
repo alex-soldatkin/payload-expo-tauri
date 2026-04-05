@@ -742,16 +742,26 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
             htmlStyle={htmlStyle}
             style={styles.editor}
             contextMenuItems={[
-              {
-                text: 'Insert Image',
-                onPress: handleInsertImage,
-                visible: true,
-              },
-              {
-                text: 'Mention Document',
-                onPress: () => editorRef.current?.startMention('@'),
-                visible: true,
-              },
+              // Inline formatting — appear in text selection context menu
+              { text: 'Bold', onPress: () => editorRef.current?.toggleBold(), visible: true },
+              { text: 'Italic', onPress: () => editorRef.current?.toggleItalic(), visible: true },
+              { text: 'Underline', onPress: () => editorRef.current?.toggleUnderline(), visible: true },
+              { text: 'Strikethrough', onPress: () => editorRef.current?.toggleStrikeThrough(), visible: true },
+              { text: 'Code', onPress: () => editorRef.current?.toggleInlineCode(), visible: true },
+              // Block formatting
+              { text: 'Heading 1', onPress: () => editorRef.current?.toggleH1(), visible: true },
+              { text: 'Heading 2', onPress: () => editorRef.current?.toggleH2(), visible: true },
+              { text: 'Heading 3', onPress: () => editorRef.current?.toggleH3(), visible: true },
+              { text: 'Quote', onPress: () => editorRef.current?.toggleBlockQuote(), visible: true },
+              { text: 'Code Block', onPress: () => editorRef.current?.toggleCodeBlock(), visible: true },
+              { text: 'Bullet List', onPress: () => editorRef.current?.toggleUnorderedList(), visible: true },
+              { text: 'Numbered List', onPress: () => editorRef.current?.toggleOrderedList(), visible: true },
+              { text: 'Checklist', onPress: () => editorRef.current?.toggleCheckboxList(false), visible: true },
+              // Insert actions
+              { text: 'Insert Link', onPress: () => handleInsertLink(), visible: true },
+              { text: 'Insert Image', onPress: () => handleInsertImage(), visible: true },
+              { text: 'Insert Table', onPress: () => handleInsertTable(), visible: true },
+              { text: 'Mention Document', onPress: () => editorRef.current?.startMention('@'), visible: true },
             ]}
           />
         )

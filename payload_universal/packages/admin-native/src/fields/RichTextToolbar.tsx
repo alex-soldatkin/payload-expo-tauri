@@ -1,14 +1,17 @@
 /**
- * RichTextToolbar — single-row horizontal scrollable formatting bar.
+ * RichTextToolbar — native SwiftUI ControlGroup toolbar with glass buttons.
  *
- * Each control is a pill-shaped toggle button with glass effect (iOS 26+).
- * Multiple controls can be active simultaneously (e.g. bold + italic).
- * Groups separated by hairline dividers.
+ * Uses @expo/ui ControlGroup + Button with buttonStyle('glass') on iOS.
+ * Multiple ControlGroups in a horizontal ScrollView, each grouping
+ * related formatting actions. Buttons reflect live style state from
+ * EnrichedTextInput via `onChangeState`.
  *
- * Layout: B I U S <> | 🔗 📎 📷 @ | H1 H2 H3 | ❝ {} | • 1. ☑ | ⊞
+ * Falls back to Pressable pill buttons when @expo/ui is unavailable.
+ *
+ * Layout: [B I U S <>] [🔗 📷 @] [H1 H2 H3] [❝ {}] [• 1. ☑] [⊞]
  */
 import React from 'react'
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
+import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
 import {
   AtSign,
   Bold,
@@ -29,6 +32,8 @@ import {
   Underline,
 } from 'lucide-react-native'
 import { defaultTheme as t } from '../theme'
+import { nativeComponents } from './shared'
+import { NativeHost } from './NativeHost'
 
 // ---------------------------------------------------------------------------
 // Types — matches react-native-enriched OnChangeStateEvent shape
@@ -63,18 +68,6 @@ export type StyleState = {
 }
 
 // ---------------------------------------------------------------------------
-// Optional glass effect (iOS 26+)
-// ---------------------------------------------------------------------------
-
-let GlassView: React.ComponentType<any> | null = null
-let liquidGlassAvailable = false
-try {
-  const glassModule = require('expo-glass-effect')
-  GlassView = glassModule.GlassView
-  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
-} catch { /* not available */ }
-
-// ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
 
@@ -101,7 +94,100 @@ export type RichTextToolbarProps = {
 }
 
 // ---------------------------------------------------------------------------
-// Pill toggle button — individual segment-style control
+// Native toolbar — uses @expo/ui ControlGroup + Button with glass style
+// ---------------------------------------------------------------------------
+
+const NativeToolbar: React.FC<RichTextToolbarProps> = ({
+  styleState: s,
+  onToggleBold, onToggleItalic, onToggleUnderline, onToggleStrikeThrough,
+  onToggleInlineCode, onToggleH1, onToggleH2, onToggleH3,
+  onToggleBlockQuote, onToggleCodeBlock,
+  onToggleOrderedList, onToggleUnorderedList, onToggleCheckboxList,
+  onInsertLink, onInsertImage, onInsertTable, onInsertMention,
+  visible,
+}) => {
+  if (!visible) return null
+
+  const NativeButton = nativeComponents.Button!
+  const NativeControlGroup = nativeComponents.ControlGroup!
+  const glass = nativeComponents.buttonStyle!('glass')
+  const small = nativeComponents.controlSize!('small')
+  const activeTint = nativeComponents.tint!(t.colors.primary)
+
+  /** Build modifiers array: glass + small + optional active tint */
+  const mods = (entry?: StyleStateEntry) => {
+    const m = [glass, small]
+    if (entry?.isActive) m.push(activeTint)
+    return m
+  }
+
+  return (
+    <View style={styles.nativeContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.nativeScroll}
+        keyboardShouldPersistTaps="always"
+      >
+        {/* Inline formatting */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton systemImage="bold" onPress={onToggleBold} modifiers={mods(s?.bold)} />
+            <NativeButton systemImage="italic" onPress={onToggleItalic} modifiers={mods(s?.italic)} />
+            <NativeButton systemImage="underline" onPress={onToggleUnderline} modifiers={mods(s?.underline)} />
+            <NativeButton systemImage="strikethrough" onPress={onToggleStrikeThrough} modifiers={mods(s?.strikeThrough)} />
+            <NativeButton systemImage="chevron.left.forwardslash.chevron.right" onPress={onToggleInlineCode} modifiers={mods(s?.inlineCode)} />
+          </NativeControlGroup>
+        </NativeHost>
+
+        {/* Insert actions */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton systemImage="link" onPress={onInsertLink} modifiers={mods(s?.link)} />
+            <NativeButton systemImage="photo.badge.plus" onPress={onInsertImage} modifiers={mods(s?.image)} />
+            <NativeButton systemImage="at" onPress={onInsertMention} modifiers={mods(s?.mention)} />
+          </NativeControlGroup>
+        </NativeHost>
+
+        {/* Headings */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton label="H1" onPress={onToggleH1} modifiers={mods(s?.h1)} />
+            <NativeButton label="H2" onPress={onToggleH2} modifiers={mods(s?.h2)} />
+            <NativeButton label="H3" onPress={onToggleH3} modifiers={mods(s?.h3)} />
+          </NativeControlGroup>
+        </NativeHost>
+
+        {/* Block formatting */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton systemImage="text.quote" onPress={onToggleBlockQuote} modifiers={mods(s?.blockQuote)} />
+            <NativeButton systemImage="curlybraces" onPress={onToggleCodeBlock} modifiers={mods(s?.codeBlock)} />
+          </NativeControlGroup>
+        </NativeHost>
+
+        {/* Lists */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton systemImage="list.bullet" onPress={onToggleUnorderedList} modifiers={mods(s?.unorderedList)} />
+            <NativeButton systemImage="list.number" onPress={onToggleOrderedList} modifiers={mods(s?.orderedList)} />
+            <NativeButton systemImage="checklist" onPress={onToggleCheckboxList} modifiers={mods(s?.checkboxList)} />
+          </NativeControlGroup>
+        </NativeHost>
+
+        {/* Table */}
+        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
+          <NativeControlGroup>
+            <NativeButton systemImage="tablecells" onPress={onInsertTable} modifiers={[glass, small]} />
+          </NativeControlGroup>
+        </NativeHost>
+      </ScrollView>
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Fallback toolbar — Pressable pills (non-iOS / no @expo/ui)
 // ---------------------------------------------------------------------------
 
 const PILL_HEIGHT = 34
@@ -114,34 +200,14 @@ type PillProps = {
   onPress: () => void
 }
 
-const PillGlass: React.FC<PillProps> = ({ icon: Icon, active = false, blocked = false, onPress }) => {
-  const Glass = GlassView as React.ComponentType<any>
-  return (
-    <Pressable onPress={onPress} disabled={blocked} hitSlop={2}>
-      <Glass
-        style={[styles.pill, active && styles.pillActiveGlass, blocked && styles.pillBlocked]}
-        isInteractive
-        glassEffectStyle="regular"
-        tintColor={active ? t.colors.primary : undefined}
-      >
-        <Icon
-          size={ICON_SIZE}
-          color={blocked ? t.colors.textPlaceholder : active ? '#fff' : t.colors.text}
-          strokeWidth={active ? 2.5 : 1.8}
-        />
-      </Glass>
-    </Pressable>
-  )
-}
-
-const PillFallback: React.FC<PillProps> = ({ icon: Icon, active = false, blocked = false, onPress }) => (
+const Pill: React.FC<PillProps> = ({ icon: Icon, active = false, blocked = false, onPress }) => (
   <Pressable
     onPress={onPress}
     disabled={blocked}
     hitSlop={2}
     style={({ pressed }) => [
       styles.pill,
-      active && styles.pillActiveFallback,
+      active && styles.pillActive,
       blocked && styles.pillBlocked,
       pressed && !blocked && styles.pillPressed,
     ]}
@@ -154,19 +220,9 @@ const PillFallback: React.FC<PillProps> = ({ icon: Icon, active = false, blocked
   </Pressable>
 )
 
-const Pill = liquidGlassAvailable && GlassView ? PillGlass : PillFallback
-
-// ---------------------------------------------------------------------------
-// Divider between groups
-// ---------------------------------------------------------------------------
-
 const Divider: React.FC = () => <View style={styles.divider} />
 
-// ---------------------------------------------------------------------------
-// Main toolbar — single horizontal scroll
-// ---------------------------------------------------------------------------
-
-export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
+const FallbackToolbar: React.FC<RichTextToolbarProps> = ({
   styleState: s,
   onToggleBold, onToggleItalic, onToggleUnderline, onToggleStrikeThrough,
   onToggleInlineCode, onToggleH1, onToggleH2, onToggleH3,
@@ -177,83 +233,85 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = ({
 }) => {
   if (!visible) return null
 
-  const bar = (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={styles.scrollContent}
-      keyboardShouldPersistTaps="always"
-    >
-      {/* Inline formatting */}
-      <Pill icon={Bold} active={s?.bold.isActive} blocked={s?.bold.isBlocking} onPress={onToggleBold} />
-      <Pill icon={Italic} active={s?.italic.isActive} blocked={s?.italic.isBlocking} onPress={onToggleItalic} />
-      <Pill icon={Underline} active={s?.underline.isActive} blocked={s?.underline.isBlocking} onPress={onToggleUnderline} />
-      <Pill icon={Strikethrough} active={s?.strikeThrough.isActive} blocked={s?.strikeThrough.isBlocking} onPress={onToggleStrikeThrough} />
-      <Pill icon={Code} active={s?.inlineCode.isActive} blocked={s?.inlineCode.isBlocking} onPress={onToggleInlineCode} />
-
-      <Divider />
-
-      {/* Insert actions */}
-      <Pill icon={Link} active={s?.link.isActive} blocked={s?.link.isBlocking} onPress={onInsertLink} />
-      <Pill icon={ImagePlus} active={s?.image.isActive} blocked={s?.image.isBlocking} onPress={onInsertImage} />
-      <Pill icon={AtSign} active={s?.mention.isActive} blocked={s?.mention.isBlocking} onPress={onInsertMention} />
-
-      <Divider />
-
-      {/* Headings */}
-      <Pill icon={Heading1} active={s?.h1.isActive} blocked={s?.h1.isBlocking} onPress={onToggleH1} />
-      <Pill icon={Heading2} active={s?.h2.isActive} blocked={s?.h2.isBlocking} onPress={onToggleH2} />
-      <Pill icon={Heading3} active={s?.h3.isActive} blocked={s?.h3.isBlocking} onPress={onToggleH3} />
-
-      <Divider />
-
-      {/* Block formatting */}
-      <Pill icon={Quote} active={s?.blockQuote.isActive} blocked={s?.blockQuote.isBlocking} onPress={onToggleBlockQuote} />
-      <Pill icon={FileCode} active={s?.codeBlock.isActive} blocked={s?.codeBlock.isBlocking} onPress={onToggleCodeBlock} />
-
-      <Divider />
-
-      {/* Lists */}
-      <Pill icon={List} active={s?.unorderedList.isActive} blocked={s?.unorderedList.isBlocking} onPress={onToggleUnorderedList} />
-      <Pill icon={ListOrdered} active={s?.orderedList.isActive} blocked={s?.orderedList.isBlocking} onPress={onToggleOrderedList} />
-      <Pill icon={ListChecks} active={s?.checkboxList.isActive} blocked={s?.checkboxList.isBlocking} onPress={onToggleCheckboxList} />
-
-      <Divider />
-
-      {/* Table */}
-      <Pill icon={Table2} onPress={onInsertTable} />
-    </ScrollView>
+  return (
+    <View style={styles.fallbackContainer}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.fallbackScroll}
+        keyboardShouldPersistTaps="always"
+      >
+        <Pill icon={Bold} active={s?.bold.isActive} blocked={s?.bold.isBlocking} onPress={onToggleBold} />
+        <Pill icon={Italic} active={s?.italic.isActive} blocked={s?.italic.isBlocking} onPress={onToggleItalic} />
+        <Pill icon={Underline} active={s?.underline.isActive} blocked={s?.underline.isBlocking} onPress={onToggleUnderline} />
+        <Pill icon={Strikethrough} active={s?.strikeThrough.isActive} blocked={s?.strikeThrough.isBlocking} onPress={onToggleStrikeThrough} />
+        <Pill icon={Code} active={s?.inlineCode.isActive} blocked={s?.inlineCode.isBlocking} onPress={onToggleInlineCode} />
+        <Divider />
+        <Pill icon={Link} active={s?.link.isActive} blocked={s?.link.isBlocking} onPress={onInsertLink} />
+        <Pill icon={ImagePlus} active={s?.image.isActive} blocked={s?.image.isBlocking} onPress={onInsertImage} />
+        <Pill icon={AtSign} active={s?.mention.isActive} blocked={s?.mention.isBlocking} onPress={onInsertMention} />
+        <Divider />
+        <Pill icon={Heading1} active={s?.h1.isActive} blocked={s?.h1.isBlocking} onPress={onToggleH1} />
+        <Pill icon={Heading2} active={s?.h2.isActive} blocked={s?.h2.isBlocking} onPress={onToggleH2} />
+        <Pill icon={Heading3} active={s?.h3.isActive} blocked={s?.h3.isBlocking} onPress={onToggleH3} />
+        <Divider />
+        <Pill icon={Quote} active={s?.blockQuote.isActive} blocked={s?.blockQuote.isBlocking} onPress={onToggleBlockQuote} />
+        <Pill icon={FileCode} active={s?.codeBlock.isActive} blocked={s?.codeBlock.isBlocking} onPress={onToggleCodeBlock} />
+        <Divider />
+        <Pill icon={List} active={s?.unorderedList.isActive} blocked={s?.unorderedList.isBlocking} onPress={onToggleUnorderedList} />
+        <Pill icon={ListOrdered} active={s?.orderedList.isActive} blocked={s?.orderedList.isBlocking} onPress={onToggleOrderedList} />
+        <Pill icon={ListChecks} active={s?.checkboxList.isActive} blocked={s?.checkboxList.isBlocking} onPress={onToggleCheckboxList} />
+        <Divider />
+        <Pill icon={Table2} onPress={onInsertTable} />
+      </ScrollView>
+    </View>
   )
-
-  if (liquidGlassAvailable && GlassView) {
-    return (
-      <GlassView style={styles.containerGlass} glassEffectStyle="regular">
-        {bar}
-      </GlassView>
-    )
-  }
-
-  return <View style={styles.containerFallback}>{bar}</View>
 }
+
+// ---------------------------------------------------------------------------
+// Exported component — picks native ControlGroup or fallback
+// ---------------------------------------------------------------------------
+
+const useNativeToolbar = !!(
+  nativeComponents.ControlGroup &&
+  nativeComponents.Button &&
+  nativeComponents.buttonStyle &&
+  nativeComponents.controlSize &&
+  nativeComponents.tint
+)
+
+export const RichTextToolbar: React.FC<RichTextToolbarProps> = (props) =>
+  useNativeToolbar ? <NativeToolbar {...props} /> : <FallbackToolbar {...props} />
 
 // ---------------------------------------------------------------------------
 // Styles
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  containerGlass: {
-    borderRadius: 12,
-    overflow: 'hidden',
+  // Native ControlGroup toolbar
+  nativeContainer: {
     marginBottom: t.spacing.xs,
   },
-  containerFallback: {
+  nativeScroll: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 2,
+    paddingVertical: 2,
+  },
+  groupHost: {
+    flexShrink: 0,
+  },
+
+  // Fallback toolbar
+  fallbackContainer: {
     backgroundColor: Platform.OS === 'ios' ? 'rgba(245, 245, 245, 0.92)' : '#f5f5f5',
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: t.colors.separator,
     marginBottom: t.spacing.xs,
   },
-  scrollContent: {
+  fallbackScroll: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 6,
@@ -267,10 +325,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  pillActiveGlass: {
-    // GlassView tintColor handles the fill
-  },
-  pillActiveFallback: {
+  pillActive: {
     backgroundColor: t.colors.primary,
   },
   pillBlocked: {

@@ -88,6 +88,65 @@ export type NativeComponentRegistry = {
 
   /** Modifier factory: creates presentationDragIndicator modifier. */
   presentationDragIndicator: ((visibility: 'automatic' | 'visible' | 'hidden') => any) | null
+
+  /** Native button. SwiftUI Button (iOS). */
+  Button: React.ComponentType<{
+    onPress?: () => void
+    systemImage?: string
+    role?: 'default' | 'cancel' | 'destructive'
+    label?: string
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  /** Modifier factory: creates a `buttonStyle` modifier. */
+  buttonStyle: ((style: 'automatic' | 'bordered' | 'borderedProminent' | 'borderless' | 'glass' | 'glassProminent' | 'plain') => any) | null
+
+  /** Modifier factory: creates a `controlSize` modifier. */
+  controlSize: ((size: 'mini' | 'small' | 'regular' | 'large' | 'extraLarge') => any) | null
+
+  /** Modifier factory: creates a `tint` color modifier. */
+  tint: ((color: string) => any) | null
+
+  /** Native control group. SwiftUI ControlGroup (iOS). Groups buttons/toggles semantically. */
+  ControlGroup: React.ComponentType<{
+    label?: string | React.ReactNode
+    systemImage?: string
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  // ── Form primitives (iOS 16+) ──
+
+  /** Native form container. SwiftUI Form — renders grouped table with automatic styling. */
+  Form: React.ComponentType<{
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  /** Native form section. Groups fields with optional title/header/footer. */
+  Section: React.ComponentType<{
+    title?: string
+    header?: React.ReactNode
+    footer?: React.ReactNode
+    isExpanded?: boolean
+    onIsExpandedChange?: (isExpanded: boolean) => void
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  /** Native labeled content. "Label: [value]" inline row — the iOS Mail/Settings pattern. */
+  LabeledContent: React.ComponentType<{
+    label?: string | React.ReactNode
+    children?: React.ReactNode
+    modifiers?: any[]
+  }> | null
+
+  /** Modifier factory: creates a `formStyle` modifier (grouped, automatic, columns). */
+  formStyle: ((style: 'automatic' | 'grouped' | 'columns') => any) | null
+
+  /** Modifier factory: creates a `listSectionSpacing` modifier. */
+  listSectionSpacing: ((spacing: 'default' | 'compact' | number) => any) | null
 }
 
 /** Empty registry — all components null, nothing available. */
@@ -106,4 +165,14 @@ export const emptyRegistry: NativeComponentRegistry = {
   Group: null,
   presentationDetents: null,
   presentationDragIndicator: null,
+  Button: null,
+  buttonStyle: null,
+  controlSize: null,
+  tint: null,
+  ControlGroup: null,
+  Form: null,
+  Section: null,
+  LabeledContent: null,
+  formStyle: null,
+  listSectionSpacing: null,
 }
