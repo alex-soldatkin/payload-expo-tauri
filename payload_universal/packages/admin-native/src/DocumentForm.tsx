@@ -222,6 +222,9 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     [rootFields],
   )
 
+  // Show sidebar inline (side panel) on wide screens, modal sheet on narrow
+  const showInlineSidebar = windowWidth >= 1024 && sidebarFields.length > 0
+
   // Initialize RHF with Zod resolver from the Payload field schema
   const payloadForm = usePayloadForm({
     fields: rootFields,
@@ -432,7 +435,8 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
         )
       })}
 
-      {sidebarFields.length > 0 && (
+      {/* On narrow screens: show "Details" row that opens modal sheet */}
+      {sidebarFields.length > 0 && !showInlineSidebar && (
         <FormSection>
           <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
@@ -443,8 +447,8 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     </Animated.ScrollView>
   )
 
-  // ── Sidebar sheet / panel ──
-  const sidebarContent = sidebarFields.length > 0 ? (
+  // ── Sidebar: inline panel (tablet) or modal sheet (phone) ──
+  const sidebarModal = sidebarFields.length > 0 && !showInlineSidebar ? (
     <SidebarSheet
       visible={sidebarOpen}
       onClose={() => setSidebarOpen(false)}
@@ -453,13 +457,28 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     />
   ) : null
 
+  const sidebarPanel = showInlineSidebar ? (
+    <ScrollView
+      style={styles.inlineSidebar}
+      contentContainerStyle={styles.inlineSidebarContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      <FormSection title="Details">
+        {renderFields(sidebarFields)}
+      </FormSection>
+    </ScrollView>
+  ) : null
+
   const formContent = (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <View style={{ flex: 1 }}>
-        {fallbackFormContent}
-        {sidebarContent}
+      <View style={showInlineSidebar ? styles.splitLayout : { flex: 1 }}>
+        <View style={showInlineSidebar ? { flex: 1 } : { flex: 1 }}>
+          {fallbackFormContent}
+        </View>
+        {sidebarPanel}
+        {sidebarModal}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -597,6 +616,8 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     () => splitFieldsBySidebar(rootFields),
     [rootFields],
   )
+
+  const showInlineSidebar = windowWidthLegacy >= 1024 && sidebarFields.length > 0
 
   // Merge external + server + client validation errors
   const mergedErrors = useMemo(() => ({
@@ -796,7 +817,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         )
       })}
 
-      {sidebarFields.length > 0 && (
+      {sidebarFields.length > 0 && !showInlineSidebar && (
         <FormSection>
           <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
@@ -807,7 +828,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     </Animated.ScrollView>
   )
 
-  const sidebarContent = sidebarFields.length > 0 ? (
+  const sidebarModal = sidebarFields.length > 0 && !showInlineSidebar ? (
     <SidebarSheet
       visible={sidebarOpen}
       onClose={() => setSidebarOpen(false)}
@@ -816,13 +837,28 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     />
   ) : null
 
+  const sidebarPanel = showInlineSidebar ? (
+    <ScrollView
+      style={styles.inlineSidebar}
+      contentContainerStyle={styles.inlineSidebarContent}
+      keyboardShouldPersistTaps="handled"
+    >
+      <FormSection title="Details">
+        {renderFields(sidebarFields)}
+      </FormSection>
+    </ScrollView>
+  ) : null
+
   return (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <View style={{ flex: 1 }}>
-        {fallbackFormContent}
-        {sidebarContent}
+      <View style={showInlineSidebar ? styles.splitLayout : { flex: 1 }}>
+        <View style={showInlineSidebar ? { flex: 1 } : { flex: 1 }}>
+          {fallbackFormContent}
+        </View>
+        {sidebarPanel}
+        {sidebarModal}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -854,11 +890,29 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
 // Styles — iOS 26 Mail compose aesthetic
 // ===========================================================================
 
+const SIDEBAR_PANEL_WIDTH = 320
+
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.sm, paddingBottom: 60 },
   widthRow: { flexDirection: 'row' as const, gap: t.spacing.md },
   carveoutContainer: { paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.sm },
+
+  // Inline sidebar — tablet landscape split layout
+  splitLayout: {
+    flex: 1,
+    flexDirection: 'row',
+  },
+  inlineSidebar: {
+    width: SIDEBAR_PANEL_WIDTH,
+    borderLeftWidth: StyleSheet.hairlineWidth,
+    borderLeftColor: t.colors.separator,
+  },
+  inlineSidebarContent: {
+    paddingHorizontal: t.spacing.md,
+    paddingTop: t.spacing.md,
+    paddingBottom: 60,
+  },
 
   // Validation banner — subtle, no heavy border
   validationBanner: {
