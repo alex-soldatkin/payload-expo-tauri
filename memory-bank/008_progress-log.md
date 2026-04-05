@@ -397,6 +397,37 @@ This log captures what has been implemented so far and the current state of the 
   - All built-in constraints (required, min, max, minLength, maxLength, email regex) run automatically from schema metadata
 - **Architecture**: validators/hooks are JavaScript functions bundled at build time via Metro (not serialized through the JSON admin-schema endpoint). Custom validators defined per-app in a client-safe module imported by the mobile app.
 
+### Phase 11a — SwiftUI Form / Section / LabeledContent integration (2026-04-05)
+
+**Native Form primitives from @expo/ui:**
+- Added `Form`, `Section`, `LabeledContent` to the native component registry (`types.ts`, `native.ios.ts`)
+- Also added `formStyle` and `listSectionSpacing` modifier factories
+- `NativeFormContext` (boolean context) — set by DocumentForm when wrapping in a native SwiftUI Form. FieldShell checks this to decide between `LabeledContent` (native) and custom `View` layout (fallback).
+
+**DocumentForm wraps in native SwiftUI Form (when compatible):**
+- `canUseNativeFormForFields(fields)` recursively checks whether all field types (including nested sub-fields in groups, tabs, arrays, blocks) are Form-compatible
+- Incompatible types: `richText` (EnrichedTextInput — native UITextView conflicts with Form layout), `join` (FlatList + nested ScrollView conflicts with Form's List-based scroll)
+- When compatible AND `nativeComponents.Form`/`Section` available → renders inside `<NativeHost><Form formStyle="grouped">...</Form></NativeHost>`
+- Main fields wrapped in `<Section>`, sidebar fields in `<Section title="Details">`
+- The Form provides its own scroll, separators, grouped table appearance, keyboard avoidance — no need for `Animated.ScrollView`
+- Falls back to the existing RN ScrollView path when: Android, @expo/ui unavailable, OR field list contains incompatible types
+
+**FieldShell uses native LabeledContent:**
+- Inside a native Form (`useIsInsideNativeForm() === true`), inline-layout fields wrap their children in `<LabeledContent label="...">` — gives the exact iOS Mail/Settings "Label: [value]" row appearance for free
+- Stacked-layout fields (textarea, code, JSON) skip LabeledContent (multiline content doesn't fit the inline pattern)
+- Fallback path retains custom inline/stacked layout with hairline separators
+
+**GroupField uses native Section:**
+- Inside a native Form, named groups render as `<Section title="Group Name">` with proper iOS grouped-table section headers/footers
+- Unnamed groups remain transparent passthrough containers
+
+**CollapsibleField uses native Section with expand/collapse:**
+- Inside a native Form, collapsibles render as `<Section title="..." isExpanded={expanded} onIsExpandedChange={setExpanded}>` — native iOS collapsible section with smooth animation
+- Footer prop used for description text
+- Outside a Form, falls back to DisclosureGroup (native) or chevron-animated Pressable (fallback)
+
+**Key lesson:** `zod ^3.25.76` caret range resolves to Zod v4 which is incompatible with Hermes (non-writable module properties). Pinned to `>=3.22.0 <4.0.0`.
+
 ### Phase 11 — Zod validation + React Hook Form integration (2026-04-03)
 
 **Phase 1: Zod schema generation (`validation.ts`):**
@@ -629,6 +660,36 @@ The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextIn
 - Blocked state: 25% opacity
 - Note: `@expo/ui` Picker with `pickerStyle('segmented')` is single-select only — can't be used for multiselect formatting toggles
 
+### Phase 22 — SwiftUI Form adaptation for all field types (2026-04-04)
+
+**NativeHost depth guard** (`NativeHost.tsx`):
+- `NativeHostDepthContext` tracks Host nesting depth
+- When `depth > 0 && insideNativeForm`, skips the Host wrapper
+- Prevents Host-in-Host crashes for controls, pickers, tabs
+
+**FieldShell stacked layout** (`FieldShell.tsx`):
+- Inside native Form: skips container View and separator — Form provides its own chrome
+- Inline layout already adapted (uses `LabeledContent`)
+
+**Structural fields** (`structural.tsx`):
+- `CollapsibleFieldFallback`: `NativeSection` with expand/collapse
+- `RowField`: stacked inside Form (one row per field)
+- `ArrayField`: `NativeSection` per item instead of GlassView wrappers
+- `BlocksField`: `NativeSection` per block with type label
+
+**DocumentForm conditional path**:
+- `canUseNativeFormForFields()` recursively excludes `richText` and `join` (incompatible with Form)
+- Compatible collections → SwiftUI Form (native iOS Settings/Mail grouped table rows)
+- Incompatible collections → standard ScrollView fallback
+
+**ControlGroup toolbar** (`RichTextToolbar.tsx`):
+- @expo/ui ControlGroup + Button with `buttonStyle('glass')` + SF Symbol icons
+- 6 groups: inline formatting, insert actions, headings, block formatting, lists, table
+- 17 formatting items in native text selection context menu
+
+**Native component registry additions**:
+- `ControlGroup`, `Form`, `Section`, `LabeledContent`, `formStyle`, `listSectionSpacing`
+
 ## Current known gaps
 - EnrichedTextInput rendering depends on UIManager.getViewManagerConfig shim + Metro singleton resolver for deep react-native imports. May need revisiting when RN 0.84+ fixes the Codegen Babel plugin.
 - Tauri uses live Next dev server; static export strategy still TBD.
@@ -661,6 +722,81 @@ The `react-native-enriched` package uses `codegenNativeComponent('EnrichedTextIn
 - **Dist build artifacts** added to version control (removed from tracking):
   - `.gitignore` updated to exclude `test_app/apps/mobile-expo/dist/`
   - Already-committed dist files removed via `git rm -r` to keep repo clean
+
+### Phase 19 — Custom collection action buttons (2026-04-04)
+
+**Custom action buttons for collection list and document edit views:**
+
+- **Admin schema extension** (`admin-schema/src/index.ts`):
+  - Added `NativeActionMeta` type: `{ key, label, icon?, destructive? }`
+  - Added `listActions?: NativeActionMeta[]` and `editActions?: NativeActionMeta[]` to `MenuModel` collection entries
+  - `buildMenuModel()` reads `admin.listActions` and `admin.editActions` from collection config (custom extension, like `icon`)
+  - Action metadata flows through `/api/admin-schema` JSON endpoint to mobile clients
+
+- **Action handler registry** (`admin-native/src/contexts/ActionContext.tsx`):
+  - `ActionRegistryProvider` context — holds per-collection action handler functions
+  - `useListActionHandlers(slug)` / `useEditActionHandlers(slug)` hooks — return `Record<key, handler>` for a collection
+  - Action handlers are Metro-bundled code (like client validators) — not serialized through JSON
+  - `ActionHandlerRegistry` type: `{ [collectionSlug]: { list?: Record<key, handler>, edit?: Record<key, handler> } }`
+  - `ListActionContext` provides: collectionSlug, selectedIds, allDocs, localDB, baseURL, token
+  - `EditActionContext` provides: collectionSlug, documentId, doc, localDB, baseURL, token
+
+- **Codegen pipeline extended** (`tools/native-component-codegen/src/cli.ts`):
+  - Discovers `admin.components.listMenuItems[]` and `admin.components.edit.editMenuItems[]` at collection level
+  - New component types: `listActions` and `editActions` in `DiscoveredComponent`
+  - Generates `listActions` and `editActions` sections in the custom component registry
+  - Transformed web components available for complex action UIs (rendered in bottom sheet if needed)
+
+- **Collection list view** (`[slug]/index.tsx`):
+  - **Multi-select mode**: toggle via `Stack.Toolbar.Menu` "Select Items..." action
+  - Circular checkboxes on each row in selection mode (blue when selected, gray outline when not)
+  - Selection count displayed in the cancel action and action labels
+  - **Selection action bar** at bottom: shows all list actions as tappable buttons + "Done" to exit
+  - **Native menu** (iOS): `Stack.Toolbar.Menu` with `ellipsis.circle` shows custom actions as `Stack.Toolbar.MenuAction` items
+  - **Android fallback**: `CheckSquare` icon toggles selection mode; actions shown in bottom bar
+  - Action handlers receive `{ selectedIds, allDocs, localDB, ... }` context
+
+- **Document edit view** (`[slug]/[id].tsx`):
+  - Custom edit actions rendered as `Stack.Toolbar.MenuAction` items inside the existing `...` menu
+  - Merged with built-in actions (Versions, Publish, Unpublish) — custom actions appear after built-in ones
+  - `DocumentActionsMenu` extended with `extraActions` prop for Android/fallback rendering
+  - Action handlers receive `{ documentId, doc, localDB, ... }` context
+
+- **DocumentActionsMenu** updated (`admin-native/src/DocumentActionsMenu.tsx`):
+  - New `extraActions?: ExtraAction[]` prop: `{ label, icon?, destructive?, onPress }`
+  - Extra actions appended to the built-in action list
+  - Works with both native SwiftUI Picker (iOS) and BottomSheet fallback (Android)
+  - Menu appears even when `hasVersions`/`hasDrafts` are false — if `extraActions` has items
+
+- **Test app actions** (`mobile-expo/src/actions/index.ts`):
+  - Posts list: `bulkPublish` — patches selected docs to `_status: 'published'` in local RxDB
+  - Posts list: `bulkArchive` — patches selected docs to `status: 'archived'` with destructive confirmation
+  - Posts edit: `sharePost` — uses native `Share.share()` API with post title + excerpt + URL
+  - Posts edit: `duplicatePost` — clones doc data, generates new ID, strips internals, inserts as draft copy
+
+- **Server-side** (`Posts.ts`):
+  - `admin.listActions` metadata: `[{ key: 'bulkPublish', label: 'Publish Selected', icon: 'arrow.up.doc' }, { key: 'bulkArchive', label: 'Archive Selected', icon: 'archivebox', destructive: true }]`
+  - `admin.editActions` metadata: `[{ key: 'sharePost', label: 'Share Post', icon: 'square.and.arrow.up' }, { key: 'duplicatePost', label: 'Duplicate', icon: 'doc.on.doc' }]`
+  - Web components: `BulkPublishAction` (listMenuItems) and `SharePostAction` (editMenuItems) for the web admin
+
+- **Native component registry extended** (`fields/shared/`):
+  - Added `Button`, `buttonStyle`, `controlSize`, `tint` to `NativeComponentRegistry` type and all platform files
+  - iOS: loads `swiftUI.Button` + `modifiers.buttonStyle/controlSize/tint` from `@expo/ui/swift-ui`
+  - Android: nulled out (no SwiftUI equivalent)
+  - Selection bar uses `buttonStyle('borderedProminent')` for action buttons, `buttonStyle('bordered')` for Done
+  - Destructive actions use `role="destructive"` (native red styling), normal actions use `tint('#007AFF')`
+  - `controlSize('regular')` for consistent sizing
+  - `NativeHost matchContents={{ height: true }}` — SwiftUI reports button height, RN controls width
+  - Three-tier fallback: SwiftUI Button (iOS) → Pressable (Android/unsupported)
+
+- **Component label extraction** (codegen):
+  - During codegen, `extractActionLabel()` parses the web component AST to find button text content BEFORE the transform runs
+  - Labels are attached to the generated registry as `{ component, label }` entries (not bare components)
+  - Screen files merge component labels with metadata labels: `listActionEntries[i]?.label ?? action.label`
+  - Component label takes precedence — single source of truth is the Payload custom component text
+  - No duplicate label definitions needed: define text once in the web component, it flows to native buttons
+
+- **Architecture**: action metadata (key, icon, destructive) serialized in admin schema → rendered as native menu items. Button labels extracted from custom components during codegen → used as SwiftUI Button label text. Action handlers are JavaScript functions bundled by Metro → matched by `key`. Follows the same pattern as client validators: define once in Payload config, implement per-platform.
 
 ## Commands
 - Start everything: `pnpm -C test_app dev:all`
