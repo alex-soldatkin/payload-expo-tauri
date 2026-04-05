@@ -112,6 +112,17 @@ const segmentFieldsForForm = (fields: ClientField[]): FieldSegment[] => {
   return segments
 }
 
+// Error boundary: catches native Form rendering crashes and auto-falls back
+class FormCrashBoundary extends React.Component<
+  { children: React.ReactNode; onCrash: (error: Error) => void },
+  { crashed: boolean }
+> {
+  state = { crashed: false }
+  static getDerivedStateFromError() { return { crashed: true } }
+  componentDidCatch(error: Error) { this.props.onCrash(error) }
+  render() { return this.state.crashed ? null : this.props.children }
+}
+
 // Re-export for backwards compatibility
 export { FormDataContext, useFormData } from './contexts/FormDataContext'
 export type { FormDataContextValue } from './contexts/FormDataContext'
@@ -348,11 +359,18 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Use segmented native Form when @expo/ui Form + Section are available.
-  // Fields are split into compatible segments (rendered inside mini SwiftUI
-  // Forms) and carve-outs (richText, join — rendered as plain RN Views).
-  // All segments live inside a single RN ScrollView that handles scrolling.
+  // Enable native SwiftUI Form when components are available.
   const useNativeForm = !!(NativeForm && NativeSection)
+
+  // Diagnostic: log what's being rendered in each segment
+  if (useNativeForm && __DEV__) {
+    const segs = segmentFieldsForForm(mainFields)
+    console.log('[DocumentForm] native Form enabled, segments:', segs.map((s, i) =>
+      s.type === 'carveout'
+        ? `[${i}] carveout: ${s.field.type}/${(s.field as any).name ?? '?'}`
+        : `[${i}] compatible: ${s.fields.map(f => `${f.type}/${(f as any).name ?? '?'}`).join(', ')}`
+    ))
+  }
 
   // Status + error banner (rendered above the form fields)
   const formHeader = (
@@ -478,14 +496,26 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     />
   ) : null
 
+  // When the native Form path crashes, automatically fall back to ScrollView
+  // and log the error so we can diagnose without breaking the app.
+  const [nativeFormCrashed, setNativeFormCrashed] = useState(false)
+  const effectiveUseNativeForm = useNativeForm && !nativeFormCrashed
+
   const formContent = (
-    <NativeFormContext.Provider value={useNativeForm}>
+    <NativeFormContext.Provider value={effectiveUseNativeForm}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {useNativeForm && formHeader}
-        {useNativeForm ? nativeFormContent : fallbackFormContent}
+        {effectiveUseNativeForm && formHeader}
+        {effectiveUseNativeForm ? (
+          <FormCrashBoundary onCrash={(err) => {
+            console.error('[DocumentForm] Native Form crashed, falling back to ScrollView:', err)
+            setNativeFormCrashed(true)
+          }}>
+            {nativeFormContent}
+          </FormCrashBoundary>
+        ) : fallbackFormContent}
         {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
@@ -769,11 +799,18 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Use segmented native Form when @expo/ui Form + Section are available.
-  // Fields are split into compatible segments (rendered inside mini SwiftUI
-  // Forms) and carve-outs (richText, join — rendered as plain RN Views).
-  // All segments live inside a single RN ScrollView that handles scrolling.
+  // Enable native SwiftUI Form when components are available.
   const useNativeForm = !!(NativeForm && NativeSection)
+
+  // Diagnostic: log what's being rendered in each segment
+  if (useNativeForm && __DEV__) {
+    const segs = segmentFieldsForForm(mainFields)
+    console.log('[DocumentForm] native Form enabled, segments:', segs.map((s, i) =>
+      s.type === 'carveout'
+        ? `[${i}] carveout: ${s.field.type}/${(s.field as any).name ?? '?'}`
+        : `[${i}] compatible: ${s.fields.map(f => `${f.type}/${(f as any).name ?? '?'}`).join(', ')}`
+    ))
+  }
 
   const formHeader = (
     <>
@@ -883,14 +920,24 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     />
   ) : null
 
+  const [nativeFormCrashedLegacy, setNativeFormCrashedLegacy] = useState(false)
+  const effectiveUseNativeFormLegacy = useNativeForm && !nativeFormCrashedLegacy
+
   return (
-    <NativeFormContext.Provider value={useNativeForm}>
+    <NativeFormContext.Provider value={effectiveUseNativeFormLegacy}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {useNativeForm && formHeader}
-        {useNativeForm ? nativeFormContent : fallbackFormContent}
+        {effectiveUseNativeFormLegacy && formHeader}
+        {effectiveUseNativeFormLegacy ? (
+          <FormCrashBoundary onCrash={(err) => {
+            console.error('[DocumentFormLegacy] Native Form crashed, falling back:', err)
+            setNativeFormCrashedLegacy(true)
+          }}>
+            {nativeFormContent}
+          </FormCrashBoundary>
+        ) : fallbackFormContent}
         {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
