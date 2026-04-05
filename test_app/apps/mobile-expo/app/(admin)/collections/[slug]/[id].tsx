@@ -26,6 +26,8 @@ import {
   useAdminSchema,
   useBaseURL,
   useAuth,
+  useCustomComponentRegistry,
+  useEditActionHandlers,
   useMenuModel,
   VersionsBottomSheet,
 } from '@payload-universal/admin-native'
@@ -80,6 +82,22 @@ export default function DocumentEditScreen() {
   // Feature flags from collection config
   const hasDrafts = collectionMeta?.drafts ?? false
   const hasVersions = collectionMeta?.versions ?? false
+
+  // Custom edit actions from the admin schema + action handler registry
+  const editActions = collectionMeta?.editActions ?? []
+  const editHandlers = useEditActionHandlers(slug)
+  // Transpiled custom components — provide labels extracted from web components
+  const componentRegistry = useCustomComponentRegistry()
+  const editActionEntries = componentRegistry?.editActions?.[slug] ?? []
+  // Component label takes precedence over metadata label
+  const resolvedEditActions = useMemo(
+    () =>
+      editActions.map((action, i) => ({
+        ...action,
+        label: editActionEntries[i]?.label ?? action.label,
+      })),
+    [editActions, editActionEntries],
+  )
 
   // Versions bottom sheet state
   const [versionsVisible, setVersionsVisible] = useState(false)
@@ -162,7 +180,7 @@ export default function DocumentEditScreen() {
           ...(Platform.OS !== 'ios' ? {
             headerRight: () => (
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
-                {(hasVersions || hasDrafts) && (
+                {(hasVersions || hasDrafts || resolvedEditActions.length > 0) && (
                   <DocumentActionsMenu
                     hasVersions={hasVersions}
                     hasDrafts={hasDrafts}
@@ -171,6 +189,24 @@ export default function DocumentEditScreen() {
                     onSaveDraft={() => formRef.current?.submitWithStatus('draft')}
                     onPublish={() => formRef.current?.submitWithStatus('published')}
                     onUnpublish={() => formRef.current?.submitWithStatus('draft')}
+                    extraActions={resolvedEditActions.map((action) => ({
+                      label: action.label,
+                      icon: action.icon,
+                      destructive: action.destructive,
+                      onPress: () => {
+                        const handler = editHandlers[action.key]
+                        if (handler && doc) {
+                          handler({
+                            collectionSlug: slug,
+                            documentId: id,
+                            doc: doc as Record<string, unknown>,
+                            localDB,
+                            baseURL,
+                            token,
+                          })
+                        }
+                      },
+                    }))}
                   />
                 )}
                 <Pressable
@@ -193,7 +229,7 @@ export default function DocumentEditScreen() {
       />
       {Platform.OS === 'ios' && (
         <Stack.Toolbar placement="right">
-          {(hasVersions || hasDrafts) && (
+          {(hasVersions || hasDrafts || resolvedEditActions.length > 0) && (
             <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions">
               {hasVersions && (
                 <Stack.Toolbar.MenuAction
@@ -219,8 +255,35 @@ export default function DocumentEditScreen() {
                   Unpublish
                 </Stack.Toolbar.MenuAction>
               )}
+              {/* Custom edit actions from Payload config */}
+              {resolvedEditActions.map((action) => (
+                <Stack.Toolbar.MenuAction
+                  key={action.key}
+                  icon={action.icon || 'bolt'}
+                  onPress={() => {
+                    const handler = editHandlers[action.key]
+                    if (handler && doc) {
+                      handler({
+                        collectionSlug: slug,
+                        documentId: id,
+                        doc: doc as Record<string, unknown>,
+                        localDB,
+                        baseURL,
+                        token,
+                      })
+                    }
+                  }}
+                >
+                  {action.label}
+                </Stack.Toolbar.MenuAction>
+              ))}
             </Stack.Toolbar.Menu>
           )}
+          {/* Sidebar toggle — only shown when collection has sidebar fields */}
+          <Stack.Toolbar.Button
+            icon="sidebar.right"
+            onPress={() => formRef.current?.toggleSidebar()}
+          />
           <Stack.Toolbar.Button
             icon="square.and.arrow.down"
             onPress={() => {

@@ -136,6 +136,10 @@ export type DocumentFormHandle = {
   getFormData: () => Record<string, unknown>
   /** Whether the form has unsaved changes. */
   isDirty?: boolean
+  /** Whether this form has sidebar fields (admin.position: 'sidebar'). */
+  hasSidebarFields: boolean
+  /** Toggle the sidebar panel visibility. */
+  toggleSidebar: () => void
 }
 
 type Props = {
@@ -313,7 +317,9 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     submitWithStatus: (status: 'draft' | 'published') => handleSubmit(status),
     getFormData,
     isDirty,
-  }), [handleSubmit, getFormData, isDirty])
+    hasSidebarFields: sidebarFields.length > 0,
+    toggleSidebar: () => setSidebarOpen((v) => !v),
+  }), [handleSubmit, getFormData, isDirty, sidebarFields.length])
 
   useEffect(() => {
     if (scrollToError === 0) return
@@ -704,7 +710,9 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     submit: () => handleSubmit(),
     submitWithStatus: (status: 'draft' | 'published') => handleSubmit(status),
     getFormData: () => formData,
-  }), [handleSubmit, formData])
+    hasSidebarFields: sidebarFields.length > 0,
+    toggleSidebar: () => setSidebarOpen((v) => !v),
+  }), [handleSubmit, formData, sidebarFields.length])
 
   useEffect(() => {
     if (scrollToError === 0) return
