@@ -279,9 +279,9 @@ export default function DocumentEditScreen() {
               ))}
             </Stack.Toolbar.Menu>
           )}
-          {/* Details sheet — only shown when collection has sidebar fields */}
+          {/* Sidebar details — opens/dismisses the formSheet */}
           <Stack.Toolbar.Button
-            icon="info.circle"
+            icon="sidebar.right"
             onPress={() => router.push(`/collections/${slug}/details?id=${id}`)}
           />
           <Stack.Toolbar.Button
