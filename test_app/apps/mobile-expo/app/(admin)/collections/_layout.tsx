@@ -52,6 +52,17 @@ function CollectionsStack() {
             headerBackground: () => <HeaderBackgroundFallback />,
           }}
         />
+        <Stack.Screen
+          name="[slug]/details"
+          options={{
+            title: 'Details',
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.5, 0.75, 1.0],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            headerShown: false,
+          } as any}
+        />
       </Stack>
       <ProgressiveBlurHeader headerHeight={headerHeight} scrollY={scrollY} />
     </View>

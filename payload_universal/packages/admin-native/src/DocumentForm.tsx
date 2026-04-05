@@ -138,7 +138,7 @@ export type DocumentFormHandle = {
   isDirty?: boolean
   /** Whether this form has sidebar fields (admin.position: 'sidebar'). */
   hasSidebarFields: boolean
-  /** Toggle the sidebar panel visibility. */
+  /** Open the sidebar details sheet/panel. */
   toggleSidebar: () => void
 }
 
@@ -167,6 +167,8 @@ type Props = {
   onScroll?: (event: any) => void
   /** Scroll event throttle in ms (default 16). Only used when onScroll is provided. */
   scrollEventThrottle?: number
+  /** Called when the user taps "Details" to open the sidebar sheet. */
+  onOpenDetails?: () => void
 }
 
 /**
@@ -211,11 +213,11 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
   draftStatus,
   onScroll,
   scrollEventThrottle = 16,
+  onOpenDetails,
 }, ref) => {
   const scrollViewRef = useRef<ScrollView>(null)
   const [scrollToError, setScrollToError] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const toast = useToast()
 
   const { width: windowWidth } = useWindowDimensions()
@@ -316,8 +318,8 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     getFormData,
     isDirty,
     hasSidebarFields: sidebarFields.length > 0,
-    toggleSidebar: () => setSidebarOpen((v) => !v),
-  }), [handleSubmit, getFormData, isDirty, sidebarFields.length])
+    toggleSidebar: () => onOpenDetails?.(),
+  }), [handleSubmit, getFormData, isDirty, sidebarFields.length, onOpenDetails])
 
   useEffect(() => {
     if (scrollToError === 0) return
@@ -439,10 +441,10 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
         )
       })}
 
-      {/* Show "Details" row — opens floating inspector panel */}
-      {sidebarFields.length > 0 && (
+      {/* Show "Details" row — opens native sheet */}
+      {sidebarFields.length > 0 && onOpenDetails && (
         <FormSection>
-          <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
+          <Pressable onPress={onOpenDetails} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
             <Text style={styles.detailsRowChevron}>›</Text>
           </Pressable>
@@ -451,23 +453,12 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     </Animated.ScrollView>
   )
 
-  // ── Floating inspector panel for sidebar fields ──
-  const sidebarContent = sidebarFields.length > 0 ? (
-    <InspectorPanel
-      visible={sidebarOpen}
-      onClose={() => setSidebarOpen(false)}
-      renderFields={renderFields}
-      sidebarFields={sidebarFields}
-    />
-  ) : null
-
   const formContent = (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
         {fallbackFormContent}
-        {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -480,10 +471,6 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
   ) : formContent
 })
 
-// ---------------------------------------------------------------------------
-// InspectorPanel — right-side floating panel for sidebar fields
-// Slides in from the right edge, floats over form content with glass/blur bg.
-// Works in both portrait and landscape on all device sizes.
 // ---------------------------------------------------------------------------
 
 // Optional: BlurView for translucent panel background
@@ -755,6 +742,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
   draftStatus,
   onScroll,
   scrollEventThrottle = 16,
+  onOpenDetails,
 }, ref) => {
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData)
   const [saving, setSaving] = useState(false)
@@ -762,7 +750,6 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
   const [serverErrors, setServerErrors] = useState<FormErrors>({})
   const [clientErrors, setClientErrors] = useState<FormErrors>({})
   const [scrollToError, setScrollToError] = useState(0)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
   const toast = useToast()
 
@@ -860,8 +847,8 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     submitWithStatus: (status: 'draft' | 'published') => handleSubmit(status),
     getFormData: () => formData,
     hasSidebarFields: sidebarFields.length > 0,
-    toggleSidebar: () => setSidebarOpen((v) => !v),
-  }), [handleSubmit, formData, sidebarFields.length])
+    toggleSidebar: () => onOpenDetails?.(),
+  }), [handleSubmit, formData, sidebarFields.length, onOpenDetails])
 
   useEffect(() => {
     if (scrollToError === 0) return
@@ -974,9 +961,9 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         )
       })}
 
-      {sidebarFields.length > 0 && (
+      {sidebarFields.length > 0 && onOpenDetails && (
         <FormSection>
-          <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
+          <Pressable onPress={onOpenDetails} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
             <Text style={styles.detailsRowChevron}>›</Text>
           </Pressable>
@@ -985,22 +972,12 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     </Animated.ScrollView>
   )
 
-  const sidebarContent = sidebarFields.length > 0 ? (
-    <InspectorPanel
-      visible={sidebarOpen}
-      onClose={() => setSidebarOpen(false)}
-      renderFields={renderFields}
-      sidebarFields={sidebarFields}
-    />
-  ) : null
-
   return (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
         {fallbackFormContent}
-        {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>

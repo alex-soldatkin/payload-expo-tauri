@@ -279,10 +279,10 @@ export default function DocumentEditScreen() {
               ))}
             </Stack.Toolbar.Menu>
           )}
-          {/* Sidebar toggle — only shown when collection has sidebar fields */}
+          {/* Details sheet — only shown when collection has sidebar fields */}
           <Stack.Toolbar.Button
-            icon="sidebar.right"
-            onPress={() => formRef.current?.toggleSidebar()}
+            icon="info.circle"
+            onPress={() => router.push(`/collections/${slug}/details?id=${id}`)}
           />
           <Stack.Toolbar.Button
             icon="square.and.arrow.down"
@@ -312,6 +312,7 @@ export default function DocumentEditScreen() {
         contentInsetTop={headerHeight}
         onScroll={editScrollHandler}
         scrollEventThrottle={16}
+        onOpenDetails={() => router.push(`/collections/${slug}/details?id=${id}`)}
       />
 
       {/* Versions bottom sheet */}
