@@ -226,8 +226,6 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     [rootFields],
   )
 
-  // Show sidebar inline (side panel) on wide screens, modal sheet on narrow
-  const showInlineSidebar = windowWidth >= 1024 && sidebarFields.length > 0
 
   // Initialize RHF with Zod resolver from the Payload field schema
   const payloadForm = usePayloadForm({
@@ -441,8 +439,8 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
         )
       })}
 
-      {/* On narrow screens: show "Details" row that opens modal sheet */}
-      {sidebarFields.length > 0 && !showInlineSidebar && (
+      {/* Show "Details" row — opens floating inspector panel */}
+      {sidebarFields.length > 0 && (
         <FormSection>
           <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
@@ -453,9 +451,9 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     </Animated.ScrollView>
   )
 
-  // ── Sidebar: inline panel (tablet) or modal sheet (phone) ──
-  const sidebarModal = sidebarFields.length > 0 && !showInlineSidebar ? (
-    <SidebarSheet
+  // ── Floating inspector panel for sidebar fields ──
+  const sidebarContent = sidebarFields.length > 0 ? (
+    <InspectorPanel
       visible={sidebarOpen}
       onClose={() => setSidebarOpen(false)}
       renderFields={renderFields}
@@ -463,28 +461,13 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     />
   ) : null
 
-  const sidebarPanel = showInlineSidebar ? (
-    <ScrollView
-      style={styles.inlineSidebar}
-      contentContainerStyle={styles.inlineSidebarContent}
-      keyboardShouldPersistTaps="handled"
-    >
-      <FormSection title="Details">
-        {renderFields(sidebarFields)}
-      </FormSection>
-    </ScrollView>
-  ) : null
-
   const formContent = (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <View style={showInlineSidebar ? styles.splitLayout : { flex: 1 }}>
-        <View style={showInlineSidebar ? { flex: 1 } : { flex: 1 }}>
-          {fallbackFormContent}
-        </View>
-        {sidebarPanel}
-        {sidebarModal}
+      <View style={{ flex: 1 }}>
+        {fallbackFormContent}
+        {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -498,45 +481,153 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 })
 
 // ---------------------------------------------------------------------------
-// SidebarSheet — sidebar fields in a formSheet (mobile) or inline panel (tablet)
+// InspectorPanel — right-side floating panel for sidebar fields
+// Slides in from the right edge, floats over form content with glass/blur bg.
+// Works in both portrait and landscape on all device sizes.
 // ---------------------------------------------------------------------------
 
-const SidebarSheet: React.FC<{
+// Optional: BlurView for translucent panel background
+let BlurView: React.ComponentType<any> | null = null
+try {
+  BlurView = require('expo-blur').BlurView
+} catch { /* not available */ }
+
+const INSPECTOR_WIDTH = 340
+
+const InspectorPanel: React.FC<{
   visible: boolean
   onClose: () => void
   renderFields: (fields: ClientField[]) => React.ReactNode
   sidebarFields: ClientField[]
 }> = ({ visible, onClose, renderFields, sidebarFields }) => {
-  const NativeForm = nativeComponents.Form
-  const NativeSection = nativeComponents.Section
-  const useNativeInSheet = !!(NativeForm && NativeSection)
+  const translateX = useRef(new Animated.Value(INSPECTOR_WIDTH)).current
+  const backdropOpacity = useRef(new Animated.Value(0)).current
+  const [mounted, setMounted] = useState(false)
 
-  const sidebarBody = (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.spacing.lg }}>
-      <FormSection title="Details">
-        {renderFields(sidebarFields)}
-      </FormSection>
-    </ScrollView>
-  )
+  useEffect(() => {
+    if (visible) {
+      setMounted(true)
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: 0,
+          useNativeDriver: true,
+          damping: 22,
+          stiffness: 220,
+          mass: 0.9,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 1,
+          duration: 200,
+          useNativeDriver: true,
+        }),
+      ]).start()
+    } else {
+      Animated.parallel([
+        Animated.spring(translateX, {
+          toValue: INSPECTOR_WIDTH,
+          useNativeDriver: true,
+          damping: 22,
+          stiffness: 220,
+          mass: 0.9,
+        }),
+        Animated.timing(backdropOpacity, {
+          toValue: 0,
+          duration: 150,
+          useNativeDriver: true,
+        }),
+      ]).start(() => setMounted(false))
+    }
+  }, [visible, translateX, backdropOpacity])
+
+  if (!mounted) return null
+
+  const panelBg = liquidGlassAvailable && GlassView
+    ? React.createElement(GlassView as React.ComponentType<any>, {
+        style: StyleSheet.absoluteFill,
+        glassEffectStyle: 'regular',
+      })
+    : BlurView
+      ? <BlurView style={StyleSheet.absoluteFill} intensity={40} tint="systemUltraThinMaterial" />
+      : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(249, 249, 249, 0.95)' }]} />
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="formSheet"
-      onRequestClose={onClose}
-    >
-      <View style={styles.sheetContainer}>
-        <View style={styles.sheetHeader}>
+    <View style={StyleSheet.absoluteFill} pointerEvents={visible ? 'auto' : 'none'}>
+      {/* Backdrop — tap to close */}
+      <Animated.View style={[StyleSheet.absoluteFill, { opacity: backdropOpacity }]}>
+        <Pressable style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(0,0,0,0.2)' }]} onPress={onClose} />
+      </Animated.View>
+
+      {/* Floating panel */}
+      <Animated.View style={[
+        inspectorStyles.panel,
+        { width: INSPECTOR_WIDTH, transform: [{ translateX }] },
+      ]}>
+        {panelBg}
+
+        {/* Header */}
+        <View style={inspectorStyles.header}>
+          <Text style={inspectorStyles.headerTitle}>Details</Text>
           <Pressable onPress={onClose} hitSlop={12}>
-            <Text style={styles.sheetDone}>Done</Text>
+            <Text style={inspectorStyles.closeButton}>Done</Text>
           </Pressable>
         </View>
-        {sidebarBody}
-      </View>
-    </Modal>
+
+        {/* Scrollable content */}
+        <ScrollView
+          style={{ flex: 1 }}
+          contentContainerStyle={inspectorStyles.content}
+          keyboardShouldPersistTaps="handled"
+        >
+          <FormSection>
+            {renderFields(sidebarFields)}
+          </FormSection>
+        </ScrollView>
+      </Animated.View>
+    </View>
   )
 }
+
+const inspectorStyles = StyleSheet.create({
+  panel: {
+    position: 'absolute',
+    right: 0,
+    top: 0,
+    bottom: 0,
+    overflow: 'hidden',
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: -4, height: 0 },
+    shadowOpacity: 0.15,
+    shadowRadius: 12,
+    elevation: 24,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingTop: 16,
+    paddingBottom: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  headerTitle: {
+    fontSize: 17,
+    fontWeight: '600',
+    color: '#1f1f1f',
+  },
+  closeButton: {
+    fontSize: 17,
+    fontWeight: '500',
+    color: t.colors.primary,
+  },
+  content: {
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 40,
+  },
+})
 
 // ---------------------------------------------------------------------------
 // RHFFieldBridge — Phase 2 Controller bridge (Phase 3 ready)
@@ -622,8 +713,6 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     () => splitFieldsBySidebar(rootFields),
     [rootFields],
   )
-
-  const showInlineSidebar = windowWidthLegacy >= 1024 && sidebarFields.length > 0
 
   // Merge external + server + client validation errors
   const mergedErrors = useMemo(() => ({
@@ -825,7 +914,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         )
       })}
 
-      {sidebarFields.length > 0 && !showInlineSidebar && (
+      {sidebarFields.length > 0 && (
         <FormSection>
           <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
             <Text style={styles.detailsRowLabel}>Details</Text>
@@ -836,8 +925,8 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     </Animated.ScrollView>
   )
 
-  const sidebarModal = sidebarFields.length > 0 && !showInlineSidebar ? (
-    <SidebarSheet
+  const sidebarContent = sidebarFields.length > 0 ? (
+    <InspectorPanel
       visible={sidebarOpen}
       onClose={() => setSidebarOpen(false)}
       renderFields={renderFields}
@@ -845,28 +934,13 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     />
   ) : null
 
-  const sidebarPanel = showInlineSidebar ? (
-    <ScrollView
-      style={styles.inlineSidebar}
-      contentContainerStyle={styles.inlineSidebarContent}
-      keyboardShouldPersistTaps="handled"
-    >
-      <FormSection title="Details">
-        {renderFields(sidebarFields)}
-      </FormSection>
-    </ScrollView>
-  ) : null
-
   return (
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <View style={showInlineSidebar ? styles.splitLayout : { flex: 1 }}>
-        <View style={showInlineSidebar ? { flex: 1 } : { flex: 1 }}>
-          {fallbackFormContent}
-        </View>
-        {sidebarPanel}
-        {sidebarModal}
+      <View style={{ flex: 1 }}>
+        {fallbackFormContent}
+        {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -898,29 +972,12 @@ export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
 // Styles — iOS 26 Mail compose aesthetic
 // ===========================================================================
 
-const SIDEBAR_PANEL_WIDTH = 320
-
 const styles = StyleSheet.create({
   scroll: { flex: 1 },
   content: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.sm, paddingBottom: 60 },
   widthRow: { flexDirection: 'row' as const, gap: t.spacing.md },
   carveoutContainer: { paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.sm },
 
-  // Inline sidebar — tablet landscape split layout
-  splitLayout: {
-    flex: 1,
-    flexDirection: 'row',
-  },
-  inlineSidebar: {
-    width: SIDEBAR_PANEL_WIDTH,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: t.colors.separator,
-  },
-  inlineSidebarContent: {
-    paddingHorizontal: t.spacing.md,
-    paddingTop: t.spacing.md,
-    paddingBottom: 60,
-  },
 
   // Validation banner — subtle, no heavy border
   validationBanner: {
