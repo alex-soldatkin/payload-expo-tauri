@@ -398,24 +398,19 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     </>
   )
 
-  // ── Segmented native Form rendering ──
-  // Split fields into compatible runs (rendered inside SwiftUI Form/Section)
-  // and carve-outs (richText, join — rendered as plain RN Views OUTSIDE the
-  // Form). This is critical: carve-out fields CANNOT live inside a SwiftUI
-  // Form because their native views (UITextView, FlatList) conflict with
-  // Form's self-sizing layout engine. Each compatible run gets its own
-  // mini-Form inside a NativeHost with matchContents={{ height: true }} so
-  // it reports its height to the outer RN ScrollView.
+  // ── Segmented native Section rendering ──
+  // Split fields into compatible runs (rendered inside SwiftUI Section for
+  // grouped visual chrome — rounded corners, separators) and carve-outs
+  // (richText, join — rendered as plain RN Views).
+  //
+  // IMPORTANT: we use Section WITHOUT Form. SwiftUI Form is a scrollable
+  // list — nesting it inside an RN ScrollView creates scroll-inside-scroll
+  // conflicts. Section alone provides the grouped appearance without scroll.
   const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
 
-  const formModifiers = useMemo(
-    () => nativeComponents.formStyle ? [nativeComponents.formStyle('grouped')] : undefined,
-    [],
-  )
-
-  // ── Native SwiftUI Form path ──
+  // ── Native Section path ──
   // Uses an RN ScrollView as the outer container. Compatible field segments
-  // are wrapped in NativeHost > Form > Section. Carve-outs are plain RN Views.
+  // are wrapped in Section (native grouped chrome). Carve-outs are plain Views.
   const nativeFormContent = useNativeForm ? (
     <Animated.ScrollView
       ref={scrollViewRef as any}
@@ -429,7 +424,6 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 
       {mainSegments.map((seg, i) => {
         if (seg.type === 'carveout') {
-          // Carve-out: plain RN View, OUTSIDE any SwiftUI Form/Host
           const f = seg.field
           const path = f.name ?? `carveout-${i}`
           return (
@@ -440,15 +434,13 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
             </View>
           )
         }
-        // Compatible run: Form + Section render their own native views
-        // via requireNativeView('ExpoUI') — NO NativeHost wrapper needed.
+        // Compatible run: Section provides grouped visual chrome
+        // (rounded corners, separators) without Form's scroll behavior.
         return (
           <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeForm modifiers={formModifiers}>
-              <NativeSection>
-                {renderFields(seg.fields)}
-              </NativeSection>
-            </NativeForm>
+            <NativeSection>
+              {renderFields(seg.fields)}
+            </NativeSection>
           </NativeFormContext.Provider>
         )
       })}
@@ -839,11 +831,6 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
 
-  const formModifiersLegacy = useMemo(
-    () => nativeComponents.formStyle ? [nativeComponents.formStyle('grouped')] : undefined,
-    [],
-  )
-
   const nativeFormContent = useNativeForm ? (
     <Animated.ScrollView
       ref={scrollViewRef as any}
@@ -870,11 +857,9 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         }
         return (
           <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeForm modifiers={formModifiersLegacy}>
-              <NativeSection>
-                {renderFields(seg.fields)}
-              </NativeSection>
-            </NativeForm>
+            <NativeSection>
+              {renderFields(seg.fields)}
+            </NativeSection>
           </NativeFormContext.Provider>
         )
       })}
