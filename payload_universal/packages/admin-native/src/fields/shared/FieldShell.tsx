@@ -75,7 +75,19 @@ export const FieldShell: React.FC<FieldShellProps> = ({
     )
   }
 
-  // ── Stacked layout (multiline fields, or inside native Form) ──
+  // ── Stacked layout inside SwiftUI Form — let the Form handle chrome ──
+  if (insideNativeForm && layout === 'stacked') {
+    return (
+      <>
+        <Text style={styles.stackedLabel}>{displayLabel}</Text>
+        {children}
+        {description && <Text style={styles.description}>{description}</Text>}
+        {error && <Text style={styles.error}>{error}</Text>}
+      </>
+    )
+  }
+
+  // ── Stacked layout (multiline fields, outside native Form) ──
   if (layout === 'stacked') {
     return (
       <View style={styles.container}>

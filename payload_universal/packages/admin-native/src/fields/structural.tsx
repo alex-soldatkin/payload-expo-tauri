@@ -34,7 +34,7 @@ import type {
 } from '../types'
 import { defaultTheme as t } from '../theme'
 import { getFieldDescription, getFieldLabel, groupFieldsByWidth } from '../utils/schemaHelpers'
-import { nativeComponents } from './shared'
+import { nativeComponents, useIsInsideNativeForm } from './shared'
 import { NativeHost } from './NativeHost'
 
 // Optional: GlassView for liquid glass containers on iOS 26+
@@ -186,13 +186,30 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
   const subFields = field.fields ?? []
   const description = getFieldDescription(field)
+  const NativeSection = nativeComponents.Section
 
   if (!field.name) {
     return <>{renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'group', compact)}</>
   }
 
+  const renderedFields = renderSubFieldsWithWidth(subFields, (sub) => `${path}.${sub.name ?? ''}`, renderField, 'grp', compact)
+
+  // ── Native Section inside a SwiftUI Form ──
+  if (insideNativeForm && NativeSection) {
+    return (
+      <NativeSection
+        title={field.label ? getFieldLabel(field) : undefined}
+        footer={description ? <Text style={styles.groupDesc}>{description}</Text> : undefined}
+      >
+        {renderedFields}
+      </NativeSection>
+    )
+  }
+
+  // ── Fallback ──
   const content = (
     <>
       {field.label && (
@@ -201,9 +218,7 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
           {description && <Text style={styles.groupDesc}>{description}</Text>}
         </View>
       )}
-      <View style={styles.groupBody}>
-        {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${sub.name ?? ''}`, renderField, 'grp', compact)}
-      </View>
+      <View style={styles.groupBody}>{renderedFields}</View>
     </>
   )
 
@@ -234,7 +249,9 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
   const DisclosureGroup = nativeComponents.DisclosureGroup!
+  const NativeSection = nativeComponents.Section
   const [expanded, setExpanded] = useState(!(field.admin?.initCollapsed ?? false))
   const subFields = field.fields ?? []
   const description = getFieldDescription(field)
@@ -244,6 +261,23 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
     ? `${getFieldLabel(field)} (${errorCount} error${errorCount !== 1 ? 's' : ''})`
     : getFieldLabel(field)
 
+  const renderedFields = renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'coln', compact)
+
+  // ── Inside a SwiftUI Form: use native Section with expand/collapse ──
+  if (insideNativeForm && NativeSection) {
+    return (
+      <NativeSection
+        title={label}
+        isExpanded={expanded}
+        onIsExpandedChange={setExpanded}
+        footer={description ? <Text style={styles.groupDesc}>{description}</Text> : undefined}
+      >
+        {renderedFields}
+      </NativeSection>
+    )
+  }
+
+  // ── Standalone: DisclosureGroup with custom container ──
   const ContainerStyle = liquidGlassAvailable && GlassView ? styles.glassCollapsibleContainer : styles.collapsibleContainer
   const Container = liquidGlassAvailable && GlassView
     ? ({ children }: any) => <GlassView style={ContainerStyle} glassEffectStyle="regular">{children}</GlassView>
@@ -257,7 +291,7 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'coln', compact)}
+          {renderedFields}
         </View>
       )}
     </Container>
@@ -269,6 +303,8 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
+  const NativeSection = nativeComponents.Section
   const [expanded, setExpanded] = useState(!(field.admin?.initCollapsed ?? false))
   const subFields = field.fields ?? []
   const description = getFieldDescription(field)
@@ -284,6 +320,27 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
     Animated.spring(chevronAnim, { toValue: next ? 1 : 0, useNativeDriver: true, damping: 15, stiffness: 200 }).start()
   }
 
+  const label = errorCount > 0
+    ? `${getFieldLabel(field)} (${errorCount} error${errorCount !== 1 ? 's' : ''})`
+    : getFieldLabel(field)
+
+  const renderedFields = renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'colf', compact)
+
+  // ── Inside a SwiftUI Form: use native Section with expand/collapse ──
+  if (insideNativeForm && NativeSection) {
+    return (
+      <NativeSection
+        title={label}
+        isExpanded={expanded}
+        onIsExpandedChange={setExpanded}
+        footer={description ? <Text style={styles.groupDesc}>{description}</Text> : undefined}
+      >
+        {renderedFields}
+      </NativeSection>
+    )
+  }
+
+  // ── Fallback: custom animated collapsible ──
   const Wrapper = liquidGlassAvailable && GlassView
     ? ({ children, style }: any) => <GlassView style={[styles.glassCollapsibleContainer, style]} glassEffectStyle="regular">{children}</GlassView>
     : ({ children, style }: any) => <View style={[styles.collapsibleContainer, style]}>{children}</View>
@@ -308,7 +365,7 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
       {expanded && (
         <View style={styles.collapsibleBody}>
           {description && <Text style={styles.groupDesc}>{description}</Text>}
-          {renderSubFieldsWithWidth(subFields, (sub) => subPath(path, sub.name), renderField, 'colf', compact)}
+          {renderedFields}
         </View>
       )}
     </Wrapper>
@@ -329,7 +386,22 @@ export const RowField: React.FC<FieldComponentProps<ClientRowField>> = ({
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
 
+  // ── Inside a SwiftUI Form: always stack vertically (single-column cells) ──
+  if (insideNativeForm) {
+    return (
+      <>
+        {(field.fields ?? []).map((sub, i) => (
+          <React.Fragment key={sub.name || `row-${i}`}>
+            {renderField(sub, subPath(path, sub.name))}
+          </React.Fragment>
+        ))}
+      </>
+    )
+  }
+
+  // ── Fallback ──
   return (
     <View style={compact ? styles.rowContainerCompact : styles.rowContainer}>
       {(field.fields ?? []).map((sub, i) => (
@@ -481,6 +553,8 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
+  const NativeSection = nativeComponents.Section
   const items = Array.isArray(value) ? (value as Record<string, unknown>[]) : []
   const subFields = field.fields ?? []
   const singularLabel = field.labels?.singular || getFieldLabel(field)
@@ -496,6 +570,36 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
     onChange(items.filter((_, i) => i !== index))
   }
 
+  // ── Inside a SwiftUI Form: skip GlassView/View wrappers, use NativeSection per item ──
+  if (insideNativeForm && NativeSection) {
+    return (
+      <>
+        <Text style={styles.groupLabel}>
+          {getFieldLabel(field)}
+          {field.required && <Text style={styles.required}> *</Text>}
+          <Text style={styles.arrayCount}>  {items.length} item{items.length !== 1 ? 's' : ''}</Text>
+        </Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        {items.map((_, index) => (
+          <NativeSection key={`${path}.${index}`} title={`${singularLabel} ${index + 1}`}>
+            {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`, compact)}
+            {!disabled && (
+              <Pressable onPress={() => removeRow(index)}>
+                <Text style={styles.removeText}>Remove</Text>
+              </Pressable>
+            )}
+          </NativeSection>
+        ))}
+
+        {!disabled && (field.maxRows == null || items.length < field.maxRows) && (
+          <Pressable onPress={addRow}><Text style={styles.addText}>+ Add {singularLabel}</Text></Pressable>
+        )}
+      </>
+    )
+  }
+
+  // ── Fallback ──
   return (
     <View style={styles.container}>
       <View style={styles.arrayHeader}>
@@ -552,6 +656,8 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
 }) => {
   const renderField = useRenderField()
   const compact = useCompactFields()
+  const insideNativeForm = useIsInsideNativeForm()
+  const NativeSection = nativeComponents.Section
   const items = Array.isArray(value) ? (value as Array<Record<string, unknown> & { blockType?: string }>) : []
   const blocks = field.blocks ?? []
   const [showPicker, setShowPicker] = useState(false)
@@ -568,6 +674,52 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
     onChange(items.filter((_, i) => i !== index))
   }
 
+  // ── Inside a SwiftUI Form: skip GlassView/View wrappers, use NativeSection per block ──
+  if (insideNativeForm && NativeSection) {
+    return (
+      <>
+        <Text style={styles.groupLabel}>
+          {getFieldLabel(field)}
+          {field.required && <Text style={styles.required}> *</Text>}
+        </Text>
+        {error && <Text style={styles.error}>{error}</Text>}
+
+        {items.map((item, index) => {
+          const block = blocks.find((b) => b.slug === item.blockType)
+          const blockLabel = block?.labels?.singular || item.blockType || 'Block'
+          return (
+            <NativeSection key={`${path}.${index}`} title={`${blockLabel} ${index + 1}`}>
+              {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`, compact)}
+              {!disabled && (
+                <Pressable onPress={() => removeBlock(index)}>
+                  <Text style={styles.removeText}>Remove</Text>
+                </Pressable>
+              )}
+            </NativeSection>
+          )
+        })}
+
+        {!disabled && (field.maxRows == null || items.length < field.maxRows) && (
+          <>
+            <Pressable onPress={() => setShowPicker(true)}>
+              <Text style={styles.addText}>+ Add block</Text>
+            </Pressable>
+            {showPicker && (
+              <View style={styles.blockPicker}>
+                {blocks.map((block) => (
+                  <Pressable key={block.slug} style={styles.blockPickerItem} onPress={() => addBlock(block.slug)}>
+                    <Text style={styles.blockPickerText}>{block.labels?.singular || block.slug}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </>
+        )}
+      </>
+    )
+  }
+
+  // ── Fallback ──
   return (
     <View style={styles.container}>
       <Text style={styles.groupLabel}>
