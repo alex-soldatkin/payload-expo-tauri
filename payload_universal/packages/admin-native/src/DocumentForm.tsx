@@ -32,6 +32,7 @@ try {
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
 import { extractRootFields, getByPath, getFieldLabel, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
+import { FormSection } from './FormSection'
 import { ErrorMapContext, FieldRendererContext, FIELD_WIDTH_BREAKPOINT } from './fields/structural'
 import { FieldRenderer } from './FieldRenderer'
 import { useToast } from './Toast'
@@ -393,65 +394,11 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     </>
   )
 
-  // ── Segmented native Section rendering ──
-  // Split fields into compatible runs (rendered inside SwiftUI Section for
-  // grouped visual chrome — rounded corners, separators) and carve-outs
-  // (richText, join — rendered as plain RN Views).
-  //
-  // IMPORTANT: we use Section WITHOUT Form. SwiftUI Form is a scrollable
-  // list — nesting it inside an RN ScrollView creates scroll-inside-scroll
-  // conflicts. Section alone provides the grouped appearance without scroll.
+  // ── Segmented FormSection rendering ──
+  // Fields are split into compatible runs (grouped in iOS Settings-style
+  // FormSection containers with rounded corners + hairline separators)
+  // and carve-outs (richText, join — rendered standalone with padding).
   const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
-
-  // ── Native Section path ──
-  // Uses an RN ScrollView as the outer container. Compatible field segments
-  // are wrapped in Section (native grouped chrome). Carve-outs are plain Views.
-  const nativeFormContent = useNativeForm ? (
-    <Animated.ScrollView
-      ref={scrollViewRef as any}
-      style={styles.scroll}
-      contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
-      keyboardShouldPersistTaps="handled"
-      onScroll={onScroll}
-      scrollEventThrottle={scrollEventThrottle}
-    >
-      {formHeader}
-
-      {mainSegments.map((seg, i) => {
-        if (seg.type === 'carveout') {
-          const f = seg.field
-          const path = f.name ?? `carveout-${i}`
-          return (
-            <View key={path} style={styles.carveoutContainer}>
-              <NativeFormContext.Provider value={false}>
-                {renderField(f, path)}
-              </NativeFormContext.Provider>
-            </View>
-          )
-        }
-        // Compatible run: Section provides grouped visual chrome
-        // (rounded corners, separators) without Form's scroll behavior.
-        return (
-          <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeSection>
-              {renderFields(seg.fields)}
-            </NativeSection>
-          </NativeFormContext.Provider>
-        )
-      })}
-
-      {sidebarFields.length > 0 && (
-        <NativeFormContext.Provider value={false}>
-          <View style={styles.sidebarSection}>
-            <Text style={styles.sidebarTitle}>Details</Text>
-            <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-          </View>
-        </NativeFormContext.Provider>
-      )}
-    </Animated.ScrollView>
-  ) : null
-
-  // ── Fallback RN ScrollView path ──
   const fallbackFormContent = (
     <Animated.ScrollView
       ref={scrollViewRef as any}
@@ -463,12 +410,35 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
       scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
     >
       {formHeader}
-      {renderFields(mainFields)}
+
+      {/* Group fields into iOS Settings-style FormSections.
+          Compatible segments (text, select, checkbox, date, etc.) are grouped
+          in rounded FormSection containers. Carve-out fields (richText, join,
+          structural fields containing them) render standalone with padding. */}
+      {mainSegments.map((seg, i) => {
+        if (seg.type === 'carveout') {
+          const f = seg.field
+          const path = f.name ?? `carveout-${i}`
+          return (
+            <View key={path} style={styles.carveoutContainer}>
+              {renderField(f, path)}
+            </View>
+          )
+        }
+        return (
+          <FormSection key={`section-${i}`}>
+            {renderFields(seg.fields)}
+          </FormSection>
+        )
+      })}
+
       {sidebarFields.length > 0 && (
-        <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
-          <Text style={styles.detailsRowLabel}>Details</Text>
-          <Text style={styles.detailsRowChevron}>›</Text>
-        </Pressable>
+        <FormSection>
+          <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
+            <Text style={styles.detailsRowLabel}>Details</Text>
+            <Text style={styles.detailsRowChevron}>›</Text>
+          </Pressable>
+        </FormSection>
       )}
     </Animated.ScrollView>
   )
@@ -483,32 +453,17 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     />
   ) : null
 
-  // When the native Form path crashes, automatically fall back to ScrollView
-  // and log the error so we can diagnose without breaking the app.
-  const [nativeFormCrashed, setNativeFormCrashed] = useState(false)
-  const effectiveUseNativeForm = useNativeForm && !nativeFormCrashed
-
   const formContent = (
-    <NativeFormContext.Provider value={effectiveUseNativeForm}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {effectiveUseNativeForm && formHeader}
-        {effectiveUseNativeForm ? (
-          <FormCrashBoundary onCrash={(err) => {
-            console.error('[DocumentForm] Native Form crashed, falling back to ScrollView:', err)
-            setNativeFormCrashed(true)
-          }}>
-            {nativeFormContent}
-          </FormCrashBoundary>
-        ) : fallbackFormContent}
+        {fallbackFormContent}
         {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
     </FormDataContext.Provider>
-    </NativeFormContext.Provider>
   )
 
   // Wrap in FormProvider so nested components can use useFormContext / usePayloadField
@@ -531,20 +486,11 @@ const SidebarSheet: React.FC<{
   const NativeSection = nativeComponents.Section
   const useNativeInSheet = !!(NativeForm && NativeSection)
 
-  const sidebarBody = useNativeInSheet ? (
-    <NativeFormContext.Provider value={true}>
-      <NativeHost matchContents={false} style={{ flex: 1 }}>
-        <NativeForm modifiers={nativeComponents.formStyle ? [nativeComponents.formStyle('grouped')] : undefined}>
-          <NativeSection title="Details">
-            {renderFields(sidebarFields)}
-          </NativeSection>
-        </NativeForm>
-      </NativeHost>
-    </NativeFormContext.Provider>
-  ) : (
+  const sidebarBody = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: t.spacing.lg }}>
-      <Text style={styles.sidebarTitle}>Details</Text>
-      {renderFields(sidebarFields)}
+      <FormSection title="Details">
+        {renderFields(sidebarFields)}
+      </FormSection>
     </ScrollView>
   )
 
@@ -821,7 +767,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
 
-  const nativeFormContent = useNativeForm ? (
+  const fallbackFormContent = (
     <Animated.ScrollView
       ref={scrollViewRef as any}
       style={styles.scroll}
@@ -839,49 +785,24 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
           const path = f.name ?? `carveout-${i}`
           return (
             <View key={path} style={styles.carveoutContainer}>
-              <NativeFormContext.Provider value={false}>
-                {renderField(f, path)}
-              </NativeFormContext.Provider>
+              {renderField(f, path)}
             </View>
           )
         }
         return (
-          <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeSection>
-              {renderFields(seg.fields)}
-            </NativeSection>
-          </NativeFormContext.Provider>
+          <FormSection key={`section-${i}`}>
+            {renderFields(seg.fields)}
+          </FormSection>
         )
       })}
 
       {sidebarFields.length > 0 && (
-        <NativeFormContext.Provider value={false}>
-          <View style={styles.sidebarSection}>
-            <Text style={styles.sidebarTitle}>Details</Text>
-            <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-          </View>
-        </NativeFormContext.Provider>
-      )}
-    </Animated.ScrollView>
-  ) : null
-
-  const fallbackFormContent = (
-    <Animated.ScrollView
-      ref={scrollViewRef as any}
-      style={styles.scroll}
-      contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
-      keyboardShouldPersistTaps="handled"
-      contentInsetAdjustmentBehavior="automatic"
-      onScroll={onScroll}
-      scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
-    >
-      {formHeader}
-      {renderFields(mainFields)}
-      {sidebarFields.length > 0 && (
-        <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
-          <Text style={styles.detailsRowLabel}>Details</Text>
-          <Text style={styles.detailsRowChevron}>›</Text>
-        </Pressable>
+        <FormSection>
+          <Pressable onPress={() => setSidebarOpen(true)} style={styles.detailsRow}>
+            <Text style={styles.detailsRowLabel}>Details</Text>
+            <Text style={styles.detailsRowChevron}>›</Text>
+          </Pressable>
+        </FormSection>
       )}
     </Animated.ScrollView>
   )
@@ -895,30 +816,17 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     />
   ) : null
 
-  const [nativeFormCrashedLegacy, setNativeFormCrashedLegacy] = useState(false)
-  const effectiveUseNativeFormLegacy = useNativeForm && !nativeFormCrashedLegacy
-
   return (
-    <NativeFormContext.Provider value={effectiveUseNativeFormLegacy}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {effectiveUseNativeFormLegacy && formHeader}
-        {effectiveUseNativeFormLegacy ? (
-          <FormCrashBoundary onCrash={(err) => {
-            console.error('[DocumentFormLegacy] Native Form crashed, falling back:', err)
-            setNativeFormCrashedLegacy(true)
-          }}>
-            {nativeFormContent}
-          </FormCrashBoundary>
-        ) : fallbackFormContent}
+        {fallbackFormContent}
         {sidebarContent}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
     </FormDataContext.Provider>
-    </NativeFormContext.Provider>
   )
 })
 

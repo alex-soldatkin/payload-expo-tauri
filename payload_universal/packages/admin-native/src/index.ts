@@ -23,6 +23,7 @@ export type { IconComponent } from './utils/iconRegistry'
 // Core components
 export { BottomSheet } from './BottomSheet'
 export { DocumentActionsMenu } from './DocumentActionsMenu'
+export { FormSection } from './FormSection'
 export { DocumentForm, FormDataContext, useFormData } from './DocumentForm'
 export type { DocumentFormHandle, FormDataContextValue } from './DocumentForm'
 export { DocumentList } from './DocumentList'
@@ -43,6 +44,14 @@ export {
   useCustomFieldSlots,
   useCustomView,
 } from './contexts/CustomComponentContext'
+
+// Action handler registry — collection-level custom action buttons
+export {
+  ActionRegistryProvider,
+  useActionRegistry,
+  useEditActionHandlers,
+  useListActionHandlers,
+} from './contexts/ActionContext'
 
 // WebView fallback bridge
 export { WebViewFieldBridge } from './WebViewFieldBridge'
@@ -153,6 +162,8 @@ export type { Theme } from './theme'
 
 // Types
 export type {
+  ActionHandler,
+  ActionHandlerRegistry,
   AdminSchema,
   AuthState,
   ClientArrayField,
@@ -182,11 +193,14 @@ export type {
   ComponentSlot,
   CustomComponentRegistry,
   CustomFieldEntry,
+  EditActionContext,
   FieldComponentProps,
   FieldValue,
   FormErrors,
   FormState,
+  ListActionContext,
   MenuModel,
+  NativeActionMeta,
   NativeFieldType,
   PaginatedDocs,
   PayloadNativeContextValue,
