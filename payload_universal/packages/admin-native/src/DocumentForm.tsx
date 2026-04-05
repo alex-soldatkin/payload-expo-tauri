@@ -521,9 +521,9 @@ const InspectorPanel: React.FC<{
   const topInset = Math.max(insets.top + 56, 70)
   const bottomInset = Math.max(insets.bottom + 50, 60)
 
-  // Dynamic width: measure content, clamp between min/max
-  const [measuredWidth, setMeasuredWidth] = useState(0)
-  const panelWidth = Math.max(260, Math.min(measuredWidth > 0 ? measuredWidth + 24 : INSPECTOR_WIDTH, screenWidth - 2 * INSPECTOR_MARGIN))
+  // Width adapts to screen: use ~40% of screen width on tablets, max 380px
+  // This ensures date pickers, relationship fields etc. aren't cut off.
+  const panelWidth = Math.min(Math.max(300, Math.round(screenWidth * 0.4)), 380)
 
   const panX = useRef(new Animated.Value(screenWidth)).current
   const lastX = useRef(screenWidth)
@@ -599,8 +599,8 @@ const InspectorPanel: React.FC<{
         glassEffectStyle: 'regular',
       })
     : BlurView
-      ? <BlurView style={StyleSheet.absoluteFill} intensity={50} tint="systemChromeMaterial" />
-      : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(249, 249, 249, 0.95)' }]} />
+      ? <BlurView style={StyleSheet.absoluteFill} intensity={80} tint="systemThickMaterial" />
+      : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.97)' }]} />
 
   return (
     <Animated.View
@@ -626,20 +626,15 @@ const InspectorPanel: React.FC<{
         </Pressable>
       </View>
 
-      {/* Scrollable content — onLayout measures widest child */}
+      {/* Scrollable content */}
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={inspectorStyles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <View onLayout={(e) => {
-          const w = e.nativeEvent.layout.width
-          if (w > 0 && Math.abs(w - measuredWidth) > 10) setMeasuredWidth(w)
-        }}>
-          <FormSection>
-            {renderFields(sidebarFields)}
-          </FormSection>
-        </View>
+        <FormSection>
+          {renderFields(sidebarFields)}
+        </FormSection>
       </ScrollView>
     </Animated.View>
   )
@@ -650,12 +645,14 @@ const inspectorStyles = StyleSheet.create({
     position: 'absolute',
     // top and bottom set dynamically from safe area insets
     overflow: 'hidden',
-    borderRadius: 14,
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'rgba(0, 0, 0, 0.08)',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.18,
-    shadowRadius: 16,
-    elevation: 24,
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.25,
+    shadowRadius: 24,
+    elevation: 32,
   },
   dragHandle: {
     alignItems: 'center',
