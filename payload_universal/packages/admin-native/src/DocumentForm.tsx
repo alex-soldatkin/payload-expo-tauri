@@ -492,6 +492,12 @@ try {
   BlurView = require('expo-blur').BlurView
 } catch { /* not available */ }
 
+// Try to import safe area insets for proper panel positioning
+let useSafeAreaInsets: (() => { top: number; bottom: number; left: number; right: number }) | null = null
+try {
+  useSafeAreaInsets = require('react-native-safe-area-context').useSafeAreaInsets
+} catch { /* not available */ }
+
 const INSPECTOR_WIDTH = 320
 const INSPECTOR_MARGIN = 12
 const DISMISS_THRESHOLD = 100 // px swipe right to dismiss
@@ -511,6 +517,11 @@ const InspectorPanel: React.FC<{
   sidebarFields: ClientField[]
 }> = ({ visible, onClose, renderFields, sidebarFields }) => {
   const { width: screenWidth } = useWindowDimensions()
+  const insets = useSafeAreaInsets ? useSafeAreaInsets() : { top: 0, bottom: 0 }
+  // Clear the nav bar (~56px) + status bar, and tab bar at bottom
+  const topInset = Math.max(insets.top + 56, 70)
+  const bottomInset = Math.max(insets.bottom + 50, 60) // tab bar height
+
   const defaultX = screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN
   const panX = useRef(new Animated.Value(screenWidth)).current // start offscreen right
   const lastX = useRef(defaultX)
@@ -591,7 +602,7 @@ const InspectorPanel: React.FC<{
     <Animated.View
       style={[
         inspectorStyles.panel,
-        { width: INSPECTOR_WIDTH, transform: [{ translateX: panX }] },
+        { width: INSPECTOR_WIDTH, top: topInset, bottom: bottomInset, transform: [{ translateX: panX }] },
       ]}
       pointerEvents="box-none"
       {...panResponder.panHandlers}
@@ -628,8 +639,7 @@ const InspectorPanel: React.FC<{
 const inspectorStyles = StyleSheet.create({
   panel: {
     position: 'absolute',
-    top: INSPECTOR_MARGIN,
-    bottom: INSPECTOR_MARGIN,
+    // top and bottom set dynamically from safe area insets
     overflow: 'hidden',
     borderRadius: 14,
     shadowColor: '#000',
