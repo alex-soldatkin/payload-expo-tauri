@@ -518,21 +518,24 @@ const InspectorPanel: React.FC<{
 }> = ({ visible, onClose, renderFields, sidebarFields }) => {
   const { width: screenWidth } = useWindowDimensions()
   const insets = useSafeAreaInsets ? useSafeAreaInsets() : { top: 0, bottom: 0 }
-  // Clear the nav bar (~56px) + status bar, and tab bar at bottom
   const topInset = Math.max(insets.top + 56, 70)
-  const bottomInset = Math.max(insets.bottom + 50, 60) // tab bar height
+  const bottomInset = Math.max(insets.bottom + 50, 60)
 
-  const defaultX = screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN
-  const panX = useRef(new Animated.Value(screenWidth)).current // start offscreen right
-  const lastX = useRef(defaultX)
-  const [mounted, setMounted] = useState(false)
+  // Dynamic width: measure content, clamp between min/max
+  const [measuredWidth, setMeasuredWidth] = useState(0)
+  const panelWidth = Math.max(260, Math.min(measuredWidth > 0 ? measuredWidth + 24 : INSPECTOR_WIDTH, screenWidth - 2 * INSPECTOR_MARGIN))
 
-  // Snap to default position when visible changes
+  const panX = useRef(new Animated.Value(screenWidth)).current
+  const lastX = useRef(screenWidth)
+  // Track if we've ever mounted — once true, stays true to avoid
+  // re-rendering the form content below when the panel is dismissed.
+  const hasBeenVisible = useRef(false)
+
   useEffect(() => {
-    const target = screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN
-    lastX.current = target
+    const target = screenWidth - panelWidth - INSPECTOR_MARGIN
     if (visible) {
-      setMounted(true)
+      hasBeenVisible.current = true
+      lastX.current = target
       Animated.spring(panX, {
         toValue: target,
         useNativeDriver: true,
@@ -541,15 +544,16 @@ const InspectorPanel: React.FC<{
         mass: 0.8,
       }).start()
     } else {
+      lastX.current = screenWidth
       Animated.spring(panX, {
         toValue: screenWidth,
         useNativeDriver: true,
         damping: 24,
         stiffness: 200,
         mass: 0.8,
-      }).start(() => setMounted(false))
+      }).start()
     }
-  }, [visible, screenWidth, panX])
+  }, [visible, screenWidth, panelWidth, panX])
 
   // PanResponder for drag + swipe-to-dismiss
   const panResponder = useRef(
@@ -567,14 +571,12 @@ const InspectorPanel: React.FC<{
         panX.flattenOffset()
         const finalX = lastX.current + gs.dx
 
-        // Swipe right past threshold → dismiss
         if (gs.dx > DISMISS_THRESHOLD || gs.vx > 0.5) {
           onClose()
           return
         }
 
-        // Clamp to screen bounds
-        const clamped = Math.max(INSPECTOR_MARGIN, Math.min(finalX, screenWidth - INSPECTOR_WIDTH - INSPECTOR_MARGIN))
+        const clamped = Math.max(INSPECTOR_MARGIN, Math.min(finalX, screenWidth - panelWidth - INSPECTOR_MARGIN))
         lastX.current = clamped
         Animated.spring(panX, {
           toValue: clamped,
@@ -587,7 +589,9 @@ const InspectorPanel: React.FC<{
     }),
   ).current
 
-  if (!mounted) return null
+  // Don't render until first opened — but once rendered, keep alive
+  // (just offscreen) to avoid re-rendering the form below.
+  if (!hasBeenVisible.current) return null
 
   const panelBg = liquidGlassAvailable && GlassView
     ? React.createElement(GlassView as React.ComponentType<any>, {
@@ -602,9 +606,9 @@ const InspectorPanel: React.FC<{
     <Animated.View
       style={[
         inspectorStyles.panel,
-        { width: INSPECTOR_WIDTH, top: topInset, bottom: bottomInset, transform: [{ translateX: panX }] },
+        { width: panelWidth, top: topInset, bottom: bottomInset, transform: [{ translateX: panX }] },
       ]}
-      pointerEvents="box-none"
+      pointerEvents={visible ? 'auto' : 'none'}
       {...panResponder.panHandlers}
     >
       {panelBg}
@@ -622,15 +626,20 @@ const InspectorPanel: React.FC<{
         </Pressable>
       </View>
 
-      {/* Scrollable content */}
+      {/* Scrollable content — onLayout measures widest child */}
       <ScrollView
         style={{ flex: 1 }}
         contentContainerStyle={inspectorStyles.content}
         keyboardShouldPersistTaps="handled"
       >
-        <FormSection>
-          {renderFields(sidebarFields)}
-        </FormSection>
+        <View onLayout={(e) => {
+          const w = e.nativeEvent.layout.width
+          if (w > 0 && Math.abs(w - measuredWidth) > 10) setMeasuredWidth(w)
+        }}>
+          <FormSection>
+            {renderFields(sidebarFields)}
+          </FormSection>
+        </View>
       </ScrollView>
     </Animated.View>
   )
