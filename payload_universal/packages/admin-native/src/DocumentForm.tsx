@@ -359,18 +359,13 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Enable native SwiftUI Form when components are available.
-  const useNativeForm = !!(NativeForm && NativeSection)
-
-  // Diagnostic: log what's being rendered in each segment
-  if (useNativeForm && __DEV__) {
-    const segs = segmentFieldsForForm(mainFields)
-    console.log('[DocumentForm] native Form enabled, segments:', segs.map((s, i) =>
-      s.type === 'carveout'
-        ? `[${i}] carveout: ${s.field.type}/${(s.field as any).name ?? '?'}`
-        : `[${i}] compatible: ${s.fields.map(f => `${f.type}/${(f as any).name ?? '?'}`).join(', ')}`
-    ))
-  }
+  // Disabled: Section without Form still crashes — likely requireNativeView
+  // for SectionView fails or Section can't host RN children properly.
+  // The ScrollView + GlassView path is stable and polished. Re-enable
+  // once @expo/ui Section is confirmed to work as a standalone container
+  // outside of a Form/List context.
+  const useNativeForm = false
+  void NativeForm; void NativeSection // suppress unused warnings
 
   // Status + error banner (rendered above the form fields)
   const formHeader = (
@@ -791,18 +786,13 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Enable native SwiftUI Form when components are available.
-  const useNativeForm = !!(NativeForm && NativeSection)
-
-  // Diagnostic: log what's being rendered in each segment
-  if (useNativeForm && __DEV__) {
-    const segs = segmentFieldsForForm(mainFields)
-    console.log('[DocumentForm] native Form enabled, segments:', segs.map((s, i) =>
-      s.type === 'carveout'
-        ? `[${i}] carveout: ${s.field.type}/${(s.field as any).name ?? '?'}`
-        : `[${i}] compatible: ${s.fields.map(f => `${f.type}/${(f as any).name ?? '?'}`).join(', ')}`
-    ))
-  }
+  // Disabled: Section without Form still crashes — likely requireNativeView
+  // for SectionView fails or Section can't host RN children properly.
+  // The ScrollView + GlassView path is stable and polished. Re-enable
+  // once @expo/ui Section is confirmed to work as a standalone container
+  // outside of a Form/List context.
+  const useNativeForm = false
+  void NativeForm; void NativeSection // suppress unused warnings
 
   const formHeader = (
     <>

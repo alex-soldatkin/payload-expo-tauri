@@ -15,6 +15,13 @@ try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const modifiers = require('@expo/ui/swift-ui/modifiers')
 
+  // Safe accessor: some components use requireNativeView which crashes if
+  // the native view isn't compiled into the binary. Wrap each in try-catch
+  // so a missing view doesn't take down the entire registry.
+  const safe = <T,>(fn: () => T): T | null => {
+    try { return fn() } catch { return null }
+  }
+
   registry = {
     isAvailable: true,
     Host: swiftUI.Host,
@@ -23,19 +30,19 @@ try {
     Picker: swiftUI.Picker,
     DisclosureGroup: swiftUI.DisclosureGroup,
     Text: swiftUI.Text,
-    Button: swiftUI.Button,
+    Button: safe(() => swiftUI.Button),
     tag: modifiers.tag,
     pickerStyle: modifiers.pickerStyle,
     glassEffect: modifiers.glassEffect,
-    buttonStyle: modifiers.buttonStyle,
-    controlSize: modifiers.controlSize,
-    tint: modifiers.tint,
-    BottomSheet: swiftUI.BottomSheet,
+    buttonStyle: modifiers.buttonStyle ?? null,
+    controlSize: modifiers.controlSize ?? null,
+    tint: modifiers.tint ?? null,
+    BottomSheet: safe(() => swiftUI.BottomSheet),
     Group: swiftUI.Group,
-    ControlGroup: swiftUI.ControlGroup,
-    Form: swiftUI.Form,
-    Section: swiftUI.Section,
-    LabeledContent: swiftUI.LabeledContent,
+    ControlGroup: safe(() => swiftUI.ControlGroup),
+    Form: safe(() => swiftUI.Form),
+    Section: safe(() => swiftUI.Section),
+    LabeledContent: safe(() => swiftUI.LabeledContent),
     presentationDetents: modifiers.presentationDetents,
     presentationDragIndicator: modifiers.presentationDragIndicator,
     formStyle: modifiers.formStyle ?? null,
