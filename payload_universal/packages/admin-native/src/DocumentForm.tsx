@@ -348,8 +348,10 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Always use native SwiftUI Form when available (iOS with @expo/ui).
-  // Incompatible fields (richText, join) get per-field carve-outs within the Form.
+  // Use segmented native Form when @expo/ui Form + Section are available.
+  // Fields are split into compatible segments (rendered inside mini SwiftUI
+  // Forms) and carve-outs (richText, join — rendered as plain RN Views).
+  // All segments live inside a single RN ScrollView that handles scrolling.
   const useNativeForm = !!(NativeForm && NativeSection)
 
   // Status + error banner (rendered above the form fields)
@@ -420,25 +422,26 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
             </View>
           )
         }
-        // Compatible run: SwiftUI Form with a single Section
+        // Compatible run: Form + Section render their own native views
+        // via requireNativeView('ExpoUI') — NO NativeHost wrapper needed.
         return (
           <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeHost matchContents={{ height: true }}>
-              <NativeForm modifiers={formModifiers}>
-                <NativeSection>
-                  {renderFields(seg.fields)}
-                </NativeSection>
-              </NativeForm>
-            </NativeHost>
+            <NativeForm modifiers={formModifiers}>
+              <NativeSection>
+                {renderFields(seg.fields)}
+              </NativeSection>
+            </NativeForm>
           </NativeFormContext.Provider>
         )
       })}
 
       {sidebarFields.length > 0 && (
-        <View style={styles.sidebarSection}>
-          <Text style={styles.sidebarTitle}>Details</Text>
-          <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-        </View>
+        <NativeFormContext.Provider value={false}>
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarTitle}>Details</Text>
+            <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
+          </View>
+        </NativeFormContext.Provider>
       )}
     </Animated.ScrollView>
   ) : null
@@ -766,8 +769,10 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const NativeForm = nativeComponents.Form
   const NativeSection = nativeComponents.Section
-  // Always use native SwiftUI Form when available (iOS with @expo/ui).
-  // Incompatible fields (richText, join) get per-field carve-outs within the Form.
+  // Use segmented native Form when @expo/ui Form + Section are available.
+  // Fields are split into compatible segments (rendered inside mini SwiftUI
+  // Forms) and carve-outs (richText, join — rendered as plain RN Views).
+  // All segments live inside a single RN ScrollView that handles scrolling.
   const useNativeForm = !!(NativeForm && NativeSection)
 
   const formHeader = (
@@ -828,22 +833,22 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         }
         return (
           <NativeFormContext.Provider key={`section-${i}`} value={true}>
-            <NativeHost matchContents={{ height: true }}>
-              <NativeForm modifiers={formModifiersLegacy}>
-                <NativeSection>
-                  {renderFields(seg.fields)}
-                </NativeSection>
-              </NativeForm>
-            </NativeHost>
+            <NativeForm modifiers={formModifiersLegacy}>
+              <NativeSection>
+                {renderFields(seg.fields)}
+              </NativeSection>
+            </NativeForm>
           </NativeFormContext.Provider>
         )
       })}
 
       {sidebarFields.length > 0 && (
-        <View style={styles.sidebarSection}>
-          <Text style={styles.sidebarTitle}>Details</Text>
-          <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-        </View>
+        <NativeFormContext.Provider value={false}>
+          <View style={styles.sidebarSection}>
+            <Text style={styles.sidebarTitle}>Details</Text>
+            <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
+          </View>
+        </NativeFormContext.Provider>
       )}
     </Animated.ScrollView>
   ) : null
