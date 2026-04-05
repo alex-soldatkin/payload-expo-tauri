@@ -1,19 +1,32 @@
 /**
- * Shared field wrapper — iOS 26 Mail compose style.
+ * Shared field wrapper — uses native SwiftUI LabeledContent when available,
+ * falls back to a custom inline/stacked layout otherwise.
+ *
+ * When inside a SwiftUI Form (via NativeFormContext), fields automatically
+ * get the iOS Mail/Settings appearance: label left, value right, native
+ * separators, grouped table rows.
  *
  * Two layouts:
- *   'inline' (default) — label left, input right on a single row.
- *     Matches "To: [value]" pattern in Mail compose.
- *   'stacked' — label above, input below.
- *     Used for multiline fields (textarea, code, richText, arrays, etc.)
- *
- * Full-width hairline separator beneath each field.
- * Error text renders below the separator in red.
+ *   'inline' (default) — label left, input right.
+ *   'stacked' — label above, input below (multiline fields).
  */
-import React from 'react'
+import React, { createContext, useContext } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { defaultTheme as t } from '../../theme'
+import { nativeComponents } from './native'
+
+// ---------------------------------------------------------------------------
+// NativeFormContext — set by DocumentForm when wrapping in a SwiftUI Form.
+// When true, FieldShell uses LabeledContent instead of custom Views.
+// ---------------------------------------------------------------------------
+
+export const NativeFormContext = createContext(false)
+export const useIsInsideNativeForm = () => useContext(NativeFormContext)
+
+// ---------------------------------------------------------------------------
+// FieldShell
+// ---------------------------------------------------------------------------
 
 type FieldShellProps = {
   label: string
@@ -36,12 +49,37 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   children,
   layout = 'inline',
 }) => {
+  const insideNativeForm = useIsInsideNativeForm()
+  const NativeLabeledContent = nativeComponents.LabeledContent
+  const NativeText = nativeComponents.Text
+
+  const displayLabel = `${label}${required ? ' *' : ''}`
+
+  // ── Native LabeledContent path (inside a SwiftUI Form) ──
+  // The Form provides separators, grouping, and scroll automatically.
+  if (insideNativeForm && NativeLabeledContent && layout === 'inline') {
+    return (
+      <>
+        <NativeLabeledContent label={displayLabel}>
+          {children}
+        </NativeLabeledContent>
+        {description && NativeText ? (
+          <NativeText modifiers={nativeComponents.tag ? [nativeComponents.tag('desc')] : undefined}>
+            {description}
+          </NativeText>
+        ) : description ? (
+          <Text style={styles.description}>{description}</Text>
+        ) : null}
+        {error && <Text style={styles.error}>{error}</Text>}
+      </>
+    )
+  }
+
+  // ── Stacked layout (multiline fields, or inside native Form) ──
   if (layout === 'stacked') {
     return (
       <View style={styles.container}>
-        <Text style={styles.stackedLabel}>
-          {label}{required ? ':' : ':'}<Text style={styles.required}>{required ? ' *' : ''}</Text>
-        </Text>
+        <Text style={styles.stackedLabel}>{displayLabel}</Text>
         {children}
         {description && <Text style={styles.description}>{description}</Text>}
         <View style={[styles.separator, error && styles.separatorError]} />
@@ -50,16 +88,12 @@ export const FieldShell: React.FC<FieldShellProps> = ({
     )
   }
 
-  // Inline layout: label left, children right
+  // ── Fallback inline layout (no native Form) ──
   return (
     <View style={styles.container}>
       <View style={styles.inlineRow}>
-        <Text style={styles.inlineLabel} numberOfLines={1}>
-          {label}{required ? ':' : ':'}<Text style={styles.required}>{required ? ' *' : ''}</Text>
-        </Text>
-        <View style={styles.inlineContent}>
-          {children}
-        </View>
+        <Text style={styles.inlineLabel} numberOfLines={1}>{displayLabel}</Text>
+        <View style={styles.inlineContent}>{children}</View>
       </View>
       {description && <Text style={styles.description}>{description}</Text>}
       <View style={[styles.separator, error && styles.separatorError]} />
@@ -68,8 +102,8 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   )
 }
 
+// Keep fieldShellStyles for components that bypass FieldShell (checkbox native, etc.)
 export const fieldShellStyles = StyleSheet.create({
-  // Keep these for components that bypass FieldShell (checkbox native, etc.)
   container: { paddingVertical: 0 },
   label: {
     fontSize: t.fontSize.sm,
@@ -78,12 +112,12 @@ export const fieldShellStyles = StyleSheet.create({
   },
   required: { color: t.colors.error },
   description: {
-    fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    fontSize: 12,
+    color: t.colors.textPlaceholder,
     marginTop: 2,
   },
   error: {
-    fontSize: t.fontSize.xs,
+    fontSize: 12,
     color: t.colors.error,
     marginTop: 3,
     marginBottom: 2,
@@ -92,11 +126,9 @@ export const fieldShellStyles = StyleSheet.create({
 })
 
 const styles = StyleSheet.create({
-  container: {
-    paddingVertical: 0,
-  },
+  container: { paddingVertical: 0 },
 
-  // ── Inline layout (label left, input right) ──
+  // Inline layout
   inlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -109,11 +141,9 @@ const styles = StyleSheet.create({
     marginRight: t.spacing.sm,
     flexShrink: 0,
   },
-  inlineContent: {
-    flex: 1,
-  },
+  inlineContent: { flex: 1 },
 
-  // ── Stacked layout (label above, input below) ──
+  // Stacked layout
   stackedLabel: {
     fontSize: t.fontSize.md,
     fontWeight: '400',
@@ -122,12 +152,10 @@ const styles = StyleSheet.create({
     marginTop: 8,
   },
 
-  // ── Shared ──
-  required: { color: t.colors.error },
+  // Shared
   separator: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: t.colors.separator,
-    marginTop: 0,
   },
   separatorError: {
     backgroundColor: t.colors.error,
