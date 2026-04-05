@@ -43,6 +43,8 @@ import {
   isRHFAvailable,
   usePayloadForm,
 } from './hooks/usePayloadForm'
+import { NativeFormContext, nativeComponents } from './fields/shared'
+import { NativeHost } from './fields/NativeHost'
 
 // Re-export for backwards compatibility
 export { FormDataContext, useFormData } from './contexts/FormDataContext'
@@ -277,61 +279,91 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     [formData, slug],
   )
 
+  const NativeForm = nativeComponents.Form
+  const NativeSection = nativeComponents.Section
+  // Native SwiftUI Form is registered but not stable with all field types yet.
+  // EnrichedTextInput, TableEditor, and complex structural fields crash inside
+  // SwiftUI Form/Section. Disabled until field components are adapted.
+  const useNativeForm = false
+
+  // Status + error banner (rendered above the form fields)
+  const formHeader = (
+    <>
+      {draftStatus && (
+        <View style={styles.statusRow}>
+          <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
+            <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
+              {draftStatus === 'draft' ? 'Draft' : 'Published'}
+            </Text>
+          </View>
+        </View>
+      )}
+      {errorCount > 0 && (
+        <View style={styles.validationBanner}>
+          <Text style={styles.validationIcon}>!</Text>
+          <Text style={styles.validationText}>
+            {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
+          </Text>
+        </View>
+      )}
+      {saveError && !errorCount && (
+        <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
+      )}
+    </>
+  )
+
+  // ── Native SwiftUI Form path ──
+  // Form provides its own scroll, separators, and grouped table appearance.
+  const nativeFormContent = useNativeForm ? (
+    <NativeHost matchContents={false} style={{ flex: 1 }}>
+      <NativeForm modifiers={nativeComponents.formStyle ? [nativeComponents.formStyle('grouped')] : undefined}>
+        <NativeSection>
+          {renderFields(mainFields)}
+        </NativeSection>
+        {sidebarFields.length > 0 && (
+          <NativeSection title="Details">
+            {renderFields(sidebarFields)}
+          </NativeSection>
+        )}
+      </NativeForm>
+    </NativeHost>
+  ) : null
+
+  // ── Fallback RN ScrollView path ──
+  const fallbackFormContent = (
+    <Animated.ScrollView
+      ref={scrollViewRef as any}
+      style={styles.scroll}
+      contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic"
+      onScroll={onScroll}
+      scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
+    >
+      {formHeader}
+      {renderFields(mainFields)}
+      {sidebarFields.length > 0 && (
+        <View style={styles.sidebarSection}>
+          <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
+          <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
+        </View>
+      )}
+    </Animated.ScrollView>
+  )
+
   const formContent = (
+    <NativeFormContext.Provider value={useNativeForm}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <Animated.ScrollView
-        ref={scrollViewRef as any}
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior="automatic"
-        onScroll={onScroll}
-        scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
-      >
-        {draftStatus && (
-          <View style={styles.statusRow}>
-            <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
-              <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
-                {draftStatus === 'draft' ? 'Draft' : 'Published'}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {errorCount > 0 && (
-          <View style={styles.validationBanner}>
-            <Text style={styles.validationIcon}>!</Text>
-            <Text style={styles.validationText}>
-              {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
-            </Text>
-          </View>
-        )}
-
-        {renderFields(mainFields)}
-
-        {sidebarFields.length > 0 && (
-          liquidGlassAvailable && GlassView ? (
-            <GlassView style={styles.glassSidebarSection} glassEffectStyle="regular">
-              <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
-              <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-            </GlassView>
-          ) : (
-            <View style={styles.sidebarSection}>
-              <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
-              <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-            </View>
-          )
-        )}
-
-        {saveError && !errorCount && (
-          <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
-        )}
-      </Animated.ScrollView>
+      <View style={{ flex: 1 }}>
+        {useNativeForm && formHeader}
+        {useNativeForm ? nativeFormContent : fallbackFormContent}
+      </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
     </FormDataContext.Provider>
+    </NativeFormContext.Provider>
   )
 
   // Wrap in FormProvider so nested components can use useFormContext / usePayloadField
@@ -556,65 +588,87 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     [formData, slug],
   )
 
+  const NativeForm = nativeComponents.Form
+  const NativeSection = nativeComponents.Section
+  // Native SwiftUI Form is registered but not stable with all field types yet.
+  // EnrichedTextInput, TableEditor, and complex structural fields crash inside
+  // SwiftUI Form/Section. Disabled until field components are adapted.
+  const useNativeForm = false
+
+  const formHeader = (
+    <>
+      {draftStatus && (
+        <View style={styles.statusRow}>
+          <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
+            <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
+              {draftStatus === 'draft' ? 'Draft' : 'Published'}
+            </Text>
+          </View>
+        </View>
+      )}
+      {errorCount > 0 && (
+        <View style={styles.validationBanner}>
+          <Text style={styles.validationIcon}>!</Text>
+          <Text style={styles.validationText}>
+            {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
+          </Text>
+        </View>
+      )}
+      {saveError && !errorCount && (
+        <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
+      )}
+    </>
+  )
+
+  const nativeFormContent = useNativeForm ? (
+    <NativeHost matchContents={false} style={{ flex: 1 }}>
+      <NativeForm modifiers={nativeComponents.formStyle ? [nativeComponents.formStyle('grouped')] : undefined}>
+        <NativeSection>
+          {renderFields(mainFields)}
+        </NativeSection>
+        {sidebarFields.length > 0 && (
+          <NativeSection title="Details">
+            {renderFields(sidebarFields)}
+          </NativeSection>
+        )}
+      </NativeForm>
+    </NativeHost>
+  ) : null
+
+  const fallbackFormContent = (
+    <Animated.ScrollView
+      ref={scrollViewRef as any}
+      style={styles.scroll}
+      contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
+      keyboardShouldPersistTaps="handled"
+      contentInsetAdjustmentBehavior="automatic"
+      onScroll={onScroll}
+      scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
+    >
+      {formHeader}
+      {renderFields(mainFields)}
+      {sidebarFields.length > 0 && (
+        <View style={styles.sidebarSection}>
+          <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
+          <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
+        </View>
+      )}
+    </Animated.ScrollView>
+  )
+
   return (
+    <NativeFormContext.Provider value={useNativeForm}>
     <FormDataContext.Provider value={formDataCtx}>
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
-      <Animated.ScrollView
-        ref={scrollViewRef as any}
-        style={styles.scroll}
-        contentContainerStyle={[styles.content, contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.lg }]}
-        keyboardShouldPersistTaps="handled"
-        contentInsetAdjustmentBehavior="automatic"
-        onScroll={onScroll}
-        scrollEventThrottle={onScroll ? scrollEventThrottle : undefined}
-      >
-        {draftStatus && (
-          <View style={styles.statusRow}>
-            <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
-              <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
-                {draftStatus === 'draft' ? 'Draft' : 'Published'}
-              </Text>
-            </View>
-          </View>
-        )}
-
-        {errorCount > 0 && (
-          <View style={styles.validationBanner}>
-            <Text style={styles.validationIcon}>!</Text>
-            <Text style={styles.validationText}>
-              {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
-            </Text>
-          </View>
-        )}
-
-        {renderFields(mainFields)}
-
-        {sidebarFields.length > 0 && (
-          liquidGlassAvailable && GlassView ? (
-            <GlassView style={styles.glassSidebarSection} glassEffectStyle="regular">
-              <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
-              <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-            </GlassView>
-          ) : (
-            <View style={styles.sidebarSection}>
-              <View style={styles.sidebarHeader}><Text style={styles.sidebarTitle}>Details</Text></View>
-              <View style={styles.sidebarBody}>{renderFields(sidebarFields)}</View>
-            </View>
-          )
-        )}
-
-        {saveError && !errorCount && (
-          <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
-        )}
-
-        {/* Action buttons (Save, Delete) live in the native header toolbar
-            (Stack.Toolbar) — not inline in the form. The form exposes submit()
-            via ref so screen files can wire it to toolbar buttons. */}
-      </Animated.ScrollView>
+      <View style={{ flex: 1 }}>
+        {useNativeForm && formHeader}
+        {useNativeForm ? nativeFormContent : fallbackFormContent}
+      </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
     </FormDataContext.Provider>
+    </NativeFormContext.Provider>
   )
 })
 
