@@ -1,31 +1,35 @@
 /**
  * Admin tab layout – bottom tabs (phone) or sidebar (tablet).
  *
- * Phone:
+ * Phone / narrow window (no persistent sidebar):
  *   - Bottom tabs with a custom frosted-glass tab bar
  *   - Press-state capsule highlight on tab items (Telegram-style)
  *   - Long-press menu on Collections tab (iOS) with grouped collections
+ *   - Swipe from the LEFT EDGE on a tab root reveals an overlay sidebar
+ *     (Apple Notes/Mail slide-over) — see src/components/OverlaySidebar.tsx
  *
- * Tablet (>= 768px shortest side):
+ * Tablet (>= 1024px window width):
  *   - Left sidebar replaces bottom tabs
  *   - Shows all collections and globals inline with icons and group headers
  *   - Account pinned at bottom
  *   - Frosted-glass background (same as phone tab bar)
+ *
+ * The sidebar nav tree itself (SidebarContent) is shared between the
+ * persistent sidebar here and the overlay panel — one source of truth.
  */
 import React from 'react'
-import { Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
-import { Tabs, useRouter, usePathname } from 'expo-router'
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Tabs, useRouter } from 'expo-router'
 import { Home, LayoutList, Globe, User } from 'lucide-react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import {
-  CollectionIcon,
   getCollectionLabel,
-  getGlobalLabel,
   getSFSymbol,
   useListColors,
   useMenuModel,
 } from '@payload-universal/admin-native'
 import { useResponsive, SIDEBAR_WIDTH } from '@/hooks/useResponsive'
+import { OverlaySidebar, SidebarContent } from '@/src/components/OverlaySidebar'
 
 // ---------------------------------------------------------------------------
 // Optional native modules (graceful fallback when unavailable)
@@ -44,16 +48,6 @@ try {
   }
 } catch {
   /* expo-blur not installed or native view unavailable */
-}
-
-let GlassView: React.ComponentType<any> | null = null
-let liquidGlassAvailable = false
-try {
-  const glassModule = require('expo-glass-effect')
-  GlassView = glassModule.GlassView
-  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
-} catch {
-  /* expo-glass-effect not available */
 }
 
 // SwiftUI components for the native long-press menu (iOS only)
@@ -314,110 +308,14 @@ function CustomTabBar({ state, navigation }: any) {
 //  TABLET: Sidebar navigation
 // ===========================================================================
 
-function SidebarNavItem({
-  icon: Icon,
-  label,
-  isActive,
-  onPress,
-  indent,
-  customIcon,
-}: {
-  icon?: React.ComponentType<{ size: number; color: string }>
-  label: string
-  isActive: boolean
-  onPress: () => void
-  indent?: boolean
-  customIcon?: React.ReactNode
-}) {
-  const { colors: c } = useListColors()
-  const color = isActive ? ACTIVE_COLOR : c.text
-
-  const innerContent = (
-    <>
-      {customIcon ?? (Icon ? <Icon size={20} color={color} /> : null)}
-      <Text style={[sidebarStyles.itemLabel, { color }]} numberOfLines={1}>
-        {label}
-      </Text>
-    </>
-  )
-
-  // On iOS 26+ with liquid glass: use GlassView for native hover/press states
-  if (liquidGlassAvailable && GlassView) {
-    return (
-      <Pressable onPress={onPress}>
-        <GlassView
-          style={[
-            sidebarStyles.item,
-            indent && sidebarStyles.itemIndented,
-          ]}
-          isInteractive
-          glassEffectStyle={isActive ? 'regular' : 'regular'}
-          tintColor={isActive ? 'rgba(0,122,255,0.15)' : undefined}
-        >
-          {innerContent}
-        </GlassView>
-      </Pressable>
-    )
-  }
-
-  return (
-    <Pressable onPress={onPress}>
-      {({ pressed }) => (
-        <View
-          style={[
-            sidebarStyles.item,
-            isActive && sidebarStyles.itemActive,
-            indent && sidebarStyles.itemIndented,
-            pressed && !isActive && { backgroundColor: c.pressed },
-          ]}
-        >
-          {innerContent}
-        </View>
-      )}
-    </Pressable>
-  )
-}
-
-function SidebarSectionLabel({ label }: { label: string }) {
-  return <Text style={sidebarStyles.sectionLabel}>{label}</Text>
-}
-
+/**
+ * Persistent sidebar chrome (width, hairline, blur background, safe area).
+ * The nav tree itself is the shared SidebarContent — the same component the
+ * swipe-in OverlaySidebar panel renders on narrow windows.
+ */
 function Sidebar() {
-  const router = useRouter()
-  const pathname = usePathname()
   const insets = useSafeAreaInsets()
-  const menuModel = useMenuModel()
   const { dark, colors: c } = useListColors()
-
-  const visibleCollections =
-    menuModel?.collections.filter((c) => !c.hidden) ?? []
-  const visibleGlobals =
-    menuModel?.globals.filter((g) => !g.hidden) ?? []
-  const groups = menuModel?.groups ?? []
-
-  const ungrouped = visibleCollections.filter((c) => !c.group)
-  const grouped = groups
-    .map((g) => ({
-      name: g,
-      items: visibleCollections.filter((c) => c.group === g),
-    }))
-    .filter((g) => g.items.length > 0)
-
-  // Parse current route from pathname for active-state highlighting
-  let currentSection = 'index'
-  let currentSlug: string | undefined
-
-  if (pathname.includes('/account')) {
-    currentSection = 'account'
-  } else if (pathname.includes('/collections')) {
-    currentSection = 'collections'
-    const match = pathname.match(/collections\/([^/]+)/)
-    currentSlug = match?.[1]
-  } else if (pathname.includes('/globals')) {
-    currentSection = 'globals'
-    const match = pathname.match(/globals\/([^/]+)/)
-    currentSlug = match?.[1]
-  }
 
   return (
     <View
@@ -443,119 +341,7 @@ function Sidebar() {
         />
       )}
 
-      {/* Scrollable nav content */}
-      <ScrollView
-        style={sidebarStyles.scroll}
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={{ paddingBottom: 8 }}
-      >
-        <Text style={[sidebarStyles.title, { color: c.text }]}>Payload Admin</Text>
-
-        {/* Home */}
-        <SidebarNavItem
-          icon={Home}
-          label="Home"
-          isActive={currentSection === 'index'}
-          onPress={() => router.navigate('/(admin)/')}
-        />
-
-        {/* Ungrouped collections */}
-        {ungrouped.length > 0 && (
-          <>
-            <SidebarSectionLabel label="Collections" />
-            {ungrouped.map((col) => (
-              <SidebarNavItem
-                key={col.slug}
-                label={getCollectionLabel(menuModel!, col.slug)}
-                isActive={
-                  currentSection === 'collections' &&
-                  currentSlug === col.slug
-                }
-                onPress={() =>
-                  router.navigate(`/(admin)/collections/${col.slug}`)
-                }
-                indent
-                customIcon={
-                  <CollectionIcon
-                    icon={col.icon}
-                    size={18}
-                    color={
-                      currentSection === 'collections' &&
-                      currentSlug === col.slug
-                        ? ACTIVE_COLOR
-                        : INACTIVE_COLOR
-                    }
-                  />
-                }
-              />
-            ))}
-          </>
-        )}
-
-        {/* Grouped collections */}
-        {grouped.map((group) => (
-          <React.Fragment key={group.name}>
-            <SidebarSectionLabel label={group.name} />
-            {group.items.map((col) => (
-              <SidebarNavItem
-                key={col.slug}
-                label={getCollectionLabel(menuModel!, col.slug)}
-                isActive={
-                  currentSection === 'collections' &&
-                  currentSlug === col.slug
-                }
-                onPress={() =>
-                  router.navigate(`/(admin)/collections/${col.slug}`)
-                }
-                indent
-                customIcon={
-                  <CollectionIcon
-                    icon={col.icon}
-                    size={18}
-                    color={
-                      currentSection === 'collections' &&
-                      currentSlug === col.slug
-                        ? ACTIVE_COLOR
-                        : INACTIVE_COLOR
-                    }
-                  />
-                }
-              />
-            ))}
-          </React.Fragment>
-        ))}
-
-        {/* Globals */}
-        {visibleGlobals.length > 0 && (
-          <>
-            <SidebarSectionLabel label="Globals" />
-            {visibleGlobals.map((g) => (
-              <SidebarNavItem
-                key={g.slug}
-                icon={Globe}
-                label={getGlobalLabel(menuModel!, g.slug)}
-                isActive={
-                  currentSection === 'globals' && currentSlug === g.slug
-                }
-                onPress={() =>
-                  router.navigate(`/(admin)/globals/${g.slug}`)
-                }
-                indent
-              />
-            ))}
-          </>
-        )}
-      </ScrollView>
-
-      {/* Account – pinned at bottom */}
-      <View style={[sidebarStyles.bottomSection, { borderTopColor: c.hairline }]}>
-        <SidebarNavItem
-          icon={User}
-          label="Account"
-          isActive={currentSection === 'account'}
-          onPress={() => router.navigate('/(admin)/account')}
-        />
-      </View>
+      <SidebarContent />
     </View>
   )
 }
@@ -579,26 +365,32 @@ export default function AdminLayout() {
     ]}>
       {showSidebar && <Sidebar />}
       <View style={layoutStyles.content}>
-        <Tabs
-          tabBar={(props) =>
-            showSidebar ? null : <CustomTabBar {...props} />
-          }
-          screenOptions={{ headerShown: false }}
-        >
-          <Tabs.Screen name="index" options={{ title: 'Home' }} />
-          <Tabs.Screen
-            name="collections"
-            options={{ title: 'Collections' }}
-          />
-          <Tabs.Screen
-            name="globals"
-            options={{
-              title: 'Globals',
-              href: globalsCount === 0 ? null : undefined,
-            }}
-          />
-          <Tabs.Screen name="account" options={{ title: 'Account' }} />
-        </Tabs>
+        {/* Edge-swipe overlay sidebar — armed only when the persistent
+            sidebar is hidden, and only on tab-root routes (deeper paths
+            leave the left edge to the iOS back-swipe). Always mounted so
+            the Tabs tree never remounts on rotation/resize. */}
+        <OverlaySidebar enabled={!showSidebar}>
+          <Tabs
+            tabBar={(props) =>
+              showSidebar ? null : <CustomTabBar {...props} />
+            }
+            screenOptions={{ headerShown: false }}
+          >
+            <Tabs.Screen name="index" options={{ title: 'Home' }} />
+            <Tabs.Screen
+              name="collections"
+              options={{ title: 'Collections' }}
+            />
+            <Tabs.Screen
+              name="globals"
+              options={{
+                title: 'Globals',
+                href: globalsCount === 0 ? null : undefined,
+              }}
+            />
+            <Tabs.Screen name="account" options={{ title: 'Account' }} />
+          </Tabs>
+        </OverlaySidebar>
       </View>
     </View>
   )
@@ -675,60 +467,11 @@ const styles = StyleSheet.create({
   },
 })
 
-// Tablet: sidebar — border/text colors come from the palette (useListColors)
+// Tablet: sidebar chrome — border color comes from the palette (useListColors).
+// Nav-item styles live with SidebarContent in src/components/OverlaySidebar.tsx.
 const sidebarStyles = StyleSheet.create({
   container: {
     width: SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
-  },
-  scroll: {
-    flex: 1,
-  },
-  title: {
-    fontSize: 22,
-    fontWeight: '800',
-    paddingHorizontal: 20,
-    paddingTop: 16,
-    paddingBottom: 16,
-  },
-  sectionLabel: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: '#8E8E93',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase' as const,
-    paddingHorizontal: 20,
-    paddingTop: 20,
-    paddingBottom: 6,
-  },
-  item: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    marginHorizontal: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    borderRadius: 10,
-    overflow: 'hidden',
-  },
-  itemActive: {
-    backgroundColor: 'rgba(0,122,255,0.1)',
-  },
-  itemPressed: {
-    backgroundColor: 'rgba(0,0,0,0.04)',
-  },
-  itemIndented: {
-    paddingLeft: 16,
-  },
-  itemLabel: {
-    fontSize: 15,
-    fontWeight: '500',
-    flex: 1,
-    flexShrink: 1,
-  },
-  bottomSection: {
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: 8,
-    paddingBottom: 4,
   },
 })

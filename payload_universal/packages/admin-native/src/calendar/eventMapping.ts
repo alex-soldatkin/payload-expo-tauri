@@ -6,6 +6,10 @@
  * Tolerant by design: docs with missing/invalid dates are skipped (never
  * thrown), inverted ranges swap with a console.warn, and field values may be
  * ISO strings, epoch numbers or Date instances (RxDB / REST both feed this).
+ *
+ * Weekday audit note: NO weekday/column math lives here — events map to
+ * local 'YYYY-MM-DD' date keys only; week-column placement is owned by
+ * MonthGridFallback/WeekStrip (see the (getDay()+6)%7 self-checks there).
  */
 import { getByPath, getDocumentTitle } from '../utils/schemaHelpers'
 import { humanizeFieldName } from '../kanban/types'
@@ -163,6 +167,44 @@ export type CalendarFieldLike = {
   label?: string | Record<string, string>
 }
 
+/**
+ * Payload-internal bookkeeping fields that must NEVER become calendar
+ * sources: auth collections (Users) carry `resetPasswordExpiration` /
+ * `lockUntil` as plain date fields, so without this exclusion every Users
+ * collection offered a meaningless calendar of password-reset expiries.
+ * The salt/hash/token/loginAttempts neighbours are not date-typed today but
+ * are listed for defence in depth, and `createdAt`/`updatedAt`/`deletedAt`
+ * (timestamps + trash) are bookkeeping, not content dates.
+ *
+ * Matching is by EXACT field name (top-level — Payload defines all of these
+ * at the root). A user-defined nested date like `audit.updatedAt` keeps its
+ * dot-path name ('audit.updatedAt') and is deliberately NOT excluded.
+ */
+export const INTERNAL_DATE_FIELDS: ReadonlySet<string> = new Set([
+  // Auth bookkeeping (Payload auth: true collections)
+  'resetPasswordExpiration',
+  'resetPasswordToken',
+  'salt',
+  'hash',
+  'loginAttempts',
+  'lockUntil',
+  // Timestamps / trash bookkeeping (every collection)
+  'createdAt',
+  'updatedAt',
+  'deletedAt',
+])
+
+/**
+ * True when the collection has at least one REAL (non-internal) date field —
+ * the calendar-eligibility gate. Collections whose only date fields are
+ * Payload bookkeeping (e.g. Users: createdAt/updatedAt/resetPasswordExpiration/
+ * lockUntil) must not offer a Calendar view at all.
+ */
+export const collectionHasCalendarDateFields = (fields: CalendarFieldLike[]): boolean =>
+  fields.some(
+    (f) => f.type === 'date' && Boolean(f.name) && !INTERNAL_DATE_FIELDS.has(f.name!),
+  )
+
 const resolveFieldLabel = (field: CalendarFieldLike): string => {
   if (typeof field.label === 'string' && field.label) return field.label
   if (field.label && typeof field.label === 'object') {
@@ -196,11 +238,17 @@ const pairLabel = (startField: CalendarFieldLike, remainder: string): string => 
  *  - every remaining date field becomes a single (point-event) source;
  *  - colours come from DEFAULT_CALENDAR_PALETTE by resulting source index.
  *
+ * Payload bookkeeping date fields (INTERNAL_DATE_FIELDS — auth expiries,
+ * timestamps) are excluded up front: they are storage internals, not content
+ * dates, and previously made the Users collection offer a calendar of
+ * resetPasswordExpiration/lockUntil noise.
+ *
  * Source ids are the start field's name (stable across config edits).
  */
 export const pickDefaultSources = (fields: CalendarFieldLike[]): CalendarSource[] => {
   const dateFields = fields.filter(
-    (f): f is CalendarFieldLike & { name: string } => f.type === 'date' && Boolean(f.name),
+    (f): f is CalendarFieldLike & { name: string } =>
+      f.type === 'date' && Boolean(f.name) && !INTERNAL_DATE_FIELDS.has(f.name!),
   )
   const byLowerName = new Map<string, CalendarFieldLike & { name: string }>()
   for (const f of dateFields) {

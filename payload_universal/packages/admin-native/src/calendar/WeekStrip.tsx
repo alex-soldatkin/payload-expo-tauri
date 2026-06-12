@@ -11,6 +11,8 @@
  *    native timeline day swipes) pull the strip to the selected week.
  *
  * Liquid glass card with a themed fallback; all colours via useListColors.
+ * `regular` (iPad-class width) turns the card into a full-width header band
+ * with larger day pills and event dots.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { PanResponder, Pressable, StyleSheet, Text, View } from 'react-native'
@@ -58,12 +60,25 @@ export type WeekStripProps = {
   /** 'YYYY-MM-DD' — highlighted pill; also seeds the visible week. */
   selectedDate: string
   onSelectDate: (iso: string) => void
+  /**
+   * iPad-class layout: the strip becomes a full-width header band (no card
+   * margins/radius) with larger day pills and event dots. Default false.
+   */
+  regular?: boolean
 }
 
 /** Swipe must travel this far horizontally to change week. */
 const SWIPE_THRESHOLD = 40
 
-/** Short weekday label for a date key via Intl. */
+/**
+ * Short weekday label for a date key via Intl.
+ *
+ * Weekday-column audit note: the strip has NO parallel weekday-label array —
+ * each pill labels its OWN date (weekKeys[i] from weekStartKey, which uses
+ * the (getDay() - firstDayOfWeek + 7) % 7 ≡ Mon-start (getDay()+6)%7 math;
+ * self-check: 2026-08-02 is a Sunday → last pill of a Mon-start week), so a
+ * label/day off-by-one cannot occur here.
+ */
 const weekdayLabelFor = (dateKey: string): string => {
   const d = parseDateKey(dateKey)
   if (!d) return ''
@@ -78,6 +93,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
   events,
   selectedDate,
   onSelectDate,
+  regular = false,
 }) => {
   const { dark, colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -125,7 +141,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
   const todayKey = todayDateKey()
 
   const inner = (
-    <View style={styles.inner} {...panResponder.panHandlers}>
+    <View style={[styles.inner, regular && styles.innerRegular]} {...panResponder.panHandlers}>
       <View style={styles.headerRow}>
         <Pressable
           onPress={() => changeWeek(-1)}
@@ -140,7 +156,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
             <Text style={styles.chevronGlyph}>{'‹'}</Text>
           )}
         </Pressable>
-        <Text style={styles.weekTitle} numberOfLines={1}>
+        <Text style={[styles.weekTitle, regular && styles.weekTitleRegular]} numberOfLines={1}>
           {formatWeekRangeLabel(weekKeys[0], weekKeys[6])}
         </Text>
         <Pressable
@@ -170,10 +186,18 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
               accessibilityRole="button"
               accessibilityState={{ selected: isSelected }}
               accessibilityLabel={key}
-              style={({ pressed }) => [styles.pill, pressed && styles.pressed]}
+              style={({ pressed }) => [
+                styles.pill,
+                regular && styles.pillRegular,
+                pressed && styles.pressed,
+              ]}
             >
               <Text
-                style={[styles.pillWeekday, isSelected && { color: colors.text }]}
+                style={[
+                  styles.pillWeekday,
+                  regular && styles.pillWeekdayRegular,
+                  isSelected && { color: colors.text },
+                ]}
                 numberOfLines={1}
               >
                 {weekdayLabelFor(key)}
@@ -181,6 +205,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
               <View
                 style={[
                   styles.pillBadge,
+                  regular && styles.pillBadgeRegular,
                   isSelected && { backgroundColor: colors.primary },
                   !isSelected && isToday && { borderWidth: 1.5, borderColor: colors.primary },
                 ]}
@@ -188,6 +213,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
                 <Text
                   style={[
                     styles.pillDay,
+                    regular && styles.pillDayRegular,
                     isToday && !isSelected && { color: colors.text, fontWeight: '700' },
                     isSelected && { color: colors.primaryText, fontWeight: '700' },
                   ]}
@@ -199,7 +225,11 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
                 {dots.map((ev) => (
                   <View
                     key={ev.id}
-                    style={[styles.dot, { backgroundColor: ev.color ?? colors.primary }]}
+                    style={[
+                      styles.dot,
+                      regular && styles.dotRegular,
+                      { backgroundColor: ev.color ?? colors.primary },
+                    ]}
                   />
                 ))}
               </View>
@@ -212,12 +242,27 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
 
   if (liquidGlassAvailable && GlassView) {
     return (
-      <GlassView style={styles.card} glassEffectStyle="regular">
+      <GlassView
+        style={[styles.card, regular && styles.cardRegular]}
+        glassEffectStyle="regular"
+      >
         {inner}
       </GlassView>
     )
   }
-  return <View style={[styles.card, styles.cardFallback, dark && styles.cardDark]}>{inner}</View>
+  return (
+    <View
+      style={[
+        styles.card,
+        styles.cardFallback,
+        regular && styles.cardRegular,
+        regular && styles.cardRegularFallback,
+        dark && styles.cardDark,
+      ]}
+    >
+      {inner}
+    </View>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +282,18 @@ const createStyles = (c: ListColorPalette) =>
       borderColor: c.border,
     },
     cardDark: {},
+    /** regular: full-width header band (Apple Calendar iPad week header). */
+    cardRegular: { marginHorizontal: 0, borderRadius: 0 },
+    cardRegularFallback: {
+      borderWidth: 0,
+      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomColor: c.hairline,
+    },
     inner: { paddingVertical: t.spacing.xs, paddingHorizontal: t.spacing.xs },
+    innerRegular: {
+      paddingVertical: t.spacing.sm,
+      paddingHorizontal: t.spacing.md,
+    },
 
     headerRow: {
       flexDirection: 'row',
@@ -252,6 +308,7 @@ const createStyles = (c: ListColorPalette) =>
       fontWeight: '700',
       color: c.text,
     },
+    weekTitleRegular: { fontSize: t.fontSize.md },
     chevronBtn: {
       width: 28,
       height: 28,
@@ -270,12 +327,14 @@ const createStyles = (c: ListColorPalette) =>
       borderRadius: 12,
       gap: 2,
     },
+    pillRegular: { paddingVertical: 6, gap: 3 },
     pillWeekday: {
       fontSize: t.fontSize.xs,
       fontWeight: '600',
       color: c.textMuted,
       textTransform: 'uppercase',
     },
+    pillWeekdayRegular: { fontSize: t.fontSize.sm, letterSpacing: 0.3 },
     pillBadge: {
       minWidth: 28,
       height: 28,
@@ -284,7 +343,9 @@ const createStyles = (c: ListColorPalette) =>
       justifyContent: 'center',
       paddingHorizontal: 4,
     },
+    pillBadgeRegular: { minWidth: 36, height: 36, borderRadius: 18 },
     pillDay: { fontSize: t.fontSize.sm, fontWeight: '500', color: c.text },
+    pillDayRegular: { fontSize: t.fontSize.md },
 
     dotsRow: {
       flexDirection: 'row',
@@ -293,4 +354,5 @@ const createStyles = (c: ListColorPalette) =>
       minHeight: 5,
     },
     dot: { width: 5, height: 5, borderRadius: 2.5 },
+    dotRegular: { width: 6, height: 6, borderRadius: 3 },
   })

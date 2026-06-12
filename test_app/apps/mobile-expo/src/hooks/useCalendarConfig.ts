@@ -41,7 +41,9 @@ export const DEFAULT_CALENDAR_CONFIG: CalendarConfig = {
 
 /**
  * Validate an unknown value against the calendar source convention:
- * array of { id, label, startField, endField?, color } (all strings).
+ * array of { id, label, startField, endField?, color } (all strings) plus an
+ * optional `hidden` boolean (customize-sheet visibility toggle — only an
+ * explicit `true` survives; anything else means visible).
  * Invalid entries are dropped, duplicate ids are suffixed ('-2', '-3', …) —
  * legend toggles and drag-reorder both key on the id. A non-array / empty
  * result returns null. Shared with useViewPresets for the server
@@ -71,6 +73,7 @@ export const sanitizeCalendarSources = (raw: unknown): CalendarSource[] | null =
       startField: obj.startField,
       ...(typeof obj.endField === 'string' && obj.endField ? { endField: obj.endField } : {}),
       color: obj.color,
+      ...(obj.hidden === true ? { hidden: true } : {}),
     })
   }
   return out.length > 0 ? out : null

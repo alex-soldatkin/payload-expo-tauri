@@ -3,13 +3,17 @@
  *
  * Glass header (colour dot + label + count badge) over a vertical FlatList
  * of cards, the whole column subtly tinted with a very low-alpha wash of its
- * status colour (glass stays primary). When the board passes a reanimated-dnd
- * Droppable, the entire column registers as a drop target and brightens its
- * tint while a card hovers over it.
+ * status colour (glass stays primary).
  *
- * The board owns all card wiring (Draggable wrapper, menus, callbacks) and
+ * Drop-target plumbing is board-owned (PanResponder drag): the column hands
+ * its container node to the board via `registerContainer` (the board
+ * measures drop frames with measureInWindow), brightens its tint while the
+ * dragged card hovers it (`isDropTarget`) and locks its FlatList while a
+ * drag is active (`scrollEnabled`).
+ *
+ * The board owns all card wiring (drag activation, menus, callbacks) and
  * injects fully-built elements via `renderCardItem` — this component never
- * touches @expo/ui or the dnd library directly beyond the injected Droppable.
+ * touches @expo/ui.
  */
 import React, { useMemo } from 'react'
 import { FlatList, StyleSheet, Text, View } from 'react-native'
@@ -43,16 +47,22 @@ try {
 export type KanbanColumnProps = {
   column: KanbanColumnSpec
   docs: KanbanDoc[]
-  /** Board-built card element (includes Draggable wiring when available). */
+  /** Board-built card element (drag activation wiring included). */
   renderCardItem: (doc: KanbanDoc, index: number) => React.ReactElement
   /**
-   * reanimated-dnd Droppable component injected by the board (null → plain
-   * View, column is not a drop target).
+   * Callback ref for the column's container View — the board registers the
+   * node and measures drop frames (measureInWindow) on drag start, board
+   * layout and every scroll settle.
    */
-  DroppableComponent?: React.ComponentType<any> | null
-  /** Called when a dragged doc is released over this column. */
-  onDropDoc?: (doc: KanbanDoc) => void
-  /** Notify the board to re-measure drop targets after inner scrolls. */
+  registerContainer?: (node: View | null) => void
+  /** True while the dragged card hovers this column — brightens the tint. */
+  isDropTarget?: boolean
+  /**
+   * False while a drag is active — locks the inner FlatList so drop frames
+   * can't drift under the gesture. Defaults to true.
+   */
+  scrollEnabled?: boolean
+  /** Notify the board to re-measure drop frames after inner scrolls. */
   onScrollEnd?: () => void
   /** Re-render trigger for the inner FlatList (drag/dim/palette changes). */
   extraData?: unknown
@@ -63,8 +73,9 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   column,
   docs,
   renderCardItem,
-  DroppableComponent,
-  onDropDoc,
+  registerContainer,
+  isDropTarget,
+  scrollEnabled,
   onScrollEnd,
   extraData,
   width = KANBAN_COLUMN_WIDTH,
@@ -107,6 +118,7 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
       renderItem={({ item, index }) => renderCardItem(item as KanbanDoc, index)}
       extraData={extraData}
       nestedScrollEnabled
+      scrollEnabled={scrollEnabled !== false}
       showsVerticalScrollIndicator={false}
       contentContainerStyle={styles.listContent}
       onMomentumScrollEnd={onScrollEnd}
@@ -124,28 +136,18 @@ export const KanbanColumn: React.FC<KanbanColumnProps> = ({
   const containerStyle = [
     styles.column,
     { width, backgroundColor: tint, borderColor: tintBorder },
+    // Drop-hover highlight (board hit-tests the dragged card's center).
+    isDropTarget && { backgroundColor: activeTint, borderColor: activeBorder },
   ]
-  const inner = (
-    <>
+
+  // collapsable={false}: the board measures this node (measureInWindow) for
+  // drop hit-testing — never let the renderer flatten it away on Android.
+  return (
+    <View ref={registerContainer} collapsable={false} style={containerStyle}>
       {header}
       {body}
-    </>
+    </View>
   )
-
-  if (DroppableComponent && onDropDoc) {
-    return (
-      <DroppableComponent
-        droppableId={`kanban-${column.value ?? '__no_status__'}`}
-        onDrop={onDropDoc}
-        capacity={Number.MAX_SAFE_INTEGER}
-        style={containerStyle}
-        activeStyle={{ backgroundColor: activeTint, borderColor: activeBorder }}
-      >
-        {inner}
-      </DroppableComponent>
-    )
-  }
-  return <View style={containerStyle}>{inner}</View>
 }
 
 // ---------------------------------------------------------------------------

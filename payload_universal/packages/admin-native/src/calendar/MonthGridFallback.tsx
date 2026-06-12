@@ -76,6 +76,12 @@ export type MonthGridFallbackProps = {
    * (single-day) per week row instead of dots/strips. Default false (dots).
    */
   showEventBars?: boolean
+  /**
+   * iPad-class layout: the grid card stretches to fill the available height —
+   * week rows flex evenly (with hairline separators, Apple Calendar style),
+   * the weekday header row stays pinned. Default false (intrinsic height).
+   */
+  fillHeight?: boolean
 }
 
 /** Swipe must travel this far horizontally to change month. */
@@ -117,7 +123,19 @@ const monthTitle = (year: number, month: number): string => {
   }
 }
 
-/** All cell dates for a month (1-12) as full weeks starting on firstDayOfWeek. */
+/**
+ * All cell dates for a month (1-12) as full weeks starting on firstDayOfWeek.
+ *
+ * Column-placement self-check (JS getDay() is Sun=0…Sat=6; Mon-start weeks
+ * use firstDayOfWeek=1, so a date's column is (getDay()-1+7)%7 ≡ (getDay()+6)%7):
+ *   - 2026-08-01 is a Saturday (getDay()=6) → offset (6+6)%7 = 5 → August
+ *     2026's first week starts on Mon 2026-07-27;
+ *   - 2026-08-02 is a Sunday (getDay()=0) → column (0+6)%7 = 6 → it renders
+ *     in the LAST column of a MON…SUN header, never under TUE.
+ * Days fill each week sequentially from that start, so cell column i always
+ * holds weekday (firstDayOfWeek + i) % 7 — exactly the header label order
+ * built in `weekdayLabels` below.
+ */
 const buildMonthWeeks = (year: number, month: number, firstDayOfWeek: number): Date[][] => {
   const first = new Date(year, month - 1, 1)
   const offset = (first.getDay() - firstDayOfWeek + 7) % 7
@@ -243,6 +261,7 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
   onSelectDate,
   onChangeVisibleMonth,
   showEventBars = false,
+  fillHeight = false,
 }) => {
   const { dark, colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -315,7 +334,7 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
     return (
       <Pressable
         key={key}
-        style={({ pressed }) => [styles.cell, pressed && styles.cellPressed]}
+        style={({ pressed }) => [styles.col, styles.cell, pressed && styles.cellPressed]}
         onPress={() => onSelectDate(key)}
         accessibilityRole="button"
         accessibilityLabel={key}
@@ -381,7 +400,12 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
     return (
       <Pressable
         key={key}
-        style={({ pressed }) => [styles.barsCell, pressed && styles.cellPressed]}
+        style={({ pressed }) => [
+          styles.col,
+          styles.barsCell,
+          fillHeight ? styles.barsCellGrow : styles.barsCellFixed,
+          pressed && styles.cellPressed,
+        ]}
         onPress={() => onSelectDate(key)}
         accessibilityRole="button"
         accessibilityLabel={key}
@@ -412,8 +436,10 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
     const weekKeys = week.map(toDateKey)
     const { segments, overflow } = buildWeekBarLayout(weekKeys, eventSpans)
     return (
-      <View key={`w-${wi}`} style={styles.barsWeekWrap}>
-        <View style={styles.weekRow}>{week.map(renderBarsCell)}</View>
+      <View key={`w-${wi}`} style={[styles.barsWeekWrap, fillHeight && styles.weekRowFill]}>
+        <View style={[styles.weekRow, fillHeight && styles.flexFill]}>
+          {week.map(renderBarsCell)}
+        </View>
         <View style={StyleSheet.absoluteFill} pointerEvents="none">
           {segments.map((seg) => {
             const color = seg.event.color ?? colors.primary
@@ -482,7 +508,7 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
   }
 
   const inner = (
-    <View style={styles.inner} {...panResponder.panHandlers}>
+    <View style={[styles.inner, fillHeight && styles.flexFill]} {...panResponder.panHandlers}>
       <View style={styles.headerRow}>
         <Pressable
           onPress={() => changeMonth(-1)}
@@ -514,18 +540,23 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
           )}
         </Pressable>
       </View>
+      {/* Weekday header cells share styles.col with the day cells below —
+          BOTH rows are 7 × col inside the same inner width, so header label
+          i and day column i always align (see styles.col). */}
       <View style={styles.weekdayRow}>
         {weekdayLabels.map((label, i) => (
-          <Text key={`wd-${i}`} style={styles.weekdayLabel} numberOfLines={1}>
-            {label}
-          </Text>
+          <View key={`wd-${i}`} style={styles.col}>
+            <Text style={styles.weekdayLabel} numberOfLines={1}>
+              {label}
+            </Text>
+          </View>
         ))}
       </View>
       {weeks.map((week, wi) =>
         showEventBars ? (
           renderBarsWeek(week, wi)
         ) : (
-          <View key={`w-${wi}`} style={styles.weekRow}>
+          <View key={`w-${wi}`} style={[styles.weekRow, fillHeight && styles.weekRowFill]}>
             {week.map(renderCell)}
           </View>
         ),
@@ -535,12 +566,23 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
 
   if (liquidGlassAvailable && GlassView) {
     return (
-      <GlassView style={styles.card} glassEffectStyle="regular">
+      <GlassView style={[styles.card, fillHeight && styles.cardFill]} glassEffectStyle="regular">
         {inner}
       </GlassView>
     )
   }
-  return <View style={[styles.card, styles.cardFallback, dark && styles.cardDark]}>{inner}</View>
+  return (
+    <View
+      style={[
+        styles.card,
+        styles.cardFallback,
+        fillHeight && styles.cardFill,
+        dark && styles.cardDark,
+      ]}
+    >
+      {inner}
+    </View>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -560,7 +602,16 @@ const createStyles = (c: ListColorPalette) =>
       borderColor: c.border,
     },
     cardDark: {},
+    /** fillHeight: the card owns its pane (the parent provides the insets). */
+    cardFill: { flex: 1, marginHorizontal: 0 },
     inner: { paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.xs },
+    flexFill: { flex: 1 },
+    /** fillHeight week rows: share the leftover height, Apple-style hairlines. */
+    weekRowFill: {
+      flex: 1,
+      borderTopWidth: StyleSheet.hairlineWidth,
+      borderTopColor: c.hairline,
+    },
 
     headerRow: {
       flexDirection: 'row',
@@ -585,9 +636,20 @@ const createStyles = (c: ListColorPalette) =>
     },
     chevronGlyph: { fontSize: 22, fontWeight: '600', color: c.textMuted, lineHeight: 24 },
 
+    /**
+     * THE shared per-column metric (squished-grid guard): every column —
+     * weekday header cell, dots-density day cell, bars-density day cell —
+     * derives its width from this one style, and all three rows
+     * (weekdayRow / weekRow / barsWeekWrap>weekRow) stretch to the same
+     * `inner` width. flex:1 + minWidth:0 ⇒ exactly 1/7 each at every width
+     * tier (incl. fillHeight), so the header can never spread full-width
+     * while the day cells compress (the iPad squish bug). Never give a
+     * column an intrinsic width or a different flex value.
+     */
+    col: { flex: 1, minWidth: 0 },
+
     weekdayRow: { flexDirection: 'row', marginBottom: 2 },
     weekdayLabel: {
-      flex: 1,
       textAlign: 'center',
       fontSize: t.fontSize.xs,
       fontWeight: '600',
@@ -596,8 +658,8 @@ const createStyles = (c: ListColorPalette) =>
     },
 
     weekRow: { flexDirection: 'row' },
+    /** Day cell extras — column width comes ONLY from styles.col. */
     cell: {
-      flex: 1,
       minHeight: 52,
       alignItems: 'stretch',
       paddingTop: 3,
@@ -639,13 +701,15 @@ const createStyles = (c: ListColorPalette) =>
 
     // ── Bars density (showEventBars) ──
     barsWeekWrap: { position: 'relative' },
+    /** Day cell extras — column width comes ONLY from styles.col. */
     barsCell: {
-      flex: 1,
-      height: BARS_CELL_HEIGHT,
       alignItems: 'stretch',
       paddingTop: 3,
       borderRadius: 10,
     },
+    barsCellFixed: { height: BARS_CELL_HEIGHT },
+    /** fillHeight: rows flex — keep the lane area as the floor, grow beyond. */
+    barsCellGrow: { minHeight: BARS_CELL_HEIGHT },
     barSlot: { position: 'absolute', height: BAR_HEIGHT },
     barInner: {
       flex: 1,

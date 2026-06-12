@@ -8,33 +8,51 @@
  * Layout: horizontal ScrollView with column snapping (paging feel) over
  * KanbanColumn drop targets, each hosting a vertical FlatList of KanbanCards.
  *
- * Drag & drop (react-native-reanimated-dnd v2, optional try/catch require —
- * the lib + worklets 0.7.x live in the APP, per the memory-bank
- * Drag-to-Reorder rules):
- *  - Cards wrap in Draggable with `preDragDelay` (long-press to drag — taps
- *    and column scrolling keep working) and columns register as Droppables.
- *  - Column FlatLists clip their content on iOS, so the in-tree card can't
- *    visually cross columns. The board therefore renders a DRAG OVERLAY: on
- *    the first onDragging tick the real card turns invisible (layout space
- *    kept) and an elevated copy follows the finger above the ScrollView.
- *    Collision math and the overlay share the same origin+translation
- *    coordinates, so hover/drop detection matches what the user sees.
- *  - Hovering near the board's left/right edge auto-scrolls one column per
- *    cooldown tick; drop targets re-measure after every scroll settles.
- *  - NEVER mount @expo/ui components inside the Draggable subtree (lucide
- *    icons only) — KanbanCard receives `insideDraggable` and downgrades its
- *    move menu to the JS BottomSheet tier accordingly.
- *  - Long-press belongs to the DRAG (Apple boards convention). Screens must
- *    not wrap cards in native long-press peek triggers (ScrollablePreview):
- *    the raw UILongPressGestureRecognizer claims the press at the UIKit
- *    layer and cancels the reanimated-dnd activation. Preview access goes
- *    through `onPreviewCard` (ellipsis-menu "Preview" entry) instead.
- *  - When the lib is unavailable the board degrades gracefully: cards move
- *    via the ellipsis "Move to <column>" menu (SwiftUI Menu tier allowed
- *    there) and `onLongPressCard` becomes the long-press owner.
+ * Drag & drop — pure RN PanResponder, owned end-to-end by this board (the
+ * codebase's proven gesture tier: BottomSheet, SwipeToDeleteRow, Toast).
+ * RNGH/reanimated-dnd is deliberately NOT used here: its
+ * Gesture.Pan().activateAfterLongPress() loses the native recognizer
+ * arbitration to the column FlatLists nested inside the horizontal
+ * ScrollView and never activates on device.
+ *
+ *  - ACTIVATION: long-press (~250ms) on a card's Pressable calls beginDrag —
+ *    the board measures the card (measureInWindow), hides the in-tree card
+ *    (layout space kept) and mounts the elevated overlay copy at its origin.
+ *  - RESPONDER HANDOFF: the finger is already down and owned by the card's
+ *    Pressable, so a responder mounted after the touch began would never
+ *    receive it. The board root therefore carries a PERMANENT PanResponder
+ *    whose onMoveShouldSetPanResponderCapture returns true ONLY while a drag
+ *    is active: the first move after beginDrag is claimed in the capture
+ *    phase (moves bubble through the board), the Pressable is terminated
+ *    (grant runs before its onPressOut) and the board drives the overlay
+ *    from grant-relative dx/dy. With no drag active every hook returns
+ *    false — taps and scrolling are untouched.
+ *  - PRESS DISAMBIGUATION (Telegram-style): tap → onPressCard; long-press
+ *    released with < STATIC_PRESS_MAX_DIST of finger travel → onPreviewCard
+ *    (a fully static release never produces a captured move, so it arrives
+ *    via the Pressable's onPressOut; a sub-threshold wiggle arrives via the
+ *    responder release — both funnel into finishDrag); long-press + move →
+ *    drag.
+ *  - HIT-TESTING: each KanbanColumn registers its container node; frames
+ *    re-measure (measureInWindow) on drag start, board layout, board scroll
+ *    settle and column scroll end. Release hit-tests the overlay card's
+ *    CENTER against the frames → handleMove (same-column drops no-op); a
+ *    miss springs the overlay home and restores the card.
+ *  - AUTO-SCROLL: hovering near the board's left/right edge scrolls one
+ *    column per cooldown tick; frames re-measure after the scroll settles.
+ *  - SCROLL LOCKING: while a drag is active the horizontal ScrollView and
+ *    every column FlatList set scrollEnabled=false so frames cannot drift
+ *    under the gesture (programmatic auto-scroll still works).
+ *  - The ellipsis "Move to <column>" menu remains the accessibility path for
+ *    moves and hosts the explicit "Preview" entry. With no RNGH gesture tree
+ *    on the board the SwiftUI Menu tier is allowed on cards again.
+ *  - Screens must still NOT wrap cards in native long-press peek triggers
+ *    (ScrollablePreview.Trigger): a raw UILongPressGestureRecognizer claims
+ *    the press at the UIKit layer and the Pressable long-press that starts
+ *    drag-or-peek never fires.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import { Animated, ScrollView, StyleSheet, View } from 'react-native'
+import { Animated, PanResponder, ScrollView, StyleSheet, View } from 'react-native'
 
 import { useListColors } from '../hooks/useListColors'
 import { getDocumentTitle } from '../utils/schemaHelpers'
@@ -52,26 +70,6 @@ import {
 } from './types'
 import type { KanbanBoardProps, KanbanDoc, KanbanMoveTarget } from './types'
 
-// ---------------------------------------------------------------------------
-// Optional drag & drop — react-native-reanimated-dnd is installed in the APP
-// (with react-native-worklets 0.7.x); the package must not hard-depend on it.
-// ---------------------------------------------------------------------------
-
-let DropProvider: any = null
-let Draggable: any = null
-let Droppable: any = null
-try {
-  const dnd = require('react-native-reanimated-dnd')
-  DropProvider = dnd.DropProvider
-  Draggable = dnd.Draggable
-  Droppable = dnd.Droppable
-} catch {
-  /* drag-drop unavailable — the ellipsis "Move to" menu handles moves */
-}
-const dndAvailable = Boolean(DropProvider && Draggable && Droppable)
-
-/** Long-press duration (ms) before a card drag activates. */
-const PRE_DRAG_DELAY = 220
 // Max finger travel (pt) for a long-press to count as STATIC (open preview)
 // rather than a drag — Telegram-style press disambiguation.
 const STATIC_PRESS_MAX_DIST = 8
@@ -80,6 +78,11 @@ const AUTO_SCROLL_EDGE = 56
 /** Minimum gap (ms) between auto-scroll steps. */
 const AUTO_SCROLL_COOLDOWN = 650
 const SNAP_INTERVAL = KANBAN_COLUMN_WIDTH + KANBAN_COLUMN_GAP
+/** Fallback card height (pt) until the pick-up measure resolves. */
+const FALLBACK_CARD_HEIGHT = 80
+
+/** A column container's window-space frame (drop target). */
+type ColumnFrame = { x: number; y: number; width: number; height: number }
 
 export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   docs,
@@ -92,7 +95,6 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
   useAsTitle,
   onPressCard,
   onMoveCard,
-  onLongPressCard,
   onPreviewCard,
   renderCard,
   loadingDocIds,
@@ -172,76 +174,232 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
     [onMoveCard, statusField, optionValues],
   )
 
-  // ── Drag state + overlay (only used when dnd is available) ───────────
+  // ── Drag state ───────────────────────────────────────────────────────
+  // React state drives renders (scroll locks, gating, overlay, hover tint);
+  // refs mirror everything the once-created PanResponder reads so its
+  // closures never go stale (SwipeToDeleteRow/BottomSheet pattern).
   const [draggingDoc, setDraggingDoc] = useState<KanbanDoc | null>(null)
-  // Telegram-style long-press disambiguation: a STATIC long-press (released
-  // with < STATIC_PRESS_MAX_DIST of finger travel) opens the card preview
-  // instead of performing a drop. Travel is the max |tx|/|ty| translation
-  // reported by the drag callbacks; the drop path is gated on the same
-  // measurement so a sub-threshold release over the origin column can never
-  // fire a move. previewFiredRef debounces double-firing if the lib delivers
-  // dragEnd twice.
-  const maxDragDistRef = useRef(0)
-  const dragDocRef = useRef<KanbanDoc | null>(null)
-  const previewFiredRef = useRef(false)
-  // Overlay appears on the first movement tick so a stationary long-press
-  // never blanks the real card before the copy is positioned.
   const [overlayActive, setOverlayActive] = useState(false)
-  const overlayActiveRef = useRef(false)
-  const draggingRef = useRef(false)
+  // Hovered column while dragging: string | null = a column value (null is
+  // the no-status column), undefined = hovering nothing.
+  const [hoverValue, setHoverValue] = useState<string | null | undefined>(undefined)
+  const hoverValueRef = useRef<string | null | undefined>(undefined)
+
+  const dragActiveRef = useRef(false)
+  /** True once the board PanResponder was granted the touch (a move was
+   * captured) — gates the Pressable's termination-driven onPressOut. */
+  const dragHandedOffRef = useRef(false)
+  const dragDocRef = useRef<KanbanDoc | null>(null)
+  /** Monotonic drag id — invalidates stale spring-back completions. */
+  const dragSessionRef = useRef(0)
+  const maxDragDistRef = useRef(0)
+  /** Overlay pick-up origin in board coordinates (card's measured frame). */
+  const overlayBaseRef = useRef({ x: 0, y: 0 })
+  /** Latest overlay position in board coordinates (release hit-testing). */
+  const overlayPosRef = useRef({ x: 0, y: 0 })
+  const cardSizeRef = useRef({ width: KANBAN_CARD_WIDTH, height: FALLBACK_CARD_HEIGHT })
   const overlayXY = useRef(new Animated.ValueXY({ x: -10000, y: -10000 })).current
 
   const boardRef = useRef<View>(null)
   const boardOrigin = useRef({ x: 0, y: 0 })
   const boardWidthRef = useRef(0)
-  const dropProviderRef = useRef<any>(null)
   const scrollRef = useRef<ScrollView>(null)
   const scrollXRef = useRef(0)
   const lastAutoScrollRef = useRef(0)
 
-  const refreshDropTargets = useCallback(() => {
-    dropProviderRef.current?.requestPositionUpdate?.()
+  // Latest screen callbacks for the stable drag closures.
+  const callbacksRef = useRef({ onPreviewCard, handleMove })
+  callbacksRef.current = { onPreviewCard, handleMove }
+
+  // ── Column drop frames (board-owned hit-testing) ─────────────────────
+  const columnNodesRef = useRef(new Map<string | null, View>())
+  const columnFramesRef = useRef(new Map<string | null, ColumnFrame>())
+
+  // Stable callback ref per column value: React detaches/reattaches a
+  // callback ref whenever its IDENTITY changes, so an inline arrow would
+  // fire ref(null) on every board re-render — including mid-drag — and wipe
+  // the measured frames right before the release hit-test. One memoized
+  // callback per value means refs only fire on real mount/unmount.
+  const columnRefCallbacksRef = useRef(new Map<string | null, (node: View | null) => void>())
+  const getColumnRefCallback = useCallback((value: string | null) => {
+    let cb = columnRefCallbacksRef.current.get(value)
+    if (!cb) {
+      cb = (node: View | null) => {
+        if (node) {
+          columnNodesRef.current.set(value, node)
+        } else {
+          columnNodesRef.current.delete(value)
+          columnFramesRef.current.delete(value)
+        }
+      }
+      columnRefCallbacksRef.current.set(value, cb)
+    }
+    return cb
   }, [])
 
-  const handleDragStart = useCallback(
-    (data: unknown) => {
-      draggingRef.current = true
-      overlayActiveRef.current = false
-      maxDragDistRef.current = 0
-      dragDocRef.current = data as KanbanDoc
-      previewFiredRef.current = false
-      overlayXY.setValue({ x: -10000, y: -10000 })
-      boardRef.current?.measureInWindow((x, y, width) => {
-        boardOrigin.current = { x, y }
-        if (width > 0) boardWidthRef.current = width
+  const refreshColumnFrames = useCallback(() => {
+    columnNodesRef.current.forEach((node, value) => {
+      node.measureInWindow((x, y, width, height) => {
+        columnFramesRef.current.set(value, { x, y, width, height })
       })
-      setDraggingDoc(data as KanbanDoc)
+    })
+  }, [])
+
+  /** Hit-test the overlay card's CENTER (window coords) against the
+   * registered column frames. */
+  const hitTestCardCenter = useCallback((): { found: boolean; value: string | null } => {
+    const pos = overlayPosRef.current
+    const cx = boardOrigin.current.x + pos.x + cardSizeRef.current.width / 2
+    const cy = boardOrigin.current.y + pos.y + cardSizeRef.current.height / 2
+    let found = false
+    let value: string | null = null
+    columnFramesRef.current.forEach((frame, colValue) => {
+      if (found) return
+      if (
+        cx >= frame.x &&
+        cx <= frame.x + frame.width &&
+        cy >= frame.y &&
+        cy <= frame.y + frame.height
+      ) {
+        found = true
+        value = colValue
+      }
+    })
+    return { found, value }
+  }, [])
+
+  const updateHover = useCallback(() => {
+    const hit = hitTestCardCenter()
+    const next = hit.found ? hit.value : undefined
+    if (hoverValueRef.current !== next) {
+      hoverValueRef.current = next
+      setHoverValue(next)
+    }
+  }, [hitTestCardCenter])
+
+  // ── Drag lifecycle ───────────────────────────────────────────────────
+
+  /** Long-press pick-up: measure the card, mount the overlay at its origin,
+   * arm the board responder (capture flips on via dragActiveRef). */
+  const beginDrag = useCallback(
+    (doc: KanbanDoc, node: View) => {
+      if (dragActiveRef.current) return
+      dragSessionRef.current += 1
+      dragActiveRef.current = true
+      dragHandedOffRef.current = false
+      maxDragDistRef.current = 0
+      dragDocRef.current = doc
+      overlayXY.stopAnimation()
+      refreshColumnFrames()
+      boardRef.current?.measureInWindow((bx, by, bw) => {
+        boardOrigin.current = { x: bx, y: by }
+        if (bw > 0) boardWidthRef.current = bw
+        node.measureInWindow((cx, cy, cw, ch) => {
+          // Drag may have ended (static release) before the measure resolved.
+          if (!dragActiveRef.current || dragDocRef.current !== doc) return
+          cardSizeRef.current = {
+            width: cw > 0 ? cw : KANBAN_CARD_WIDTH,
+            height: ch > 0 ? ch : FALLBACK_CARD_HEIGHT,
+          }
+          const base = { x: cx - boardOrigin.current.x, y: cy - boardOrigin.current.y }
+          overlayBaseRef.current = base
+          overlayPosRef.current = base
+          overlayXY.setValue(base)
+          // Overlay mounts at the card's origin; the in-tree card hides in
+          // the same commit (hidden = overlayActive && dragging this card).
+          setOverlayActive(true)
+        })
+      })
+      // Locks the horizontal ScrollView + column FlatLists and gates presses.
+      setDraggingDoc(doc)
     },
-    [overlayXY],
+    [overlayXY, refreshColumnFrames],
   )
 
-  const handleDragging = useCallback(
-    (payload: { x: number; y: number; tx: number; ty: number }) => {
-      if (!draggingRef.current) return
-      const travel = Math.max(Math.abs(payload.tx), Math.abs(payload.ty))
-      if (travel > maxDragDistRef.current) maxDragDistRef.current = travel
-      const ox = payload.x + payload.tx - boardOrigin.current.x
-      const oy = payload.y + payload.ty - boardOrigin.current.y
-      overlayXY.setValue({ x: ox, y: oy })
-      if (!overlayActiveRef.current) {
-        overlayActiveRef.current = true
-        setOverlayActive(true)
+  /** End the active drag. `allowActions` is false when the OS terminated the
+   * responder (alert, app switch) — restore visuals, fire nothing. */
+  const finishDrag = useCallback(
+    (allowActions: boolean) => {
+      if (!dragActiveRef.current) return
+      dragActiveRef.current = false
+      dragHandedOffRef.current = false
+      const doc = dragDocRef.current
+      dragDocRef.current = null
+      if (hoverValueRef.current !== undefined) {
+        hoverValueRef.current = undefined
+        setHoverValue(undefined)
       }
 
-      // Edge-hover auto-scroll, one column per cooldown tick. The overlay and
-      // the lib's collision math share the same (origin + translation) space,
-      // so they stay consistent through programmatic scrolls — drop targets
-      // re-measure once the scroll settles (onMomentumScrollEnd + fallback).
+      const hideNow = () => {
+        setOverlayActive(false)
+        setDraggingDoc(null)
+        overlayXY.setValue({ x: -10000, y: -10000 })
+      }
+
+      if (!doc || !allowActions) {
+        hideNow()
+        return
+      }
+
+      // Static long-press (released with < STATIC_PRESS_MAX_DIST of travel):
+      // open the preview. The overlay still sits at the card's origin, so an
+      // immediate swap back to the in-tree card is jump-free.
+      if (maxDragDistRef.current < STATIC_PRESS_MAX_DIST) {
+        hideNow()
+        callbacksRef.current.onPreviewCard?.(doc)
+        return
+      }
+
+      const hit = hitTestCardCenter()
+      if (hit.found) {
+        // Same-column drops no-op inside handleMove; the card simply
+        // reappears in place.
+        hideNow()
+        callbacksRef.current.handleMove(doc, hit.value)
+        return
+      }
+
+      // Released outside every column — spring the overlay home, then restore
+      // the in-tree card. The session guard keeps a drag that starts during
+      // the spring from being clobbered by this stale completion.
+      const session = dragSessionRef.current
+      Animated.spring(overlayXY, {
+        toValue: overlayBaseRef.current,
+        damping: 26,
+        stiffness: 300,
+        mass: 0.8,
+        useNativeDriver: false, // JS-driven setValue tracking during the drag
+      }).start(({ finished }) => {
+        if (!finished || dragSessionRef.current !== session) return
+        setOverlayActive(false)
+        setDraggingDoc(null)
+        overlayXY.setValue({ x: -10000, y: -10000 })
+      })
+    },
+    [overlayXY, hitTestCardCenter],
+  )
+
+  /** Static-release path: the card Pressable's onPressOut fires while it is
+   * still the responder (no move was ever captured — dragHandedOffRef stays
+   * false), meaning the finger lifted without travel → preview. When the
+   * board steals the responder, grant sets dragHandedOffRef BEFORE the
+   * Pressable's termination-driven onPressOut, so this no-ops mid-drag. */
+  const handleCardPressOut = useCallback(() => {
+    if (!dragActiveRef.current || dragHandedOffRef.current) return
+    finishDrag(true)
+  }, [finishDrag])
+
+  /** Edge-hover auto-scroll, one column per cooldown tick. The overlay is
+   * positioned relative to the board root (not the ScrollView content), so
+   * programmatic scrolls move columns under the stationary overlay — only
+   * the column frames need re-measuring afterwards. */
+  const maybeAutoScroll = useCallback(
+    (overlayX: number) => {
       const boardWidth = boardWidthRef.current
       if (boardWidth <= 0) return
       const now = Date.now()
       if (now - lastAutoScrollRef.current < AUTO_SCROLL_COOLDOWN) return
-      const cardCenterX = ox + KANBAN_CARD_WIDTH / 2
+      const cardCenterX = overlayX + cardSizeRef.current.width / 2
       let target: number | null = null
       if (cardCenterX > boardWidth - AUTO_SCROLL_EDGE) {
         target = scrollXRef.current + SNAP_INTERVAL
@@ -252,33 +410,54 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         lastAutoScrollRef.current = now
         scrollRef.current?.scrollTo({ x: target, animated: true })
         // onMomentumScrollEnd fires for animated scrollTo on iOS, but not on
-        // all platforms — refresh again after the animation as a fallback.
-        setTimeout(refreshDropTargets, 420)
+        // all platforms — re-measure after the animation as a fallback, then
+        // refresh the hover tint once the async measures land.
+        setTimeout(() => {
+          refreshColumnFrames()
+          setTimeout(updateHover, 48)
+        }, 420)
       }
     },
-    [overlayXY, refreshDropTargets],
+    [refreshColumnFrames, updateHover],
   )
 
-  const handleDragEnd = useCallback(() => {
-    draggingRef.current = false
-    overlayActiveRef.current = false
-    setOverlayActive(false)
-    setDraggingDoc(null)
-    // Static long-press (lifted, but released without meaningful travel):
-    // open the preview. The lib's spring-back restores the card; the drop
-    // path is separately gated on the same threshold below.
-    const doc = dragDocRef.current
-    dragDocRef.current = null
-    if (
-      doc &&
-      onPreviewCard &&
-      !previewFiredRef.current &&
-      maxDragDistRef.current < STATIC_PRESS_MAX_DIST
-    ) {
-      previewFiredRef.current = true
-      onPreviewCard(doc)
-    }
-  }, [onPreviewCard])
+  // ── Board-root PanResponder (permanent; armed by dragActiveRef) ──────
+  // dx/dy reset to 0 at grant (PanResponder semantics), i.e. they measure
+  // displacement from the hand-off point — overlay = pick-up base + (dx,dy).
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        // Never claim touch starts — taps, presses and scrolls stay native.
+        onStartShouldSetPanResponder: () => false,
+        onStartShouldSetPanResponderCapture: () => false,
+        // Capture-phase move claim ONLY while a drag is active: the first
+        // move after beginDrag transfers the touch from the card's Pressable
+        // to the board (the FlatLists can't steal — they're scroll-locked
+        // and we refuse termination below).
+        onMoveShouldSetPanResponder: () => dragActiveRef.current,
+        onMoveShouldSetPanResponderCapture: () => dragActiveRef.current,
+        onPanResponderGrant: () => {
+          dragHandedOffRef.current = true
+        },
+        onPanResponderMove: (_evt, gs) => {
+          if (!dragActiveRef.current) return
+          const travel = Math.max(Math.abs(gs.dx), Math.abs(gs.dy))
+          if (travel > maxDragDistRef.current) maxDragDistRef.current = travel
+          const x = overlayBaseRef.current.x + gs.dx
+          const y = overlayBaseRef.current.y + gs.dy
+          overlayPosRef.current = { x, y }
+          overlayXY.setValue({ x, y })
+          updateHover()
+          maybeAutoScroll(x)
+        },
+        onPanResponderRelease: () => finishDrag(true),
+        // Keep the gesture once claimed — nothing may pull the touch back
+        // mid-drag.
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderTerminate: () => finishDrag(false),
+      }),
+    [overlayXY, updateHover, maybeAutoScroll, finishDrag],
+  )
 
   // ── Card renderer (board owns ALL card wiring) ───────────────────────
   const draggingId = draggingDoc ? String(draggingDoc.id) : null
@@ -296,28 +475,18 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
           hidden={overlayActive && draggingId === id}
           gated={draggingId != null}
           onPress={() => {
-            if (!draggingRef.current) onPressCard(doc)
+            if (!dragActiveRef.current) onPressCard(doc)
           }}
-          onLongPress={onLongPressCard ? () => onLongPressCard(doc) : undefined}
-          insideDraggable={dndAvailable}
+          // Long-press owns drag-or-peek (Apple boards convention). Mid-move
+          // cards can't pick up again.
+          onDragStart={loadingSet.has(id) ? undefined : (node) => beginDrag(doc, node)}
+          onDragPressOut={handleCardPressOut}
           moveTargets={moveTargetsFor(columnValue)}
           onMove={(toValue) => handleMove(doc, toValue)}
           onPreview={onPreviewCard ? () => onPreviewCard(doc) : undefined}
         />
       )
-      const cardEl = renderCard ? renderCard(doc, defaultCard) : defaultCard
-      if (!dndAvailable) return cardEl
-      return (
-        <Draggable
-          draggableId={`kanban-card-${id}`}
-          data={doc}
-          preDragDelay={PRE_DRAG_DELAY}
-          collisionAlgorithm="center"
-          dragDisabled={loadingSet.has(id)}
-        >
-          {cardEl}
-        </Draggable>
-      )
+      return renderCard ? renderCard(doc, defaultCard) : defaultCard
     },
     [
       useAsTitle,
@@ -328,10 +497,11 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       overlayActive,
       draggingId,
       onPressCard,
-      onLongPressCard,
       onPreviewCard,
       moveTargetsFor,
       handleMove,
+      beginDrag,
+      handleCardPressOut,
       renderCard,
     ],
   )
@@ -344,7 +514,7 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
 
   // ── Drag overlay copy ────────────────────────────────────────────────
   const overlay =
-    dndAvailable && draggingDoc && overlayActive ? (
+    draggingDoc && overlayActive ? (
       <Animated.View
         pointerEvents="none"
         style={[
@@ -365,14 +535,15 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
       </Animated.View>
     ) : null
 
-  const board = (
+  return (
     <View
       ref={boardRef}
       style={styles.board}
       onLayout={(e) => {
         boardWidthRef.current = e.nativeEvent.layout.width
-        refreshDropTargets()
+        refreshColumnFrames()
       }}
+      {...panResponder.panHandlers}
     >
       <ScrollView
         ref={scrollRef}
@@ -384,14 +555,14 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
         // Lock user scrolling mid-drag (programmatic auto-scroll still works)
-        // so drop-target page coordinates can't drift under the gesture.
+        // so drop-frame page coordinates can't drift under the gesture.
         scrollEnabled={draggingId == null}
         onScroll={(e) => {
           scrollXRef.current = e.nativeEvent.contentOffset.x
         }}
         scrollEventThrottle={32}
-        onMomentumScrollEnd={refreshDropTargets}
-        onScrollEndDrag={refreshDropTargets}
+        onMomentumScrollEnd={refreshColumnFrames}
+        onScrollEndDrag={refreshColumnFrames}
       >
         {columns.map((col) => (
           <KanbanColumn
@@ -399,36 +570,16 @@ export const KanbanBoard: React.FC<KanbanBoardProps> = ({
             column={col}
             docs={buckets.get(col.value) ?? []}
             renderCardItem={(doc) => renderCardForColumn(doc, col.value)}
-            DroppableComponent={dndAvailable ? Droppable : null}
-            onDropDoc={
-              dndAvailable
-                ? (doc) => {
-                    // Sub-threshold release = static long-press → preview
-                    // (handled in handleDragEnd), never a move.
-                    if (maxDragDistRef.current < STATIC_PRESS_MAX_DIST) return
-                    handleMove(doc, col.value)
-                  }
-                : undefined
-            }
-            onScrollEnd={dndAvailable ? refreshDropTargets : undefined}
+            registerContainer={getColumnRefCallback(col.value)}
+            isDropTarget={overlayActive && hoverValue === col.value}
+            scrollEnabled={draggingId == null}
+            onScrollEnd={refreshColumnFrames}
             extraData={columnExtraData}
           />
         ))}
       </ScrollView>
       {overlay}
     </View>
-  )
-
-  if (!dndAvailable) return board
-  return (
-    <DropProvider
-      ref={dropProviderRef}
-      onDragStart={handleDragStart}
-      onDragging={handleDragging}
-      onDragEnd={handleDragEnd}
-    >
-      {board}
-    </DropProvider>
   )
 }
 

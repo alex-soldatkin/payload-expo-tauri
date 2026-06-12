@@ -7,6 +7,14 @@
  *      opens in; week/day share the timeline surface, see CalendarView)
  *   2. Sources — drag-to-reorder rows (colour swatch, label, start → end
  *      subtitle) with edit / remove actions + an 'Add source…' row
+ *   3. Visibility — one row per source with a native SwiftUI Toggle switch
+ *      (registry Toggle, default toggleStyle, like the checkbox field;
+ *      lucide Eye/EyeOff Pressable fallback). Toggling sets the source's
+ *      `hidden` flag in the draft; CalendarView's legend seeds from it.
+ *      DECISION (drag rules): visibility lives in this SEPARATE non-drag
+ *      section rather than inside the Sources rows — @expo/ui must never
+ *      render inside a reanimated-dnd Sortable tree, and the Sortable rows
+ *      stay lucide-only (swatch/pencil/trash) exactly as before.
  *
  * Editor mode (add / edit a source):
  *   - start date-field picker (radio list over the collection's date fields,
@@ -35,6 +43,8 @@ import {
   Check,
   Circle,
   CircleCheck,
+  Eye,
+  EyeOff,
   GripVertical,
   Pencil,
   Plus,
@@ -171,6 +181,22 @@ export function CalendarCustomizeSheet({
   // ── Sources list ──────────────────────────────────────────────────────
   const removeSource = useCallback((id: string) => {
     setDraft((prev) => ({ ...prev, sources: prev.sources.filter((s) => s.id !== id) }))
+  }, [])
+
+  // Visibility section — `hidden: true` only when off (visible omits the key
+  // so configs stay minimal and pre-`hidden` entries mean visible).
+  const setSourceVisible = useCallback((id: string, visible: boolean) => {
+    setDraft((prev) => ({
+      ...prev,
+      sources: prev.sources.map((s) => {
+        if (s.id !== id) return s
+        if (visible) {
+          const { hidden: _hidden, ...rest } = s
+          return rest
+        }
+        return { ...s, hidden: true }
+      }),
+    }))
   }, [])
 
   // onMove must stay a no-op (state updates mid-drag remount the Sortable);
@@ -350,6 +376,10 @@ export function CalendarCustomizeSheet({
 
   // ── Editor view (add / edit a source) ─────────────────────────────────
   const NativeColorPicker = nativeComponents.ColorPicker
+  // Visibility switches (list view) — registry SwiftUI Toggle with the
+  // DEFAULT toggleStyle (a switch), exactly like the checkbox field. Rendered
+  // ONLY in the non-drag Visibility section (never inside Sortable trees).
+  const NativeToggle = nativeComponents.Toggle
 
   const editorView = editor && (
     <>
@@ -572,6 +602,57 @@ export function CalendarCustomizeSheet({
           <Plus size={20} color={colors.primary} />
           <Text style={styles.addText}>Add source…</Text>
         </Pressable>
+
+        {/* ── Visibility — SEPARATE non-drag section (see docblock): native
+            SwiftUI Toggle switches are safe here, OUTSIDE the Sortable tree.
+            ON = source visible on the calendar (sets `hidden` in the draft;
+            the header legend seeds from it after save). ─────────────────── */}
+        {draft.sources.length > 0 && (
+          <>
+            <Text style={styles.sectionLabel}>VISIBILITY</Text>
+            {draft.sources.map((source) => {
+              const visible = source.hidden !== true
+              return (
+                <View key={source.id} style={styles.row}>
+                  <View style={styles.rowInner}>
+                    <View style={[styles.swatch, { backgroundColor: source.color }]} />
+                    <View style={styles.fieldInfo}>
+                      <Text
+                        style={[styles.rowLabel, !visible && styles.rowLabelHidden]}
+                        numberOfLines={1}
+                      >
+                        {source.label}
+                      </Text>
+                    </View>
+                  </View>
+                  {NativeToggle ? (
+                    <NativeHost matchContents>
+                      <NativeToggle
+                        isOn={visible}
+                        onIsOnChange={(isOn: boolean) => setSourceVisible(source.id, isOn)}
+                      />
+                    </NativeHost>
+                  ) : (
+                    <Pressable
+                      hitSlop={8}
+                      style={styles.rowAction}
+                      onPress={() => setSourceVisible(source.id, !visible)}
+                      accessibilityRole="switch"
+                      accessibilityState={{ checked: visible }}
+                      accessibilityLabel={`${visible ? 'Hide' : 'Show'} ${source.label}`}
+                    >
+                      {visible ? (
+                        <Eye size={20} color={colors.primary} />
+                      ) : (
+                        <EyeOff size={20} color={colors.textPlaceholder} />
+                      )}
+                    </Pressable>
+                  )}
+                </View>
+              )
+            })}
+          </>
+        )}
       </ScrollView>
     </>
   )
@@ -646,6 +727,8 @@ const createStyles = (c: ListColorPalette) =>
       justifyContent: 'center',
     },
     rowLabel: { fontSize: 15, color: c.text, fontWeight: '500' },
+    /** Visibility section: hidden sources read muted (mirrors kanban sheet). */
+    rowLabelHidden: { color: c.textPlaceholder },
     rowPressed: { opacity: 0.6 },
 
     dragHandle: {

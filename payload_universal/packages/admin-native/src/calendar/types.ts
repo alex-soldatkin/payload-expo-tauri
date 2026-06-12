@@ -51,6 +51,12 @@ export type CalendarSource = {
   endField?: string
   /** Hex accent colour (event dots/strips/bars + legend chip). */
   color: string
+  /**
+   * Source starts hidden (customize-sheet visibility toggle). The header
+   * legend's local toggles SEED from this flag and never write back —
+   * persisting visibility is the customize sheet's job. Absent = visible.
+   */
+  hidden?: boolean
 }
 
 /**
@@ -89,7 +95,13 @@ export type CalendarViewProps = {
   useAsTitle?: string
   mode: CalendarMode
   onChangeMode: (mode: CalendarMode) => void
-  /** ISO date key 'YYYY-MM-DD' (local). */
+  /**
+   * ISO date key 'YYYY-MM-DD' (local). Screens MUST seed this with
+   * todayDateKey() — NEVER from event/doc data (deriving it from the first
+   * mapped event once opened a Users calendar on a far-future
+   * resetPasswordExpiration month). The view itself never re-seeds it; only
+   * user navigation (taps/swipes/Today) calls onChangeSelectedDate.
+   */
   selectedDate: string
   onChangeSelectedDate: (iso: string) => void
   /** Tap on an event row / native timeline block. */
@@ -123,6 +135,14 @@ export const MAX_MONTH_CELL_BARS = 3
 export const MAX_EVENT_SPAN_DAYS = 62
 /** Compact-width breakpoint: below this the month grid keeps dots. */
 export const CALENDAR_COMPACT_WIDTH = 600
+/**
+ * Regular-width breakpoint (iPad-class): at/above this the calendar opts
+ * into the iPad layout — single-row glass header (segmented + Today +
+ * legend), month grid filling the available height with the selected-day
+ * list as a right side panel, full-width week strip with larger pills, and
+ * a centred max-width day timeline.
+ */
+export const CALENDAR_REGULAR_WIDTH = 768
 
 // ---------------------------------------------------------------------------
 // Pure date helpers (all LOCAL time — date keys are 'YYYY-MM-DD')
@@ -191,6 +211,8 @@ export const getFirstDayOfWeek = (): number => {
     const loc: any = new (Intl as any).Locale(locale)
     const info = loc.weekInfo ?? loc.getWeekInfo?.()
     const first = info?.firstDay // 1=Mon … 7=Sun
+    // Self-check: weekInfo 1 (Mon) → 1%7 = JS day 1 (Mon) ✓; weekInfo 7
+    // (Sun) → 7%7 = JS day 0 (Sun) ✓ — never confuse with Sun=0 indices.
     if (typeof first === 'number' && first >= 1 && first <= 7) return first % 7
   } catch {
     /* Intl.Locale/weekInfo unavailable */
@@ -198,7 +220,15 @@ export const getFirstDayOfWeek = (): number => {
   return 1
 }
 
-/** Date key of the first day of the week containing `dateKey`. */
+/**
+ * Date key of the first day of the week containing `dateKey`.
+ *
+ * Weekday-column self-check (JS getDay() is Sun=0…Sat=6): the offset of a
+ * date inside a Mon-start week (firstDayOfWeek=1) is
+ *   (getDay() - 1 + 7) % 7 ≡ (getDay() + 6) % 7.
+ * 2026-08-02 is a Sunday (getDay()=0) → offset (0+6)%7 = 6 → it is the LAST
+ * column of a Mon-start week, and its week starts on Mon 2026-07-27.
+ */
 export const weekStartKey = (dateKey: string, firstDayOfWeek: number): string => {
   const d = parseDateKey(dateKey)
   if (!d) return dateKey

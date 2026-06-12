@@ -26,6 +26,7 @@ import {
   BottomSheet,
   CalendarView,
   closeOpenSwipeRow,
+  collectionHasCalendarDateFields,
   DocumentForm,
   DocumentList,
   extractRootFields,
@@ -93,6 +94,17 @@ const SHAKE_THRESHOLD = 1.5 // acceleration magnitude to trigger undo
 // DocumentList (cardWrap: 16px horizontal gutter + 8px bottom margin;
 // card borderRadius 16). Tablet table rows are full-bleed (no insets).
 const PHONE_SWIPE_ACTION_STYLE = { marginRight: 16, marginBottom: 8, borderRadius: 16 } as const
+
+/**
+ * Stack.Toolbar is an experimental expo-router API (unstable_headerRightItems
+ * → react-native-screens bar button items). Guard at runtime so the screen
+ * falls back to the always-available `headerRight` path when the API is
+ * missing (older expo-router / dev-client binary) instead of silently
+ * rendering NO create/filter/settings affordances. Same pattern as [id].tsx.
+ */
+const hasStackToolbar =
+  typeof (Stack as { Toolbar?: unknown }).Toolbar === 'function' &&
+  Boolean((Stack as { Toolbar?: { Button?: unknown } }).Toolbar?.Button)
 
 // ---------------------------------------------------------------------------
 // Table formatting helpers (tablet)
@@ -351,6 +363,9 @@ export default function CollectionDocumentsScreen() {
   const { showSidebar } = useResponsive()
   // Dark-mode aware palette for the screen chrome / table rows
   const { colors: tc } = useListColors()
+  // iOS native header toolbar only when the experimental API exists;
+  // otherwise (and on Android) the headerRight fallback below renders.
+  const useNativeHeaderToolbar = Platform.OS === 'ios' && hasStackToolbar
 
   const baseURL = useBaseURL()
   const { token } = useAuth()
@@ -547,7 +562,10 @@ export default function CollectionDocumentsScreen() {
   const [calendarCustomizeOpen, setCalendarCustomizeOpen] = useState(false)
 
   const dateFieldOptions = useMemo(() => collectDateFieldOptions(rootFields), [rootFields])
-  const calendarAvailable = dateFieldOptions.length > 0
+  // Eligible only with >=1 REAL date field — Payload bookkeeping dates
+  // (createdAt/updatedAt, auth resetPasswordExpiration/lockUntil) don't
+  // count, so e.g. Users offers no Calendar at all.
+  const calendarAvailable = collectionHasCalendarDateFields(dateFieldOptions)
   const isCalendar = viewMode === 'calendar' && calendarAvailable
 
   // Effective sources: explicit config, else heuristic defaults over the
@@ -812,13 +830,15 @@ export default function CollectionDocumentsScreen() {
   // is mounted at a time (not one per row — that was killing perf).
   const [previewItemId, setPreviewItemId] = useState<string | null>(null)
 
-  // Kanban card preview — opened from the card's ellipsis menu ("Preview").
-  // Kanban cards are NOT wrapped in ScrollablePreview.Trigger: the module's
-  // raw UILongPressGestureRecognizer (0.35s) claims long-press at the UIKit
-  // layer and cancels the reanimated-dnd drag activation, so on the board
-  // long-press belongs to the DRAG (Apple boards convention) and preview is
-  // a pure-JS BottomSheet + read-only DocumentForm (same inline pattern as
-  // the relationship picker, memory-bank 013).
+  // Kanban card preview — opened by a STATIC long-press on a card (hold
+  // ~250ms, release without moving; the board's PanResponder drag and the
+  // preview share the long-press, disambiguated by finger travel) or from
+  // the card's ellipsis menu ("Preview"). Kanban cards are NOT wrapped in
+  // ScrollablePreview.Trigger: the module's raw UILongPressGestureRecognizer
+  // (0.35s) claims long-press at the UIKit layer before the card Pressable
+  // that drives drag-or-peek, so preview is a pure-JS BottomSheet +
+  // read-only DocumentForm (same inline pattern as the relationship picker,
+  // memory-bank 013).
   const [kanbanPreviewDoc, setKanbanPreviewDoc] = useState<Record<string, unknown> | null>(null)
 
   const renderRow = useCallback(
@@ -952,11 +972,11 @@ export default function CollectionDocumentsScreen() {
 
   // ── Calendar row wrapper — long-press peek via ScrollablePreview.Trigger
   // (same pattern as list rows). NOT used for kanban cards: the trigger's
-  // native UILongPressGestureRecognizer would steal the long-press from the
-  // reanimated-dnd drag (cards preview via the ellipsis menu instead — see
-  // kanbanPreviewDoc above). Tap can fire from both the trigger's primary
-  // action and the inner row's Pressable — the timestamp guard collapses
-  // doubles. ──
+  // native UILongPressGestureRecognizer would steal the long-press that
+  // drives the board's PanResponder drag-or-peek (cards preview via a
+  // static long-press or the ellipsis menu instead — see kanbanPreviewDoc
+  // above). Tap can fire from both the trigger's primary action and the
+  // inner row's Pressable — the timestamp guard collapses doubles. ──
   const lastNavRef = useRef(0)
   const navigateToDoc = useCallback(
     (id: string) => {
@@ -1045,7 +1065,10 @@ export default function CollectionDocumentsScreen() {
           <Stack.Screen
             options={{
               title: label,
-              ...(Platform.OS !== 'ios' ? {
+              // Android path AND the iOS fallback whenever the experimental
+              // Stack.Toolbar pipeline is unavailable — the create '+' (and
+              // friends) must never depend solely on an unstable native API.
+              ...(!useNativeHeaderToolbar ? {
                 headerRight: () => (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
                     {/* View presets — save/share/apply saved views */}
@@ -1103,12 +1126,21 @@ export default function CollectionDocumentsScreen() {
                 placeholder: `Search ${label}...`,
                 hideWhenScrolling: true,
                 autoCapitalize: 'none',
+                // Pin the search field BELOW the nav bar. The default
+                // ('automatic') lets iPadOS integrate the search into the
+                // TRAILING nav-bar area when the bar is wide enough — i.e.
+                // landscape — where its container sits over the trailing
+                // UIBarButtonItems and eats taps on the create '+' (the
+                // rightmost item). Portrait resolves to stacked anyway, so
+                // this makes landscape behave like the known-good portrait.
+                // No-op on iPhone (no nav toolbar → automatic == stacked).
+                placement: 'stacked',
                 onChangeText: (e) => setSearchText(e.nativeEvent.text),
                 onCancelButtonPress: () => setSearchText(''),
               },
             }}
           />
-          {Platform.OS === 'ios' && (
+          {useNativeHeaderToolbar && (
             <Stack.Toolbar placement="right">
               {/* View selector — its own group BEFORE the Actions menu.
                   Two sibling <Stack.Toolbar placement="right"> elements
@@ -1121,6 +1153,7 @@ export default function CollectionDocumentsScreen() {
                     isCalendar ? 'calendar' : isKanban ? 'square.grid.2x2' : 'tablecells'
                   }
                   title="View"
+                  tintColor={tc.text}
                   separateBackground
                 >
                   <Stack.Toolbar.MenuAction
@@ -1155,13 +1188,14 @@ export default function CollectionDocumentsScreen() {
                   saved table/kanban views incl. board config + filters */}
               <Stack.Toolbar.Button
                 icon="bookmark"
+                tintColor={tc.text}
                 separateBackground
                 onPress={() => setPresetsSheetOpen(true)}
               />
               <Stack.Toolbar.Spacer width={12} />
               {/* Actions menu — selection mode, generic bulk edit, and custom
                   list actions (labels from Payload custom components) */}
-              <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions">
+              <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions" tintColor={tc.text}>
                 {!selectionMode && !isKanban && !isCalendar && (
                   <Stack.Toolbar.MenuAction
                     icon="checkmark.circle"
@@ -1210,7 +1244,7 @@ export default function CollectionDocumentsScreen() {
               </Stack.Toolbar.Menu>
               {/* Sort menu — schema-driven sortable fields */}
               {sortableFields.length > 0 && (
-                <Stack.Toolbar.Menu icon="arrow.up.arrow.down" title="Sort By">
+                <Stack.Toolbar.Menu icon="arrow.up.arrow.down" title="Sort By" tintColor={tc.text}>
                   {sortableFields.map((f) => (
                     <Stack.Toolbar.MenuAction
                       key={f.name}
@@ -1231,6 +1265,7 @@ export default function CollectionDocumentsScreen() {
               )}
               <Stack.Toolbar.Button
                 icon="gearshape"
+                tintColor={tc.text}
                 onPress={() =>
                   isKanban
                     ? setKanbanCustomizeOpen(true)
@@ -1241,10 +1276,16 @@ export default function CollectionDocumentsScreen() {
               />
               <Stack.Toolbar.Button
                 icon="line.3.horizontal.decrease"
+                tintColor={tc.text}
                 onPress={() => setFilterSheetOpen(true)}
               />
+              {/* Create — the trailing-most item; the stacked search-bar
+                  placement above guarantees nothing overlays its hit area
+                  in iPad landscape. */}
               <Stack.Toolbar.Button
                 icon="plus"
+                tintColor={tc.text}
+                accessibilityLabel="Create"
                 onPress={() => router.push(`/(admin)/collections/${slug}/create`)}
               />
             </Stack.Toolbar>
@@ -1312,7 +1353,8 @@ export default function CollectionDocumentsScreen() {
             onPressCard={(doc) => navigateToDoc(String(doc.id))}
             onMoveCard={handleMoveCard}
             // No ScrollablePreview.Trigger wrap here — its native long-press
-            // recognizer kills the drag. Preview lives in the ellipsis menu.
+            // recognizer kills the drag. Preview = static long-press (hold +
+            // release without moving) or the ellipsis menu's "Preview".
             onPreviewCard={setKanbanPreviewDoc}
             loadingDocIds={movingDocIds}
           />

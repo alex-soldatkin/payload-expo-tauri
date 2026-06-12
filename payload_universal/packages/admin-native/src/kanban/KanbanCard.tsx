@@ -7,18 +7,24 @@
  * optional "Preview" entry plus the "Move to <column>" targets.
  *
  * Gesture/menu rules (memory bank conventions):
- *  - When the card sits inside a react-native-reanimated-dnd Draggable
- *    (`insideDraggable`), @expo/ui SwiftUI components are FORBIDDEN in the
- *    subtree — the move menu uses the pure-JS ellipsis + BottomSheet tier
- *    (the Modal portals out of the gesture tree, so the sheet itself is safe).
- *  - When drag-drop is unavailable, the SwiftUI Menu tier renders (same
- *    pattern as RowActionsMenu in fields/structural/common.tsx) with the
- *    BottomSheet as the universal fallback.
+ *  - The board's drag is a pure RN PanResponder (no RNGH gesture tree), so
+ *    the "no @expo/ui inside Draggable subtrees" rule no longer binds here:
+ *    the move menu uses the SwiftUI Menu tier when the registry provides it
+ *    (same pattern as RowActionsMenu in fields/structural/common.tsx) with
+ *    the pure-JS ellipsis + BottomSheet tier as the universal fallback. The
+ *    Menu's native recognizers are local to the ellipsis button and never
+ *    claim a long-press that starts on the card body.
+ *  - LONG-PRESS always owns drag-or-peek (Apple boards convention): the
+ *    Pressable's onLongPress (~250ms) calls `onDragStart` with the card's
+ *    host view so the board can measure the pick-up origin; `onDragPressOut`
+ *    lets the board detect a static release (hold without moving → preview).
+ *    Tap (`onPress`) keeps opening the document — Pressability suppresses
+ *    onPress after a fired long-press.
  *  - `overlay` renders the elevated floating copy that follows the finger
  *    during a drag — solid card (no glass: it re-composites every frame),
  *    slight scale + tilt for the Apple pick-up feel, no interactivity.
  */
-import React, { useMemo, useState } from 'react'
+import React, { useMemo, useRef, useState } from 'react'
 import { Pressable, StyleSheet, Text, View } from 'react-native'
 
 import { defaultTheme as t } from '../theme'
@@ -42,7 +48,7 @@ try {
 }
 
 // Optional: lucide icons for the ellipsis affordance + sheet rows (pure RN
-// SVG — the only icon tier allowed inside reanimated-dnd Draggable trees)
+// SVG — safe everywhere, including under the board's PanResponder drag)
 let EllipsisIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let EyeIcon: React.ComponentType<{ size: number; color: string }> | null = null
 try {
@@ -54,6 +60,9 @@ try {
 }
 
 export type KanbanCardRow = { key: string; label: string; value: string }
+
+/** Long-press duration (ms) before drag-or-peek activates. */
+const DRAG_LONG_PRESS_MS = 250
 
 export type KanbanCardProps = {
   doc: KanbanDoc
@@ -74,22 +83,27 @@ export type KanbanCardProps = {
   /** Suppress taps while any card on the board is dragging. */
   gated?: boolean
   onPress?: () => void
-  /** Only wired when NOT inside a Draggable (drag owns long-press there). */
-  onLongPress?: () => void
+  /**
+   * Long-press drag activation (~250ms): called with the card's host view so
+   * the board can measureInWindow the pick-up origin (beginDrag). Long-press
+   * always owns drag-or-peek on the board.
+   */
+  onDragStart?: (node: View) => void
+  /**
+   * Press-release bookkeeping for the STATIC long-press path (finger lifted
+   * without moving → the board opens the preview). Fires on every press-out;
+   * the board gates it on its own drag state.
+   */
+  onDragPressOut?: () => void
   /** "Move to <column>" targets — current column disabled. */
   moveTargets?: KanbanMoveTarget[]
   onMove?: (toValue: string | null) => void
   /**
    * Optional "Preview" entry above the move targets in the ellipsis menu —
-   * the drag-safe preview path (long-press belongs to the drag gesture, so
-   * cards never host native long-press peek triggers).
+   * the accessible preview path alongside the static long-press (hold and
+   * release without moving).
    */
   onPreview?: () => void
-  /**
-   * True when the card renders inside a reanimated-dnd Draggable — the
-   * SwiftUI Menu tier is skipped (no @expo/ui inside drag trees).
-   */
-  insideDraggable?: boolean
 }
 
 export const KanbanCard: React.FC<KanbanCardProps> = ({
@@ -101,14 +115,16 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
   overlay,
   gated,
   onPress,
-  onLongPress,
+  onDragStart,
+  onDragPressOut,
   moveTargets,
   onMove,
   onPreview,
-  insideDraggable,
 }) => {
   const { colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
+  // Host view handle for the board's pick-up measure (measureInWindow).
+  const hostRef = useRef<View>(null)
 
   const inner = (
     <View style={styles.cardRow}>
@@ -124,7 +140,6 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
               onMove={onMove}
               onPreview={onPreview}
               cardTitle={title}
-              allowNative={!insideDraggable}
               colors={colors}
               styles={styles}
             />
@@ -165,8 +180,18 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
 
   return (
     <Pressable
+      ref={hostRef}
       onPress={gated ? undefined : onPress}
-      onLongPress={!insideDraggable && onLongPress ? onLongPress : undefined}
+      delayLongPress={DRAG_LONG_PRESS_MS}
+      onLongPress={
+        onDragStart && !gated
+          ? () => {
+              const node = hostRef.current
+              if (node) onDragStart(node)
+            }
+          : undefined
+      }
+      onPressOut={onDragPressOut}
       style={({ pressed }) => [
         dimmed && styles.dimmed,
         hidden && styles.hiddenCard,
@@ -179,8 +204,11 @@ export const KanbanCard: React.FC<KanbanCardProps> = ({
 }
 
 // ---------------------------------------------------------------------------
-// Move menu — SwiftUI Menu tier (outside drag trees only) with a pure-JS
-// ellipsis + BottomSheet fallback (same tiering as RowActionsMenu).
+// Move menu — SwiftUI Menu tier with a pure-JS ellipsis + BottomSheet
+// fallback (same tiering as RowActionsMenu). The board's drag is a JS
+// PanResponder — there is no RNGH gesture tree on the board, so mounting
+// @expo/ui here is safe again (the old "no SwiftUI inside Draggable
+// subtrees" rule was specific to reanimated-dnd, which is gone).
 // ---------------------------------------------------------------------------
 
 function MoveMenu({
@@ -188,7 +216,6 @@ function MoveMenu({
   onMove,
   onPreview,
   cardTitle,
-  allowNative,
   colors,
   styles,
 }: {
@@ -197,8 +224,6 @@ function MoveMenu({
   /** Optional "Preview" entry above the move targets. */
   onPreview?: () => void
   cardTitle: string
-  /** False inside Draggable trees — never mount @expo/ui there. */
-  allowNative: boolean
   colors: ListColorPalette
   styles: ReturnType<typeof createStyles>
 }) {
@@ -209,7 +234,7 @@ function MoveMenu({
   const NativeButton = nativeComponents.Button
   const disabledMod = nativeComponents.disabled
   const tintMod = nativeComponents.tint
-  if (allowNative && Menu && NativeButton) {
+  if (Menu && NativeButton) {
     // Disabled entries grey out via the `disabled` modifier; when the factory
     // is missing they are omitted instead (never render tappable no-ops).
     const visible = targets.filter((tg) => !tg.disabled || disabledMod)
@@ -237,9 +262,8 @@ function MoveMenu({
     )
   }
 
-  // Tier 2 — pure JS: lucide ellipsis opens the package BottomSheet. The
-  // sheet is a Modal (separate native layer), so it is safe to trigger from
-  // inside a Draggable tree.
+  // Tier 2 — pure JS: lucide ellipsis opens the package BottomSheet (a
+  // Modal — separate native layer, never under the board's drag responder).
   const rowCount = targets.length + (onPreview ? 1 : 0)
   const sheetHeight = Math.min(0.6, (rowCount * 52 + 120) / 800)
   return (

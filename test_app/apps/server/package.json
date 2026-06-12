@@ -10,7 +10,8 @@
     "reset:db": "node ./scripts/reset-db.mjs",
     "generate:types": "payload generate:types",
     "generate:importmap": "payload generate:importmap",
-    "generate:native-registry": "tsx ../../../payload_universal/packages/admin-schema/src/bin/generateNativeRegistry.ts src/payload.config.ts ../mobile-expo/src/customComponents.ts"
+    "generate:native-registry": "tsx ../../../payload_universal/packages/admin-schema/src/bin/generateNativeRegistry.ts src/payload.config.ts ../mobile-expo/src/customComponents.ts",
+    "seed": "node --import tsx/esm ./scripts/seed.mjs"
   },
   "dependencies": {
     "@floating-ui/react": "^0.27.19",

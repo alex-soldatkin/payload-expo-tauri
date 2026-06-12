@@ -41,8 +41,9 @@ export { VersionDiff } from './VersionDiff'
 export { VersionsBottomSheet } from './VersionsBottomSheet'
 
 // Kanban board — liquid-glass, injection-friendly (the screen supplies docs
-// and move/press callbacks; drag-drop loads from the app's optional
-// react-native-reanimated-dnd with an ellipsis "Move to" menu fallback)
+// and move/press callbacks; drag & drop is a self-contained PanResponder
+// overlay — long-press to drag, hold-and-release to preview, ellipsis
+// "Move to" menu as the accessibility path)
 export { KanbanBoard, KanbanCard, KanbanColumn } from './kanban'
 export {
   buildKanbanColumns,
@@ -76,12 +77,14 @@ export {
   addDaysToKey,
   buildEventsByDateKey,
   calendarEventDocId,
+  collectionHasCalendarDateFields,
   DEFAULT_CALENDAR_PALETTE,
   docsToCalendarEvents,
   eventOccursOnDate,
   formatEventTimeRange,
   formatLongDate,
   formatTimeOfDay,
+  INTERNAL_DATE_FIELDS,
   isMultiDayEvent,
   MAX_EVENT_SPAN_DAYS,
   MAX_MONTH_CELL_DOTS,

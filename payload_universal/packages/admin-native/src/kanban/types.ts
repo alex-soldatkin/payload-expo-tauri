@@ -90,32 +90,26 @@ export type KanbanBoardProps = {
    * Move a card to a column. `toValue` is the option value, or null for the
    * no-status column — the screen patches the select via a local-first
    * mutation. Rejections are swallowed by the board (surface errors in the
-   * screen, e.g. via a toast).
+   * screen, e.g. via a toast). Fired by the PanResponder drag's release
+   * hit-test and by the ellipsis "Move to <column>" menu (the accessibility
+   * path).
    */
   onMoveCard: (doc: KanbanDoc, toValue: string | null) => Promise<void> | void
   /**
-   * Optional long-press injection point (e.g. ScrollablePreview peek). Only
-   * wired when drag-drop is unavailable — when react-native-reanimated-dnd
-   * is installed, long-press starts a drag instead (Apple boards convention).
-   * For preview access that must coexist with drag use `onPreviewCard`.
-   */
-  onLongPressCard?: (doc: KanbanDoc) => void
-  /**
-   * Optional "Preview" entry in the card's ellipsis menu (rendered above the
-   * "Move to <column>" targets). This is the drag-safe preview path: in drag
-   * mode long-press belongs to the drag gesture, so screens must NOT wrap
-   * cards in native long-press peek triggers — present a JS preview from
-   * this callback instead (e.g. BottomSheet + read-only DocumentForm).
+   * Card preview. Fired by a STATIC long-press (hold ~250ms and release with
+   * < 8pt of finger travel — Telegram-style disambiguation against the drag)
+   * and by the "Preview" entry in the card's ellipsis menu. Long-press on the
+   * board always owns drag-or-peek, so screens must NOT wrap cards in native
+   * long-press peek triggers — present a JS preview from this callback
+   * instead (e.g. BottomSheet + read-only DocumentForm).
    */
   onPreviewCard?: (doc: KanbanDoc) => void
   /**
-   * Screen-side wrapper injection around the default card element. NOTE:
-   * when drag-drop is active the wrapper renders INSIDE a reanimated-dnd
-   * Draggable — keep it pure React Native (no @expo/ui / SwiftUI hosts) and
-   * NEVER attach native long-press recognizers (e.g. ScrollablePreview's
-   * Trigger): they claim the long-press at the UIKit layer, cancel the
-   * in-flight touches and kill the drag activation. Use `onPreviewCard` for
-   * preview access instead.
+   * Screen-side wrapper injection around the default card element. NEVER
+   * attach native long-press recognizers (e.g. ScrollablePreview's Trigger):
+   * they claim the long-press at the UIKit layer before the card Pressable
+   * that activates the board's PanResponder drag ever fires. Use
+   * `onPreviewCard` for preview access instead.
    */
   renderCard?: (doc: KanbanDoc, defaultCard: React.ReactElement) => React.ReactElement
   /** Cards mid-move render dimmed. */

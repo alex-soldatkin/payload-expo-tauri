@@ -8,17 +8,32 @@
  * `nativeModule`. Without it the pure-JS tiers render (MonthGridFallback /
  * DayListFallback).
  *
- * Layout:
+ * Layout (three width tiers via useWindowDimensions):
+ *  - compact (< CALENDAR_COMPACT_WIDTH): stacked toolbar + legend rows, month
+ *    grid with dots + the selected-day list below;
+ *  - medium (>= CALENDAR_COMPACT_WIDTH): same stacking, month grid upgrades
+ *    to titled event bars (showEventBars);
+ *  - regular (>= CALENDAR_REGULAR_WIDTH, iPad-class — Apple Calendar feel):
+ *    ONE glass header row (segmented Month/Week/Day + Today + legend chips);
+ *    month grid fills the available height (fillHeight) with the selected
+ *    day's event list as a ~320pt right side panel (glass inset section);
+ *    week strip becomes a full-width header band with larger pills and the
+ *    timeline gets comfortable insets; day mode centres the timeline at a
+ *    ~720pt max width.
+ *
+ * Pieces:
  *  - toolbar: native segmented Month/Week/Day picker (registry-gated
  *    SwiftUI/JC tiers via SegmentedIndexPicker) + a liquid-glass "Today"
  *    button;
- *  - source legend chips (colour dot + label; tap toggles a source's
- *    visibility — local state only, never mutates the injected config);
+ *  - source legend: one visibility control per source (ON = visible) —
+ *    SwiftUI Toggle rendered as a tinted toggle-button (toggleStyle('button')
+ *    via the nativeComponents registry, Toggle + toggleStyle null-checked)
+ *    with a JS chip fallback (filled + lucide Check when ON, outlined when
+ *    OFF). Visibility SEEDS from each source's `hidden` flag (customize
+ *    sheet) and then stays local — taps never mutate the injected config;
  *  - month mode: native month grid (HorizonCalendar) or MonthGridFallback,
- *    with the selected day's event rows listed below (rows go through
- *    renderDocRow so screens can wrap them in peek previews); regular width
- *    (>= CALENDAR_COMPACT_WIDTH) opts into titled event bars
- *    (showEventBars), compact keeps dots + the selected-day list;
+ *    with the selected day's event rows listed below/beside (rows go through
+ *    renderDocRow so screens can wrap them in peek previews);
  *  - week mode: 7-day week-strip header (day pills with presence dots; tap
  *    selects; chevrons/swipe page weeks) above the day timeline — the native
  *    CalendarKit DayView IS the horizontally-scrollable-days surface (its
@@ -29,7 +44,7 @@
  *    (CalendarKit renders its own all-day row); the JS all-day glass-chip
  *    strip renders ONLY in the fallback tier so the two never duplicate.
  */
-import React, { useCallback, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -38,12 +53,15 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native'
+import type { StyleProp, ViewStyle } from 'react-native'
 
 import { defaultTheme as t } from '../theme'
 import { useListColors } from '../hooks/useListColors'
 import type { ListColorPalette } from '../hooks/useListColors'
 import { hexToRgba } from '../kanban/types'
 import { SegmentedIndexPicker } from '../fields/structural/common'
+import { NativeHost } from '../fields/NativeHost'
+import { nativeComponents } from '../fields/shared'
 import { CalendarEventRow, DayListFallback } from './DayListFallback'
 import { MonthGridFallback } from './MonthGridFallback'
 import { WeekStrip } from './WeekStrip'
@@ -51,6 +69,7 @@ import { calendarEventDocId, docsToCalendarEvents } from './eventMapping'
 import {
   addDaysToKey,
   CALENDAR_COMPACT_WIDTH,
+  CALENDAR_REGULAR_WIDTH,
   eventOccursOnDate,
   formatLongDate,
   normalizeDateKey,
@@ -69,22 +88,38 @@ try {
   /* expo-glass-effect not installed */
 }
 
-// Optional: lucide chevrons (pure RN SVG) with text glyph fallbacks
+// Optional: lucide chevrons + legend check (pure RN SVG) with text fallbacks
 let ChevronLeftIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let ChevronRightIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let CheckIcon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> | null =
+  null
 try {
   const lucide = require('lucide-react-native')
   ChevronLeftIcon = lucide.ChevronLeft ?? null
   ChevronRightIcon = lucide.ChevronRight ?? null
+  CheckIcon = lucide.Check ?? null
 } catch {
   /* lucide-react-native not available */
 }
+
+// Native SwiftUI legend tier — registry Toggle rendered as a tinted toggle-
+// BUTTON (toggleStyle('button')). BOTH entries are null-checked; either
+// missing ⇒ the JS chip fallback renders (tint is optional sugar on top).
+const NativeToggle = nativeComponents.Toggle
+const toggleStyleMod = nativeComponents.toggleStyle
+const tintMod = nativeComponents.tint
 
 const MODES: CalendarMode[] = ['month', 'week', 'day']
 const MODE_LABELS = ['Month', 'Week', 'Day']
 
 /** Height of the native month grid area (the day list takes the rest). */
 const NATIVE_MONTH_HEIGHT = 360
+/** Regular-width month mode: width of the selected-day right side panel. */
+const MONTH_SIDE_PANEL_WIDTH = 320
+/** Regular-width day mode: max content width (don't stretch on 12.9"). */
+const DAY_TIMELINE_MAX_WIDTH = 720
+/** Regular-width header: fixed width of the Month/Week/Day segment. */
+const HEADER_SEGMENT_WIDTH = 300
 
 export const CalendarView: React.FC<CalendarViewProps> = ({
   docs,
@@ -101,19 +136,31 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const { dark, colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
 
-  // Compact width (iPhone-class) keeps month dots; regular width (tablet /
-  // landscape) upgrades the month grid to titled event bars.
+  // Width tiers: compact (iPhone-class) keeps month dots + stacked chrome;
+  // >= CALENDAR_COMPACT_WIDTH upgrades the month grid to titled event bars;
+  // >= CALENDAR_REGULAR_WIDTH (iPad-class) opts into the Apple-Calendar
+  // layout — single glass header row, month grid + right side panel,
+  // full-width week strip, centred day timeline.
   const { width: windowWidth } = useWindowDimensions()
   const compact = windowWidth < CALENDAR_COMPACT_WIDTH
+  const regular = windowWidth >= CALENDAR_REGULAR_WIDTH
 
-  // ── Source visibility (local — never mutates the injected config) ─────
+  // ── Source visibility — SEEDED from the configured `hidden` flags
+  // (customize-sheet visibility toggles), then local-only: legend taps never
+  // mutate the injected config. A new `sources` array (config/preset save)
+  // re-seeds, so persisted visibility always wins on arrival ────────────────
   const [hiddenSourceIds, setHiddenSourceIds] = useState<ReadonlySet<string>>(
-    () => new Set<string>(),
+    () => new Set(sources.filter((s) => s.hidden).map((s) => s.id)),
   )
-  const toggleSource = useCallback((id: string) => {
+  useEffect(() => {
+    setHiddenSourceIds(new Set(sources.filter((s) => s.hidden).map((s) => s.id)))
+  }, [sources])
+
+  const setSourceVisible = useCallback((id: string, visible: boolean) => {
     setHiddenSourceIds((prev) => {
+      if (visible === !prev.has(id)) return prev
       const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
+      if (visible) next.delete(id)
       else next.add(id)
       return next
     })
@@ -175,75 +222,128 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     return <React.Fragment key={ev.id}>{row}</React.Fragment>
   })
 
-  // ── Toolbar ───────────────────────────────────────────────────────────
-  const toolbar = (
-    <View style={styles.toolbar}>
-      <View style={styles.modePicker}>
-        <SegmentedIndexPicker
-          labels={MODE_LABELS}
-          selectedIndex={Math.max(0, MODES.indexOf(mode))}
-          onSelect={(i) => onChangeMode(MODES[i] ?? 'month')}
-        />
-      </View>
-      <TodayButton
-        styles={styles}
-        onPress={() => onChangeSelectedDate(todayDateKey())}
-      />
-    </View>
+  // ── Mode segment + legend chips (shared by both header tiers) ─────────
+  const modeSegment = (
+    <SegmentedIndexPicker
+      labels={MODE_LABELS}
+      selectedIndex={Math.max(0, MODES.indexOf(mode))}
+      onSelect={(i) => onChangeMode(MODES[i] ?? 'month')}
+    />
   )
 
-  // ── Legend ────────────────────────────────────────────────────────────
-  const legend =
-    sources.length > 0 ? (
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        style={styles.legendScroll}
-        contentContainerStyle={styles.legendRow}
+  // Legend — one visibility control per source (ON = source visible):
+  //  - native tier: SwiftUI Toggle as a tinted toggle-BUTTON
+  //    (toggleStyle('button') + tint(source.color)) hosted per-source in a
+  //    NativeHost matchContents (hosts size to their SwiftUI content inside
+  //    the horizontal legend scroller);
+  //  - JS fallback: source-tinted FILLED chip with a lucide Check when ON vs
+  //    an OUTLINED chip with the bare colour dot when OFF — the check glyph
+  //    keeps the state unambiguous without relying on colour vision.
+  const legendChips = sources.map((source) => {
+    const visible = !hiddenSourceIds.has(source.id)
+    if (NativeToggle && toggleStyleMod) {
+      return (
+        <NativeHost key={source.id} matchContents>
+          <NativeToggle
+            isOn={visible}
+            label={source.label}
+            onIsOnChange={(isOn: boolean) => setSourceVisible(source.id, isOn)}
+            modifiers={[
+              toggleStyleMod('button'),
+              ...(tintMod ? [tintMod(source.color)] : []),
+            ]}
+          />
+        </NativeHost>
+      )
+    }
+    return (
+      <Pressable
+        key={source.id}
+        onPress={() => setSourceVisible(source.id, !visible)}
+        accessibilityRole="button"
+        accessibilityState={{ selected: visible }}
+        style={({ pressed }) => [
+          styles.chip,
+          visible
+            ? {
+                borderColor: hexToRgba(source.color, 0.55),
+                backgroundColor: hexToRgba(source.color, dark ? 0.3 : 0.16),
+              }
+            : { borderColor: colors.border, backgroundColor: 'transparent' },
+          pressed && styles.chipPressed,
+        ]}
       >
-        {sources.map((source) => {
-          const hidden = hiddenSourceIds.has(source.id)
-          return (
-            <Pressable
-              key={source.id}
-              onPress={() => toggleSource(source.id)}
-              accessibilityRole="button"
-              accessibilityState={{ selected: !hidden }}
-              style={({ pressed }) => [
-                styles.chip,
-                {
-                  borderColor: hexToRgba(source.color, hidden ? 0.25 : 0.55),
-                  backgroundColor: hidden
-                    ? 'transparent'
-                    : hexToRgba(source.color, dark ? 0.2 : 0.1),
-                },
-                pressed && styles.chipPressed,
-              ]}
-            >
-              <View
-                style={[
-                  styles.chipDot,
-                  { backgroundColor: source.color },
-                  hidden && styles.chipDotHidden,
-                ]}
-              />
-              <Text
-                style={[styles.chipLabel, hidden && { color: colors.textPlaceholder }]}
-                numberOfLines={1}
-              >
-                {source.label}
-              </Text>
-            </Pressable>
+        {visible ? (
+          CheckIcon ? (
+            <CheckIcon size={12} color={colors.text} strokeWidth={3} />
+          ) : (
+            <Text style={styles.chipCheckGlyph}>{'✓'}</Text>
           )
-        })}
-      </ScrollView>
-    ) : null
+        ) : (
+          <View style={[styles.chipDot, { backgroundColor: source.color }, styles.chipDotHidden]} />
+        )}
+        <Text
+          style={[styles.chipLabel, !visible && { color: colors.textPlaceholder }]}
+          numberOfLines={1}
+        >
+          {source.label}
+        </Text>
+      </Pressable>
+    )
+  })
+
+  // ── Header ────────────────────────────────────────────────────────────
+  // Regular width: ONE glass row — segmented + Today + legend chips (Apple
+  // Calendar iPad toolbar feel). Compact keeps the stacked toolbar + legend.
+  const header = regular ? (
+    <View style={styles.headerWrapRegular}>
+      <GlassSection style={styles.headerCard} fallbackStyle={styles.headerCardFallback}>
+        <View style={styles.headerRowRegular}>
+          <View style={styles.modePickerRegular}>{modeSegment}</View>
+          <TodayButton
+            styles={styles}
+            embedded
+            onPress={() => onChangeSelectedDate(todayDateKey())}
+          />
+          {legendChips.length > 0 && <View style={styles.headerDivider} />}
+          {legendChips.length > 0 && (
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.legendScrollRegular}
+              contentContainerStyle={styles.legendRowRegular}
+            >
+              {legendChips}
+            </ScrollView>
+          )}
+        </View>
+      </GlassSection>
+    </View>
+  ) : (
+    <>
+      <View style={styles.toolbar}>
+        <View style={styles.modePicker}>{modeSegment}</View>
+        <TodayButton styles={styles} onPress={() => onChangeSelectedDate(todayDateKey())} />
+      </View>
+      {legendChips.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.legendScroll}
+          contentContainerStyle={styles.legendRow}
+        >
+          {legendChips}
+        </ScrollView>
+      )}
+    </>
+  )
 
   // ── Month mode ────────────────────────────────────────────────────────
   if (mode === 'month') {
-    // showEventBars: regular width renders Apple-Calendar-style titled bars
-    // (optional native prop — older module builds ignore it); compact keeps
-    // dots + the selected-day list below.
+    // showEventBars: >= CALENDAR_COMPACT_WIDTH renders Apple-Calendar-style
+    // titled bars (optional native prop — older module builds ignore it);
+    // compact keeps dots + the selected-day list below. fillHeight (regular,
+    // iPad-class) stretches the grid over the available height.
     const grid = NativeMonth ? (
       <NativeMonth
         events={events}
@@ -252,7 +352,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           onChangeSelectedDate(normalizeDateKey(e.nativeEvent.date))
         }
         showEventBars={!compact}
-        style={styles.nativeMonth}
+        style={regular ? styles.nativeMonthFill : styles.nativeMonth}
       />
     ) : (
       <MonthGridFallback
@@ -260,13 +360,42 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         selectedDate={selectedDate}
         onSelectDate={onChangeSelectedDate}
         showEventBars={!compact}
+        fillHeight={regular}
       />
     )
 
+    // Regular width: full-height grid + the selected-day list as a RIGHT
+    // side panel (Apple Calendar's iPad month + inspector feel).
+    if (regular) {
+      return (
+        <View style={styles.container}>
+          {header}
+          <View style={styles.monthSplit}>
+            <View style={styles.monthGridPane}>{grid}</View>
+            <GlassSection style={styles.sidePanel} fallbackStyle={styles.sidePanelFallback}>
+              <Text style={styles.sidePanelHeader} numberOfLines={1}>
+                {formatLongDate(selectedDate)}
+              </Text>
+              <ScrollView
+                style={styles.sidePanelList}
+                contentContainerStyle={styles.sidePanelContent}
+                showsVerticalScrollIndicator={false}
+              >
+                {dayRows.length > 0 ? (
+                  dayRows
+                ) : (
+                  <Text style={styles.emptyText}>No events</Text>
+                )}
+              </ScrollView>
+            </GlassSection>
+          </View>
+        </View>
+      )
+    }
+
     return (
       <View style={styles.container}>
-        {toolbar}
-        {legend}
+        {header}
         {grid}
         <Text style={styles.dayListHeader} numberOfLines={1}>
           {formatLongDate(selectedDate)}
@@ -291,11 +420,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const timelineHeader =
     mode === 'week' ? (
       // 7-day strip: tap selects a day (the timeline follows); chevrons/swipe
-      // page weeks; native timeline day swipes pull the strip along.
+      // page weeks; native timeline day swipes pull the strip along. Regular
+      // width: full-width header band with larger pills + event dots.
       <WeekStrip
         events={events}
         selectedDate={selectedDate}
         onSelectDate={onChangeSelectedDate}
+        regular={regular}
       />
     ) : (
       <View style={styles.dateNav}>
@@ -332,10 +463,13 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     )
 
   // All-day glass-chip strip — FALLBACK TIER ONLY (the native CalendarKit
-  // timeline renders its own all-day row from the unfiltered events).
+  // timeline renders its own all-day row from the unfiltered events). On
+  // regular-width week mode its insets align with the full-width strip.
   const allDayStrip =
     !nativeAvailable && allDayEvents.length > 0 ? (
-      <View style={styles.allDayRow}>
+      <View
+        style={[styles.allDayRow, regular && mode === 'week' && styles.allDayRowRegular]}
+      >
         <Text style={styles.allDayLabel} numberOfLines={1}>
           All-day
         </Text>
@@ -358,37 +492,83 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
       </View>
     ) : null
 
+  const timeline = NativeDay ? (
+    // Native CalendarKit timeline — its horizontal swipe paging IS the
+    // week mode's scrollable-days surface; allDay events pass through.
+    <NativeDay
+      events={events}
+      date={selectedDate}
+      onPressEvent={(e: { nativeEvent: { id: string } }) =>
+        handlePressEventId(e.nativeEvent.id)
+      }
+      onChangeDate={(e: { nativeEvent: { date: string } }) =>
+        onChangeSelectedDate(normalizeDateKey(e.nativeEvent.date))
+      }
+      style={styles.nativeDay}
+    />
+  ) : (
+    // Fallback timeline gets TIMED events only — the JS all-day strip
+    // above already owns the allDay ones.
+    <DayListFallback
+      events={timedEvents}
+      date={selectedDate}
+      onPressEvent={handlePressEventId}
+    />
+  )
+
+  // Regular-width DAY mode: centre the nav + timeline column at a max width
+  // so it doesn't stretch edge-to-edge on 12.9".
+  if (regular && mode === 'day') {
+    return (
+      <View style={styles.container}>
+        {header}
+        <View style={styles.dayCenterColumn}>
+          {timelineHeader}
+          {allDayStrip}
+          {timeline}
+        </View>
+      </View>
+    )
+  }
+
   return (
     <View style={styles.container}>
-      {toolbar}
-      {legend}
+      {header}
       {timelineHeader}
       {allDayStrip}
-      {NativeDay ? (
-        // Native CalendarKit timeline — its horizontal swipe paging IS the
-        // week mode's scrollable-days surface; allDay events pass through.
-        <NativeDay
-          events={events}
-          date={selectedDate}
-          onPressEvent={(e: { nativeEvent: { id: string } }) =>
-            handlePressEventId(e.nativeEvent.id)
-          }
-          onChangeDate={(e: { nativeEvent: { date: string } }) =>
-            onChangeSelectedDate(normalizeDateKey(e.nativeEvent.date))
-          }
-          style={styles.nativeDay}
-        />
+      {regular ? (
+        // Regular-width WEEK mode: comfortable timeline insets below the
+        // full-width strip.
+        <View style={styles.timelineInsetRegular}>{timeline}</View>
       ) : (
-        // Fallback timeline gets TIMED events only — the JS all-day strip
-        // above already owns the allDay ones.
-        <DayListFallback
-          events={timedEvents}
-          date={selectedDate}
-          onPressEvent={handlePressEventId}
-        />
+        timeline
       )}
     </View>
   )
+}
+
+// ---------------------------------------------------------------------------
+// GlassSection — liquid glass container with a themed bordered fallback
+// (regular-width header row + month-mode side panel)
+// ---------------------------------------------------------------------------
+
+function GlassSection({
+  style,
+  fallbackStyle,
+  children,
+}: {
+  style: StyleProp<ViewStyle>
+  fallbackStyle: StyleProp<ViewStyle>
+  children: React.ReactNode
+}) {
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <GlassView style={style} glassEffectStyle="regular">
+        {children}
+      </GlassView>
+    )
+  }
+  return <View style={[style, fallbackStyle]}>{children}</View>
 }
 
 // ---------------------------------------------------------------------------
@@ -449,25 +629,30 @@ function AllDayChip({
 }
 
 // ---------------------------------------------------------------------------
-// Today button — liquid glass first, themed bordered fallback
+// Today button — liquid glass first, themed bordered fallback. `embedded`
+// (inside the regular-width glass header) skips the nested glass and renders
+// a hairline-bordered pill instead (glass-in-glass renders poorly).
 // ---------------------------------------------------------------------------
 
 function TodayButton({
   onPress,
   styles,
+  embedded = false,
 }: {
   onPress: () => void
   styles: ReturnType<typeof createStyles>
+  embedded?: boolean
 }) {
   const inner = <Text style={styles.todayLabel}>Today</Text>
-  const body =
-    liquidGlassAvailable && GlassView ? (
-      <GlassView style={styles.todayBtn} isInteractive glassEffectStyle="regular">
-        {inner}
-      </GlassView>
-    ) : (
-      <View style={[styles.todayBtn, styles.todayBtnFallback]}>{inner}</View>
-    )
+  const body = embedded ? (
+    <View style={[styles.todayBtn, styles.todayBtnEmbedded]}>{inner}</View>
+  ) : liquidGlassAvailable && GlassView ? (
+    <GlassView style={styles.todayBtn} isInteractive glassEffectStyle="regular">
+      {inner}
+    </GlassView>
+  ) : (
+    <View style={[styles.todayBtn, styles.todayBtnFallback]}>{inner}</View>
+  )
   return (
     <Pressable
       onPress={onPress}
@@ -508,8 +693,48 @@ const createStyles = (c: ListColorPalette) =>
       borderWidth: StyleSheet.hairlineWidth,
       borderColor: c.border,
     },
+    // Inside the regular-width glass header — bordered, surface-transparent.
+    todayBtnEmbedded: {
+      backgroundColor: 'transparent',
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
     todayLabel: { fontSize: t.fontSize.sm, fontWeight: '600', color: c.text },
     todayPressed: { opacity: 0.7 },
+
+    // ── Regular-width header — ONE glass row: segmented + Today + legend ──
+    headerWrapRegular: {
+      paddingHorizontal: t.spacing.md,
+      paddingTop: t.spacing.sm,
+      paddingBottom: t.spacing.xs,
+    },
+    headerCard: { borderRadius: 18, overflow: 'hidden' },
+    headerCardFallback: {
+      backgroundColor: c.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    headerRowRegular: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+      paddingHorizontal: t.spacing.sm,
+      paddingVertical: 6,
+    },
+    modePickerRegular: { width: HEADER_SEGMENT_WIDTH },
+    headerDivider: {
+      width: StyleSheet.hairlineWidth,
+      alignSelf: 'stretch',
+      marginVertical: t.spacing.xs,
+      backgroundColor: c.hairline,
+    },
+    legendScrollRegular: { flex: 1 },
+    legendRowRegular: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: t.spacing.sm,
+      paddingRight: t.spacing.sm,
+    },
 
     legendScroll: { flexGrow: 0 },
     legendRow: {
@@ -531,8 +756,49 @@ const createStyles = (c: ListColorPalette) =>
     chipDot: { width: 8, height: 8, borderRadius: 4 },
     chipDotHidden: { opacity: 0.35 },
     chipLabel: { fontSize: t.fontSize.xs, fontWeight: '600', color: c.text, maxWidth: 160 },
+    /** Text fallback for the legend check when lucide is unavailable. */
+    chipCheckGlyph: { fontSize: 11, fontWeight: '800', color: c.text, lineHeight: 12 },
 
     nativeMonth: { height: NATIVE_MONTH_HEIGHT, marginHorizontal: t.spacing.md },
+    // Regular width: the grid owns its split pane (pane provides the insets).
+    nativeMonthFill: { flex: 1 },
+
+    // ── Regular-width month split — full-height grid + right side panel ──
+    monthSplit: {
+      flex: 1,
+      flexDirection: 'row',
+      gap: t.spacing.md,
+      paddingHorizontal: t.spacing.md,
+      paddingTop: t.spacing.xs,
+      paddingBottom: t.spacing.md,
+    },
+    monthGridPane: { flex: 1 },
+    sidePanel: {
+      width: MONTH_SIDE_PANEL_WIDTH,
+      borderRadius: 18,
+      overflow: 'hidden',
+    },
+    sidePanelFallback: {
+      backgroundColor: c.card,
+      borderWidth: StyleSheet.hairlineWidth,
+      borderColor: c.border,
+    },
+    sidePanelHeader: {
+      fontSize: t.fontSize.sm,
+      fontWeight: '700',
+      color: c.textMuted,
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+      paddingHorizontal: t.spacing.lg,
+      paddingTop: t.spacing.lg,
+      paddingBottom: t.spacing.xs,
+    },
+    sidePanelList: { flex: 1 },
+    sidePanelContent: {
+      paddingHorizontal: t.spacing.md,
+      paddingBottom: t.spacing.lg,
+      gap: t.spacing.sm,
+    },
 
     dayListHeader: {
       fontSize: t.fontSize.sm,
@@ -580,6 +846,15 @@ const createStyles = (c: ListColorPalette) =>
       color: c.text,
     },
     nativeDay: { flex: 1 },
+    // Regular-width WEEK mode: comfortable timeline insets under the strip.
+    timelineInsetRegular: { flex: 1, paddingHorizontal: t.spacing.lg },
+    // Regular-width DAY mode: centred max-width column (nav + timeline).
+    dayCenterColumn: {
+      flex: 1,
+      width: '100%',
+      maxWidth: DAY_TIMELINE_MAX_WIDTH,
+      alignSelf: 'center',
+    },
 
     // ── All-day strip (fallback tier only) ──
     allDayRow: {
@@ -588,6 +863,11 @@ const createStyles = (c: ListColorPalette) =>
       gap: t.spacing.sm,
       paddingLeft: t.spacing.md,
       paddingVertical: t.spacing.xs,
+    },
+    // Regular-width week mode: align with the full-width strip's insets.
+    allDayRowRegular: {
+      paddingLeft: t.spacing.lg,
+      paddingVertical: t.spacing.sm,
     },
     allDayLabel: {
       fontSize: t.fontSize.xs,

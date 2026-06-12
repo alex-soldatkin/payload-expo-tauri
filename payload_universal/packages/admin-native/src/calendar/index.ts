@@ -13,12 +13,19 @@ export { CalendarEventRow, DayListFallback } from './DayListFallback'
 export type { CalendarEventRowProps, DayListFallbackProps } from './DayListFallback'
 export { WeekStrip } from './WeekStrip'
 export type { WeekStripProps } from './WeekStrip'
-export { calendarEventDocId, docsToCalendarEvents, pickDefaultSources } from './eventMapping'
+export {
+  calendarEventDocId,
+  collectionHasCalendarDateFields,
+  docsToCalendarEvents,
+  INTERNAL_DATE_FIELDS,
+  pickDefaultSources,
+} from './eventMapping'
 export type { CalendarFieldLike } from './eventMapping'
 export {
   addDaysToKey,
   buildEventsByDateKey,
   CALENDAR_COMPACT_WIDTH,
+  CALENDAR_REGULAR_WIDTH,
   DEFAULT_CALENDAR_PALETTE,
   eventOccursOnDate,
   formatEventTimeRange,
