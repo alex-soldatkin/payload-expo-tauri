@@ -1,5 +1,10 @@
 /**
- * Checkbox (Toggle/Switch) and Date fields.
+ * Checkbox (Toggle/Switch) and Date fields — canonical INLINE rows.
+ *
+ * Row contract (see shared/FieldShell.tsx): minHeight-44 row, label left
+ * (15pt regular), control/value right; NO field-owned borders, boxes or
+ * hairline separators (FormSection owns separators); errors/descriptions
+ * render below the row in 12pt, space reserved only when present.
  *
  * Uses @expo/ui native components when available (resolved per-platform
  * via shared/native.ios.ts / native.android.ts). Falls back to React
@@ -18,7 +23,7 @@ import {
 } from 'react-native'
 
 import type { ClientCheckboxField, ClientDateField, FieldComponentProps } from '../types'
-import { defaultTheme as t } from '../theme'
+import { defaultTheme as t, ROW_MIN_HEIGHT } from '../theme'
 import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
@@ -28,6 +33,13 @@ import { useListColors } from '../hooks/useListColors'
 // Checkbox
 // ---------------------------------------------------------------------------
 
+/**
+ * Native checkbox — intentionally BYPASSES FieldShell: the SwiftUI Toggle
+ * renders its own label-left / switch-right row, which already matches the
+ * canonical inline layout. The bypass still obeys the row contract: 44pt
+ * minimum row height, no borders/separators, dark-mode-aware captions below
+ * with space reserved only when present.
+ */
 const CheckboxFieldNative: React.FC<FieldComponentProps<ClientCheckboxField>> = ({
   field,
   value,
@@ -37,20 +49,25 @@ const CheckboxFieldNative: React.FC<FieldComponentProps<ClientCheckboxField>> = 
 }) => {
   const Toggle = nativeComponents.Toggle!
   const isDisabled = disabled || field.admin?.readOnly
+  const { colors: c } = useListColors()
+  const description = getFieldDescription(field)
+  const hasCaption = Boolean(description) || Boolean(error)
 
   return (
-    <View style={fieldShellStyles.container}>
-      <NativeHost>
-        <Toggle
-          isOn={Boolean(value)}
-          label={getFieldLabel(field)}
-          onIsOnChange={(isOn) => { if (!isDisabled) onChange(isOn) }}
-        />
-      </NativeHost>
-      {getFieldDescription(field) && (
-        <Text style={fieldShellStyles.description}>{getFieldDescription(field)}</Text>
-      )}
-      {error && <Text style={fieldShellStyles.error}>{error}</Text>}
+    <View style={hasCaption ? styles.checkboxContainerWithCaption : null}>
+      <View style={styles.checkboxRow}>
+        <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
+          <Toggle
+            isOn={Boolean(value)}
+            label={`${getFieldLabel(field)}${field.required ? ' *' : ''}`}
+            onIsOnChange={(isOn) => { if (!isDisabled) onChange(isOn) }}
+          />
+        </NativeHost>
+      </View>
+      {description ? (
+        <Text style={[styles.caption, { color: c.textPlaceholder }]}>{description}</Text>
+      ) : null}
+      {error ? <Text style={[styles.captionError, { color: c.error }]}>{error}</Text> : null}
     </View>
   )
 }
@@ -122,15 +139,25 @@ const DateFieldNative: React.FC<FieldComponentProps<ClientDateField>> = ({
     if (!isDisabled) onChange(date.toISOString())
   }, [isDisabled, onChange])
 
+  // Compact style → the iOS Settings capsule pickers. Modifiers are FACTORY
+  // CALLS from the registry, null-checked (never object literals).
+  const pickerModifiers = nativeComponents.datePickerStyle
+    ? [nativeComponents.datePickerStyle('compact')]
+    : undefined
+
   return (
     <FieldShell label={label} description={description} required={field.required} error={error}>
-      <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
-        <DatePicker
-          selection={validDate}
-          displayedComponents={getDisplayedComponents(field.admin?.date?.pickerAppearance)}
-          onDateChange={handleDateChange}
-        />
-      </NativeHost>
+      {/* Inline row: the content-sized native picker hugs the right edge. */}
+      <View style={styles.dateControl}>
+        <NativeHost style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
+          <DatePicker
+            selection={validDate}
+            displayedComponents={getDisplayedComponents(field.admin?.date?.pickerAppearance)}
+            onDateChange={handleDateChange}
+            modifiers={pickerModifiers}
+          />
+        </NativeHost>
+      </View>
     </FieldShell>
   )
 }
@@ -243,12 +270,14 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
       required={field.required}
       error={error}
     >
+      {/* Borderless inline value row — value text right-aligned; the error
+          surfaces via FieldShell below the row (no border/box treatment). */}
       <Pressable
-        style={[styles.dateButton, { backgroundColor: c.card, borderColor: c.border }, error && { borderColor: c.error }]}
+        style={styles.dateValueRow}
         onPress={() => !disabled && handleOpen()}
         disabled={disabled || field.admin?.readOnly}
       >
-        <Text style={[styles.dateText, { color: c.text }, !displayValue && { color: c.textPlaceholder }]}>
+        <Text style={[styles.dateText, { color: displayValue ? c.text : c.textPlaceholder }]}>
           {displayValue ?? 'Select date...'}
         </Text>
       </Pressable>
@@ -297,18 +326,27 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  // Native checkbox bypass — canonical inline row metrics; captions reserve
+  // space below ONLY when present (no layout jump), mirroring FieldShell.
+  checkboxRow: { minHeight: ROW_MIN_HEIGHT, justifyContent: 'center' },
+  checkboxContainerWithCaption: { paddingBottom: 10 },
+  caption: { fontSize: 12, marginTop: 2 },
+  captionError: { fontSize: 12, marginTop: 4 },
+
   // Checkbox fallback — switch aligned right in the inline row
   checkboxInline: { alignItems: 'flex-end' },
 
-  // Date fallback
-  dateButton: {
-    borderWidth: 1, borderColor: t.colors.border, borderRadius: t.borderRadius.sm,
-    paddingHorizontal: t.spacing.md, paddingVertical: t.spacing.sm + 2,
-    backgroundColor: t.colors.surface,
+  // Native date — content-sized picker hugging the row's right edge
+  dateControl: { alignItems: 'flex-end' },
+
+  // Date fallback — borderless inline value row, right-aligned (44pt tap
+  // target; the FieldShell inline row supplies label/error chrome)
+  dateValueRow: {
+    minHeight: ROW_MIN_HEIGHT,
+    justifyContent: 'center',
+    alignItems: 'flex-end',
   },
-  dateButtonError: { borderColor: t.colors.error },
-  dateText: { fontSize: t.fontSize.md, color: t.colors.text },
-  datePlaceholder: { color: t.colors.textPlaceholder },
+  dateText: { fontSize: t.fontSize.md, textAlign: 'right' },
 
   // Modal picker
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)' },
@@ -326,11 +364,9 @@ const styles = StyleSheet.create({
   pickerTitle: { fontSize: t.fontSize.sm, fontWeight: '600', color: t.colors.text },
   pickerDone: { fontSize: t.fontSize.md, fontWeight: '700', color: t.colors.primary },
 
-  // Wheel columns
+  // Wheel columns (selected-state colours are injected inline via useListColors)
   wheelRow: { flexDirection: 'row', height: 200, paddingHorizontal: t.spacing.sm },
   wheelColumn: { flex: 1 },
   wheelItem: { height: 40, justifyContent: 'center', alignItems: 'center' },
-  wheelItemSelected: { backgroundColor: 'rgba(0,0,0,0.05)', borderRadius: 8 },
   wheelText: { fontSize: t.fontSize.md, color: t.colors.textMuted },
-  wheelTextSelected: { fontWeight: '700', color: t.colors.text },
 })

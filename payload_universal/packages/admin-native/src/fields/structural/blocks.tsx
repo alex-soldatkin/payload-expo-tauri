@@ -24,7 +24,7 @@ import {
 } from 'react-native'
 
 import type { ClientBlocksField, FieldComponentProps } from '../../types'
-import { defaultTheme as t } from '../../theme'
+import { CONTENT_INSET, defaultTheme as t, ROW_MIN_HEIGHT } from '../../theme'
 import { getFieldLabel } from '../../utils/schemaHelpers'
 import { nativeComponents, useIsInsideNativeForm } from '../shared'
 import { BottomSheet } from '../../BottomSheet'
@@ -40,6 +40,7 @@ import {
   renderSubFieldsWithWidth,
   resolveI18nText,
   RowActionsMenu,
+  SubFieldRows,
   usePalette,
   useCompactFields,
   useRenderField,
@@ -313,7 +314,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
           onSubmitEditing={() => setEditingNameIndex(null)}
           placeholder={`${blockLabel} ${String(index + 1).padStart(2, '0')}`}
           placeholderTextColor={palette.textFaint}
-          style={[styles.blockNameInput, { color: palette.text, borderBottomColor: palette.separator }]}
+          style={[styles.blockNameInput, { color: palette.text }]}
           autoFocus
           returnKeyType="done"
         />
@@ -351,7 +352,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
           {getFieldLabel(field)}
           {field.required && <Text style={{ color: t.colors.error }}> *</Text>}
         </Text>
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={[styles.error, { color: palette.destructive }]}>{error}</Text>}
         {items.map((item, index) => {
           const block = blocks.find((b) => b.slug === item.blockType)
           return (
@@ -405,7 +406,7 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
           )
         )}
       </View>
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[styles.error, { color: palette.destructive }]}>{error}</Text>}
 
       {/* Each block card wraps in SwipeToDeleteRow: swipe-left reveals Remove
           with a destructive confirm. minRows keeps the gesture but blocks the
@@ -431,7 +432,9 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
             </View>
             {expanded && (
               <View key={`g${generation}`} style={styles.rowBody}>
-                {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`, compact)}
+                <SubFieldRows>
+                  {renderSubFieldsWithWidth(block?.fields ?? [], (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `blk-${index}`, compact)}
+                </SubFieldRows>
               </View>
             )}
           </>
@@ -478,7 +481,8 @@ export const BlocksField: React.FC<FieldComponentProps<ClientBlocksField>> = ({
 
 const styles = StyleSheet.create({
   container: { marginBottom: t.spacing.xs },
-  error: { fontSize: 12, color: t.colors.error, marginTop: 2 },
+  // Colour injected at render (palette.destructive) — dark-mode aware.
+  error: { fontSize: 12, marginTop: 2 },
 
   // Field header
   blocksHeader: {
@@ -489,7 +493,14 @@ const styles = StyleSheet.create({
     marginTop: t.spacing.sm,
     gap: t.spacing.sm,
   },
-  fieldLabel: { fontSize: t.fontSize.sm, fontWeight: '600' },
+  // Section-header style (matches FormSection title chrome) — blocks are a
+  // sub-section: header above the block cards at the grid the section provides.
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   blockCount: { fontSize: 12, marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
   glassHeaderActions: {
@@ -503,17 +514,17 @@ const styles = StyleSheet.create({
   },
   headerAction: { fontSize: t.fontSize.sm, fontWeight: '500' },
 
-  // Block row cards
+  // Block row cards — the card keeps its glass/border tier but owns NO
+  // horizontal padding: the header row and SubFieldRows rows carry the
+  // canonical CONTENT_INSET so inner separators inset like FormSection's.
   rowCard: {
     borderRadius: t.borderRadius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: t.spacing.sm,
     paddingVertical: 2,
     marginBottom: t.spacing.xs,
   },
   glassRowCard: {
     borderRadius: t.borderRadius.md,
-    paddingHorizontal: t.spacing.sm,
     paddingVertical: 2,
     marginBottom: t.spacing.xs,
     overflow: 'hidden',
@@ -523,20 +534,27 @@ const styles = StyleSheet.create({
   rowSwipeWrap: { marginBottom: t.spacing.xs },
   rowCardInSwipe: { marginBottom: 0 },
   rowSwipeAction: { borderRadius: t.borderRadius.md },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 44, gap: t.spacing.xs },
+  rowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: ROW_MIN_HEIGHT,
+    gap: t.spacing.xs,
+    paddingHorizontal: CONTENT_INSET,
+  },
   rowHeaderPress: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   rowChevron: { fontSize: 13, width: 14, textAlign: 'center' },
   rowTitleArea: { flex: 1 },
   blockTypeLabel: { fontSize: 10, fontWeight: '600', letterSpacing: 0.5 },
   blockName: { fontSize: t.fontSize.md, fontWeight: '500', marginTop: 1 },
   blockNameEditHint: { fontSize: 11, fontWeight: '400' },
+  // Borderless inline edit affordance — field-owned hairlines are forbidden
+  // (the header row supplies the affordance; no underline box).
   blockNameInput: {
     fontSize: t.fontSize.md,
     fontWeight: '500',
     paddingVertical: 2,
     paddingHorizontal: 0,
     marginTop: 1,
-    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   rowBody: { paddingBottom: t.spacing.sm },
   removeText: { fontSize: t.fontSize.sm },

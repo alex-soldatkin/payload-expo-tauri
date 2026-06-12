@@ -36,7 +36,7 @@ import { usePayloadNative } from '../../PayloadNativeProvider'
 import { payloadApi } from '../../utils/api'
 import { PreviewContextProvider, useIsInsidePreview } from '../../contexts/PreviewContext'
 import { useScrollablePreview } from '../../contexts/ScrollablePreviewContext'
-import { FieldShell } from '../shared'
+import { FieldShell, ROW_MIN_HEIGHT } from '../shared'
 import {
   LucideIcon,
   docDisplayTitle,
@@ -566,7 +566,9 @@ export const RelationshipField: React.FC<RelationshipFieldProps> = ({
         const isPeekOpen = peekRow?.key === rowKey
         const peekSchemaMap = schema?.collections?.[it.relationTo]
         return (
-          <View key={rowKey} style={[styles.valueRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.separator }]}>
+          // Borderless value row (row contract: NO field-owned hairlines —
+          // FormSection is the only separator owner). 44pt min tap target.
+          <View key={rowKey} style={styles.valueRow}>
             <View style={styles.valueMainWrap}>
               {canPeek ? (
                 <nativePeek.Trigger
@@ -777,7 +779,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
-    paddingVertical: t.spacing.sm + 2,
+    minHeight: ROW_MIN_HEIGHT,
   },
   // Peek trigger wrapper — fills the row width left of the action buttons
   valueMainWrap: { flex: 1 },
@@ -801,7 +803,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.xs,
-    paddingVertical: t.spacing.sm + 2,
+    minHeight: ROW_MIN_HEIGHT,
   },
   addText: { fontSize: t.fontSize.sm, fontWeight: '500' },
   minHint: { fontSize: t.fontSize.xs, marginTop: 2 },

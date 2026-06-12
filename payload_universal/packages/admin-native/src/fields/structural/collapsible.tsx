@@ -1,7 +1,14 @@
 /**
- * Collapsible field — native SwiftUI Section (inside a Form) or
- * DisclosureGroup (standalone), falling back to a LayoutAnimation-based
- * custom collapsible.
+ * Collapsible field — canonical sub-section chrome: the toggle header sits
+ * OUTSIDE/above the body card in the section-header style (uppercase 12pt
+ * muted at the 16pt inset) and stays tappable; the expanded body is one card
+ * (GlassView on iOS 26+, subtle fill otherwise) whose field list uses the
+ * FormSection separator system via SubFieldRows. The collapsible draws no
+ * hairlines of its own — FormSection separates it from sibling rows.
+ *
+ * Native tiers: SwiftUI Section (inside a Form — dormant opt-in path) or
+ * DisclosureGroup as the header affordance, falling back to a
+ * LayoutAnimation-based custom header.
  *
  * Error counts render as a badge wherever the header is a custom layout.
  * Native Section / DisclosureGroup labels are plain strings, so the count
@@ -13,7 +20,7 @@ import React, { useRef, useState } from 'react'
 import { Animated, LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { ClientCollapsibleField, FieldComponentProps } from '../../types'
-import { defaultTheme as t } from '../../theme'
+import { CONTENT_INSET, defaultTheme as t } from '../../theme'
 import { getFieldDescription, getFieldLabel } from '../../utils/schemaHelpers'
 import { nativeComponents, useIsInsideNativeForm } from '../shared'
 import { NativeHost } from '../NativeHost'
@@ -22,6 +29,7 @@ import {
   GlassView,
   liquidGlassAvailable,
   renderSubFieldsWithWidth,
+  SubFieldRows,
   subPath,
   useCompactFields,
   useErrorCountForFields,
@@ -29,6 +37,24 @@ import {
   useRenderField,
   withErrorSuffix,
 } from './common'
+
+/** Expanded body card — glass on iOS 26+, subtle fill otherwise. Rows render
+ *  through SubFieldRows (canonical inset + separators between rows only). */
+const CollapsibleBody: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const palette = usePalette()
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <GlassView style={styles.card} glassEffectStyle="regular">
+        <SubFieldRows>{children}</SubFieldRows>
+      </GlassView>
+    )
+  }
+  return (
+    <View style={[styles.card, { backgroundColor: palette.cardBg }]}>
+      <SubFieldRows>{children}</SubFieldRows>
+    </View>
+  )
+}
 
 const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleField>> = ({
   field, path,
@@ -63,24 +89,21 @@ const CollapsibleFieldNative: React.FC<FieldComponentProps<ClientCollapsibleFiel
     )
   }
 
-  // ── Standalone: DisclosureGroup with custom container ──
-  const Glass = liquidGlassAvailable ? GlassView : null
-  const Container = Glass
-    ? ({ children }: any) => <Glass style={styles.glassContainer} glassEffectStyle="regular">{children}</Glass>
-    : ({ children }: any) => <View style={[styles.container, { borderTopColor: palette.separator }]}>{children}</View>
-
+  // ── Standalone: DisclosureGroup header OUTSIDE the body card ──
   return (
-    <Container>
+    <View style={styles.wrapper}>
       <NativeHost>
         <DisclosureGroup label={label} isExpanded={expanded} onIsExpandedChange={setExpanded} />
       </NativeHost>
       {expanded && (
-        <View style={styles.body}>
-          {description && <Text style={[styles.desc, { color: palette.textFaint }]}>{description}</Text>}
-          {renderedFields}
-        </View>
+        <>
+          <CollapsibleBody>{renderedFields}</CollapsibleBody>
+          {description ? (
+            <Text style={[styles.desc, { color: palette.textFaint }]}>{description}</Text>
+          ) : null}
+        </>
       )}
-    </Container>
+    </View>
   )
 }
 
@@ -123,20 +146,17 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
     )
   }
 
-  // ── Fallback: custom animated collapsible (error count = badge, not text) ──
-  const Glass = liquidGlassAvailable ? GlassView : null
-  const Wrapper = Glass
-    ? ({ children, style }: any) => <Glass style={[styles.glassContainer, style]} glassEffectStyle="regular">{children}</Glass>
-    : ({ children, style }: any) => <View style={[styles.container, { borderTopColor: palette.separator }, style]}>{children}</View>
-
+  // ── Fallback: tappable section-style header OUTSIDE the body card ──
   return (
-    <Wrapper>
+    <View style={styles.wrapper}>
       <Pressable
         style={({ pressed }) => [styles.header, pressed && styles.headerPressed]}
         onPress={toggle}
       >
         <View style={styles.headerContent}>
-          <Text style={[styles.title, { color: palette.text }]}>{getFieldLabel(field)}</Text>
+          <Text style={[styles.title, { color: palette.textMuted }]}>
+            {getFieldLabel(field).toUpperCase()}
+          </Text>
           {!expanded && description && (
             <Text style={[styles.hint, { color: palette.textFaint }]} numberOfLines={1}>{description}</Text>
           )}
@@ -147,12 +167,14 @@ const CollapsibleFieldFallback: React.FC<FieldComponentProps<ClientCollapsibleFi
         </Animated.Text>
       </Pressable>
       {expanded && (
-        <View style={styles.body}>
-          {description && <Text style={[styles.desc, { color: palette.textFaint }]}>{description}</Text>}
-          {renderedFields}
-        </View>
+        <>
+          <CollapsibleBody>{renderedFields}</CollapsibleBody>
+          {description ? (
+            <Text style={[styles.desc, { color: palette.textFaint }]}>{description}</Text>
+          ) : null}
+        </>
       )}
-    </Wrapper>
+    </View>
   )
 }
 
@@ -162,27 +184,39 @@ export const CollapsibleField: React.FC<FieldComponentProps<ClientCollapsibleFie
     : <CollapsibleFieldFallback {...props} />
 
 const styles = StyleSheet.create({
-  container: {
+  wrapper: {
     marginTop: t.spacing.xs,
     marginBottom: t.spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  glassContainer: {
-    marginBottom: t.spacing.xs,
-    borderRadius: t.borderRadius.md,
+  // One card per expanded body — no borders, SubFieldRows owns separators.
+  card: {
+    borderRadius: 10,
     overflow: 'hidden',
   },
+  // Tappable header in the section-header style (uppercase 12pt muted at the
+  // card's 16pt inset) with chevron + error badge.
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
-    minHeight: 44,
+    paddingHorizontal: CONTENT_INSET,
+    paddingVertical: t.spacing.sm,
+    minHeight: 36,
   },
   headerPressed: { opacity: 0.6 },
   headerContent: { flex: 1 },
-  title: { fontSize: t.fontSize.md, fontWeight: '500' },
+  title: {
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '400',
+  },
   hint: { fontSize: 12, marginTop: 1 },
   chevron: { fontSize: 16, fontWeight: '600', marginLeft: t.spacing.xs },
-  body: { paddingTop: 2, paddingBottom: t.spacing.sm },
-  desc: { fontSize: 12, marginTop: 1, marginBottom: t.spacing.xs },
+  // Footer below the card at the same inset (FormSection footer chrome).
+  desc: {
+    fontSize: 12,
+    paddingHorizontal: CONTENT_INSET,
+    paddingTop: t.spacing.sm,
+    lineHeight: 12 * 1.4,
+  },
 })

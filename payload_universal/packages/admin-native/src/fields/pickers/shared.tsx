@@ -14,7 +14,7 @@
 import React, { useEffect, useState } from 'react'
 import { Pressable, StyleSheet, Text, View, useColorScheme } from 'react-native'
 
-import { defaultTheme as t } from '../../theme'
+import { defaultTheme as t, ROW_MIN_HEIGHT } from '../../theme'
 
 // ---------------------------------------------------------------------------
 // Optional dependencies (guarded — must not crash in Expo Go)
@@ -82,6 +82,9 @@ export type PickerPalette = {
   primary: string
   primaryText: string
   destructive: string
+  /** Subtle fill for borderless sub-lists / tiles (iOS systemFill equivalent —
+   *  matches useInputColors().fill so picker chrome and input chrome agree). */
+  fill: string
 }
 
 export const usePickerPalette = (): PickerPalette => {
@@ -99,6 +102,7 @@ export const usePickerPalette = (): PickerPalette => {
         primary: '#ffffff',
         primaryText: '#000000',
         destructive: '#ff453a',
+        fill: 'rgba(120,120,128,0.28)',
       }
     : {
         dark,
@@ -112,6 +116,7 @@ export const usePickerPalette = (): PickerPalette => {
         primary: t.colors.primary,
         primaryText: t.colors.primaryText,
         destructive: t.colors.destructive,
+        fill: 'rgba(120,120,128,0.12)',
       }
 }
 
@@ -348,11 +353,13 @@ export const sharedStyles = StyleSheet.create({
     paddingVertical: t.spacing.xs + 2,
   },
 
+  // Canonical option rows: 44pt min tap target, 16pt labels (stacked-row
+  // input text size). NO hairlines — FormSection owns separators.
   radioRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
-    paddingVertical: t.spacing.sm + 2,
+    minHeight: ROW_MIN_HEIGHT,
   },
   radioOuter: {
     width: 20,
@@ -363,7 +370,7 @@ export const sharedStyles = StyleSheet.create({
     justifyContent: 'center',
   },
   radioInner: { width: 10, height: 10, borderRadius: 5 },
-  radioLabel: { fontSize: t.fontSize.md, flexShrink: 1 },
+  radioLabel: { fontSize: 16, flexShrink: 1 },
 
   sheetTitle: { fontSize: t.fontSize.lg, fontWeight: '700', marginBottom: t.spacing.md },
   optionRow: {

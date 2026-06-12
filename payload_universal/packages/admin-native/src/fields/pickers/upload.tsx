@@ -34,7 +34,7 @@ import { getFieldDescription, getFieldLabel } from '../../utils/schemaHelpers'
 import { BottomSheet } from '../../BottomSheet'
 import { usePayloadNative } from '../../PayloadNativeProvider'
 import { payloadApi } from '../../utils/api'
-import { FieldShell } from '../shared'
+import { FieldShell, ROW_MIN_HEIGHT } from '../shared'
 import {
   LucideIcon,
   type PickerPalette,
@@ -554,9 +554,11 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
     const sizeLabel = doc ? formatFileSize(doc.filesize) : null
     const mime = doc ? String(doc.mimeType ?? '') : ''
 
+    // Borderless value row (row contract: the field adds NO card borders —
+    // FormSection owns the card; FieldShell owns the label).
     return (
       <Pressable
-        style={[styles.fileRow, { borderColor: palette.border, backgroundColor: palette.surface }]}
+        style={styles.fileRow}
         onPress={() => { if (!isDisabled && !uploading) openSheet() }}
         disabled={isDisabled || uploading}
       >
@@ -610,7 +612,7 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
         })}
         {!isDisabled && !maxReached && (
           <Pressable
-            style={[styles.addTile, { borderColor: palette.border }]}
+            style={[styles.addTile, { backgroundColor: palette.fill }]}
             onPress={() => !uploading && openSheet()}
             disabled={uploading}
           >
@@ -626,22 +628,28 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
     </View>
   )
 
+  // Empty state — plain tappable muted row (no dashed boxes; mirrors the
+  // relationship single-trigger pattern so empty pickers align row-to-row).
   const renderEmptySingle = () => (
     <Pressable
-      style={[styles.uploadButton, { borderColor: palette.separator }]}
+      style={styles.emptyRow}
       onPress={() => { if (!isDisabled && !uploading) openSheet() }}
       disabled={isDisabled || uploading}
     >
       {uploading ? (
-        <View style={styles.uploadPlaceholder}>
+        <>
           <ActivityIndicator size="small" />
-          <Text style={[styles.uploadHint, { color: palette.textMuted }]}>{`Uploading ${uploadingName ?? 'file'}...`}</Text>
-        </View>
+          <Text style={[styles.emptyText, { color: palette.textMuted }]} numberOfLines={1}>
+            {`Uploading ${uploadingName ?? 'file'}...`}
+          </Text>
+        </>
       ) : (
-        <View style={styles.uploadPlaceholder}>
-          <LucideIcon name="Upload" size={22} color={palette.textMuted} />
-          <Text style={[styles.uploadHint, { color: palette.textMuted }]}>{`Tap to add from ${relationTo}`}</Text>
-        </View>
+        <>
+          <Text style={[styles.emptyText, { color: palette.placeholder }]} numberOfLines={1}>
+            {`Add from ${relationTo}...`}
+          </Text>
+          <Text style={[styles.chevron, { color: palette.textMuted }]}>›</Text>
+        </>
       )}
     </Pressable>
   )
@@ -750,13 +758,15 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
 
   const sheetHeight = mode === 'actions' ? 0.38 : mode === 'focal' ? 0.75 : 0.8
 
+  // Row contract: single upload is an INLINE row (label left, value row as
+  // the control); hasMany keeps its thumbnail strip under a STACKED label.
   return (
     <FieldShell
       label={getFieldLabel(field)}
       description={getFieldDescription(field)}
       required={field.required}
       error={error || uploadError || undefined}
-      layout="stacked"
+      layout={hasMany ? 'stacked' : 'inline'}
     >
       {hasMany
         ? renderManyValue()
@@ -793,14 +803,17 @@ export const UploadField: React.FC<FieldComponentProps<ClientUploadField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  uploadButton: {
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: t.borderRadius.sm,
-    borderStyle: 'dashed',
-    padding: t.spacing.md,
-    backgroundColor: 'transparent',
+  // Empty single value — plain tappable muted row, NO dashed/bordered boxes
+  // (row contract). Mirrors the relationship single-trigger metrics.
+  emptyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: t.spacing.sm,
+    minHeight: ROW_MIN_HEIGHT,
   },
-  uploadPlaceholder: { alignItems: 'center', gap: t.spacing.xs },
+  emptyText: { flex: 1, fontSize: t.fontSize.md },
+  chevron: { fontSize: 18, marginLeft: t.spacing.xs },
+
   uploadHint: { fontSize: t.fontSize.sm },
   uploadingRow: {
     flexDirection: 'row',
@@ -809,13 +822,14 @@ const styles = StyleSheet.create({
     paddingVertical: t.spacing.xs,
   },
 
+  // Single value row — borderless, no background, no horizontal inset (the
+  // FormSection row provides the 16pt grid). minHeight ≥ 44.
   fileRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.md,
-    padding: t.spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderRadius: t.borderRadius.md,
+    minHeight: ROW_MIN_HEIGHT,
+    paddingVertical: t.spacing.xs,
   },
   fileInfo: { flex: 1, gap: 2 },
   fileName: { fontSize: t.fontSize.md, fontWeight: '600' },
@@ -836,12 +850,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // Fill-bg add tile — dashed borders are forbidden by the row contract;
+  // backgroundColor comes from palette.fill at render.
   addTile: {
     width: 84,
     height: 84,
     borderRadius: t.borderRadius.sm,
-    borderWidth: 1,
-    borderStyle: 'dashed',
     alignItems: 'center',
     justifyContent: 'center',
   },

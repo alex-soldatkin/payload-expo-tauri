@@ -91,7 +91,11 @@ export const TabsField: React.FC<FieldComponentProps<ClientTabsField>> = ({
 }
 
 const styles = StyleSheet.create({
-  tabsContainer: { marginBottom: t.spacing.xs },
-  tabsNested: { marginBottom: 2, marginTop: 2 },
+  // The tab bar spans the full row width at the canonical 16pt grid (the
+  // enclosing FormSection row / carve-out container provides the inset; the
+  // bar adds NO horizontal margins of its own). Vertical padding gives the
+  // bar breathing room against the section separator above.
+  tabsContainer: { paddingTop: t.spacing.sm, marginBottom: t.spacing.xs },
+  tabsNested: { paddingTop: 0, marginBottom: 2, marginTop: 2 },
   tabContent: { paddingTop: 4 },
 })

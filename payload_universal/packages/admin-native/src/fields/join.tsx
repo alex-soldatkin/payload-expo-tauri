@@ -469,8 +469,6 @@ export const JoinField: React.FC<FieldComponentProps<ClientJoinField>> = ({
 
 const createStyles = (c: ListColorPalette) => StyleSheet.create({
   container: {
-    borderWidth: 1,
-    borderColor: c.border,
     borderRadius: t.borderRadius.sm,
     backgroundColor: c.card,
     overflow: 'hidden',

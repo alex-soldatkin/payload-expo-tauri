@@ -1,22 +1,31 @@
 /**
- * FormSection — iOS Settings-style grouped inset form section.
+ * FormSection — iOS Settings-style grouped inset form section, and the ONLY
+ * separator owner in the form system.
  *
- * Replicates the visual appearance of a SwiftUI Form > Section using pure
- * React Native Views (+ GlassView on iOS 26+ when available). Works with
- * all field types including richText, tables, and arrays — no native
- * SwiftUI dependencies required.
+ * ─────────────────────────── SECTION CONTRACT ───────────────────────────
+ *   - One glass card per section (GlassView on iOS 26+, surface View
+ *     otherwise), cornerRadius 10, overflow hidden.
+ *   - Every child renders inside a row with the canonical CONTENT_INSET
+ *     (16pt) left/right — children add NO horizontal inset of their own.
+ *   - Rows have a ROW_MIN_HEIGHT (44pt) floor with centered content so
+ *     short/legacy controls still form a clean tappable row.
+ *   - Hairline separators are drawn BETWEEN children only — never after the
+ *     last child, never for a single child — inset CONTENT_INSET from the
+ *     left, flush on the right. Children must render ZERO borderBottom /
+ *     hairlines of their own (FieldShell enforces this for field chrome).
+ *   - `title` renders OUTSIDE/above the card: uppercase 12pt muted at the
+ *     CONTENT_INSET so it aligns with row content. `footer` renders below
+ *     the card at the same inset.
+ *   - A single-child section is one clean rounded row (no separators).
  *
- * Visual style:
- *   - Rounded corner group container (cornerRadius 10)
- *   - White/surface background (or liquid glass on iOS 26+)
- *   - Hairline separators between rows, inset 16px from the left
- *   - Small uppercase muted header above the group
- *   - Small muted footer below the group
+ * Callers must not pass children that render as zero-height placeholders —
+ * filter hidden/conditional fields BEFORE the section so separators and row
+ * minimums never wrap empty rows (DocumentForm filters admin.hidden fields).
  */
 import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { defaultTheme as t } from './theme'
+import { CONTENT_INSET, defaultTheme as t, ROW_MIN_HEIGHT } from './theme'
 import { useListColors } from './hooks/useListColors'
 
 // ---------------------------------------------------------------------------
@@ -37,9 +46,9 @@ try {
 // ---------------------------------------------------------------------------
 
 export type FormSectionProps = {
-  /** Section header text (rendered uppercase above the group) */
+  /** Section header text (uppercase, above the card at the 16pt inset) */
   title?: string
-  /** Section footer text (rendered small below the group) */
+  /** Section footer text (small muted, below the card at the 16pt inset) */
   footer?: string
   /** Children are the form rows */
   children: React.ReactNode
@@ -53,10 +62,12 @@ export function FormSection({ title, footer, children }: FormSectionProps) {
   // Dark-mode aware tokens (never hardcode the light palette)
   const { colors: c } = useListColors()
 
-  // Flatten children and filter out nulls so separators land correctly
+  // Flatten children and drop null/false renders so separators land
+  // BETWEEN real rows only (conditionally hidden fields return null).
   const validChildren = React.Children.toArray(children).filter(Boolean)
 
-  // Build rows with hairline separators between them
+  // Build rows with hairline separators strictly between them — never after
+  // the last child, never for a single child.
   const rows: React.ReactNode[] = []
   validChildren.forEach((child, index) => {
     rows.push(
@@ -78,17 +89,17 @@ export function FormSection({ title, footer, children }: FormSectionProps) {
 
   return (
     <View style={styles.wrapper}>
-      {/* ── Section header ── */}
+      {/* ── Section header (outside/above the card) ── */}
       {title ? <Text style={[styles.title, { color: c.textMuted }]}>{title.toUpperCase()}</Text> : null}
 
-      {/* ── Grouped container ── */}
+      {/* ── Grouped glass card ── */}
       {useGlass ? (
         React.createElement(GlassView as React.ComponentType<any>, { style: styles.glassContainer, glassEffectStyle: 'regular' }, groupContent)
       ) : (
         <View style={[styles.container, { backgroundColor: c.card }]}>{groupContent}</View>
       )}
 
-      {/* ── Section footer ── */}
+      {/* ── Section footer (below the card) ── */}
       {footer ? <Text style={[styles.footer, { color: c.textMuted }]}>{footer}</Text> : null}
     </View>
   )
@@ -105,24 +116,22 @@ const styles = StyleSheet.create({
 
   // -- Header / footer text --------------------------------------------------
   title: {
-    fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    fontSize: 12,
     letterSpacing: 0.5,
-    paddingHorizontal: t.spacing.lg + 4, // align with row text + container inset
+    textTransform: 'uppercase',
+    paddingHorizontal: CONTENT_INSET, // aligns with row content inside the card
     paddingBottom: t.spacing.sm,
     fontWeight: '400',
   },
   footer: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
-    paddingHorizontal: t.spacing.lg + 4,
+    paddingHorizontal: CONTENT_INSET,
     paddingTop: t.spacing.sm,
     lineHeight: t.fontSize.xs * 1.4,
   },
 
   // -- Group container -------------------------------------------------------
   container: {
-    backgroundColor: t.colors.surface,
     borderRadius: 10,
     overflow: 'hidden',
   },
@@ -132,13 +141,16 @@ const styles = StyleSheet.create({
   },
 
   // -- Row & separator -------------------------------------------------------
+  // The row owns the canonical horizontal inset; vertical rhythm comes from
+  // FieldShell (inline minHeight 44 / stacked padding). The minHeight floor +
+  // centering keeps short/legacy controls forming a clean 44pt row.
   row: {
-    paddingHorizontal: t.spacing.lg,
-    paddingVertical: t.spacing.md,
+    paddingHorizontal: CONTENT_INSET,
+    minHeight: ROW_MIN_HEIGHT,
+    justifyContent: 'center',
   },
   separator: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: t.colors.separator,
-    marginLeft: t.spacing.lg, // inset from left, flush on right
+    marginLeft: CONTENT_INSET, // inset from left, flush on right
   },
 })

@@ -1,19 +1,46 @@
 /**
- * Shared field wrapper — uses native SwiftUI LabeledContent when available,
- * falls back to a custom inline/stacked layout otherwise.
+ * FieldShell — THE canonical row chrome for every field component.
  *
- * When inside a SwiftUI Form (via NativeFormContext), fields automatically
- * get the iOS Mail/Settings appearance: label left, value right, native
- * separators, grouped table rows.
+ * ───────────────────────────── ROW CONTRACT ─────────────────────────────
+ * FieldShell renders ALL label / description / error chrome. A field
+ * component passes its CONTROL as children and renders NOTHING else:
  *
- * Two layouts:
- *   'inline' (default) — label left, input right.
- *   'stacked' — label above, input below (multiline fields).
+ *   - NO labels of its own (FieldShell owns the label).
+ *   - NO borderBottom / hairline separators (FormSection is the ONLY
+ *     separator owner — it draws 16pt-inset hairlines BETWEEN rows).
+ *   - NO outer borders/boxes. textarea/code/json may keep a subtle filled
+ *     background (rounded-8) WITHOUT borders.
+ *
+ * Two layouts (constants from theme: CONTENT_INSET, ROW_MIN_HEIGHT,
+ * INLINE_ROW_GAP, STACKED_LABEL_GAP):
+ *
+ *   'inline' (default) — checkbox/toggle, date, single select, stepper
+ *     number, relationship/upload value rows. minHeight 44pt, label left
+ *     (15pt regular, colors.text), control/value right, 12pt gap.
+ *
+ *   'stacked' — text, email, textarea, code, json, point, hasMany chips.
+ *     11pt uppercase muted label (letterSpacing 0.4), 4pt gap to the
+ *     input; input text 16pt (the control's concern).
+ *
+ * Horizontal inset: NONE here — the enclosing FormSection row provides the
+ * 16pt CONTENT_INSET, so label and control automatically share the grid.
+ *
+ * Errors render under the row in colors.error at 12pt; space is reserved
+ * via marginTop ONLY when an error is present (no layout jump otherwise).
+ *
+ * When inside a SwiftUI Form (NativeFormContext — OPT-IN nativeForm path,
+ * dormant), fields use native LabeledContent / Text captions instead; the
+ * Form supplies separators and grouping.
  */
 import React, { createContext, useContext } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
-import { defaultTheme as t } from '../../theme'
+import {
+  defaultTheme as t,
+  INLINE_ROW_GAP,
+  ROW_MIN_HEIGHT,
+  STACKED_LABEL_GAP,
+} from '../../theme'
 import { useListColors } from '../../hooks/useListColors'
 import { nativeComponents } from './native'
 import type { NativeModifier } from './types'
@@ -67,10 +94,11 @@ type FieldShellProps = {
   description?: string
   required?: boolean
   error?: string
+  /** The CONTROL only — no labels, borders or separators (see row contract). */
   children: React.ReactNode
   /**
-   * 'inline' — label left, input right (default).
-   * 'stacked' — label above, input below.
+   * 'inline' (default) — minHeight-44 row, label left, control right.
+   * 'stacked' — uppercase mini-label above, full-width input below.
    */
   layout?: 'inline' | 'stacked'
 }
@@ -86,8 +114,8 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   const insideNativeForm = useIsInsideNativeForm()
   const NativeLabeledContent = nativeComponents.LabeledContent
   const NativeText = nativeComponents.Text
-  // Dark-mode aware tokens for the JS fallback layouts (the native Form
-  // path inherits system appearance from SwiftUI automatically).
+  // Dark-mode aware tokens for the JS layouts (the native Form path
+  // inherits system appearance from SwiftUI automatically).
   const { colors: c } = useListColors()
 
   const displayLabel = `${label}${required ? ' *' : ''}`
@@ -142,40 +170,47 @@ export const FieldShell: React.FC<FieldShellProps> = ({
     )
   }
 
-  // ── Stacked layout (multiline fields, outside native Form) ──
+  // ── Stacked layout (text-entry fields) ──
   if (layout === 'stacked') {
     return (
-      <View style={styles.container}>
+      <View style={styles.stackedContainer}>
         <Text style={[styles.stackedLabel, { color: c.textMuted }]}>{displayLabel}</Text>
         {children}
-        {description && <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>}
-        <View style={[styles.separator, { backgroundColor: c.separator }, error && styles.separatorError]} />
-        {error && <Text style={styles.error}>{error}</Text>}
+        {description ? (
+          <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>
+        ) : null}
+        {error ? <Text style={[styles.error, { color: c.error }]}>{error}</Text> : null}
       </View>
     )
   }
 
-  // ── Fallback inline layout (no native Form) ──
+  // ── Inline layout (default) ──
+  const hasCaption = Boolean(description) || Boolean(error)
   return (
-    <View style={styles.container}>
+    <View style={hasCaption ? styles.inlineContainerWithCaption : null}>
       <View style={styles.inlineRow}>
-        <Text style={[styles.inlineLabel, { color: c.textMuted }]} numberOfLines={1}>{displayLabel}</Text>
+        <Text style={[styles.inlineLabel, { color: c.text }]} numberOfLines={1}>
+          {displayLabel}
+        </Text>
         <View style={styles.inlineContent}>{children}</View>
       </View>
-      {description && <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>}
-      <View style={[styles.separator, { backgroundColor: c.separator }, error && styles.separatorError]} />
-      {error && <Text style={styles.error}>{error}</Text>}
+      {description ? (
+        <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>
+      ) : null}
+      {error ? <Text style={[styles.error, { color: c.error }]}>{error}</Text> : null}
     </View>
   )
 }
 
-// Keep fieldShellStyles for components that bypass FieldShell (checkbox native, etc.)
+// Kept for components that bypass FieldShell (native checkbox row etc.) and
+// for the disabled-host opacity treatment. Bypassing components still obey
+// the row contract: no separators, no borders, captions in these styles.
 export const fieldShellStyles = StyleSheet.create({
   container: { paddingVertical: 0 },
   label: {
-    fontSize: t.fontSize.sm,
+    fontSize: t.fontSize.md,
     fontWeight: '400',
-    color: t.colors.textMuted,
+    color: t.colors.text,
   },
   required: { color: t.colors.error },
   description: {
@@ -186,58 +221,49 @@ export const fieldShellStyles = StyleSheet.create({
   error: {
     fontSize: 12,
     color: t.colors.error,
-    marginTop: 3,
-    marginBottom: 2,
+    marginTop: 4,
   },
   disabledHost: { opacity: 0.5 },
 })
 
 const styles = StyleSheet.create({
-  container: { paddingVertical: 0 },
-
-  // Inline layout
+  // Inline layout — minHeight 44, label left, control right, 12pt gap.
+  // No vertical padding: the minHeight centers single-line content; captions
+  // below add their own spacing (only when present — no layout jump).
   inlineRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 44,
+    minHeight: ROW_MIN_HEIGHT,
+    columnGap: INLINE_ROW_GAP,
   },
   inlineLabel: {
-    fontSize: t.fontSize.md,
+    fontSize: t.fontSize.md, // 15pt regular
     fontWeight: '400',
-    color: t.colors.textMuted,
-    marginRight: t.spacing.sm,
-    flexShrink: 0,
+    flexShrink: 1,
   },
   inlineContent: { flex: 1 },
+  inlineContainerWithCaption: { paddingBottom: 10 },
 
-  // Stacked layout
+  // Stacked layout — uppercase mini-label, 4pt gap to the input.
+  stackedContainer: {
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
   stackedLabel: {
-    fontSize: t.fontSize.md,
-    fontWeight: '400',
-    color: t.colors.textMuted,
-    marginBottom: 6,
-    marginTop: 8,
+    fontSize: 11,
+    fontWeight: '500',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    marginBottom: STACKED_LABEL_GAP,
   },
 
-  // Shared
-  separator: {
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: t.colors.separator,
-  },
-  separatorError: {
-    backgroundColor: t.colors.error,
-    height: 1,
-  },
+  // Captions (shared by both layouts; colors injected at render)
   description: {
     fontSize: 12,
-    color: t.colors.textPlaceholder,
     marginTop: 2,
-    marginBottom: 2,
   },
   error: {
     fontSize: 12,
-    color: t.colors.error,
-    marginTop: 3,
-    marginBottom: 2,
+    marginTop: 4,
   },
 })

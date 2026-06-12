@@ -31,9 +31,9 @@ try {
 }
 
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
-import { defaultTheme as t } from './theme'
+import { defaultTheme as t, ROW_MIN_HEIGHT } from './theme'
 import { deepEqual } from './utils/diff'
-import { extractRootFields, getByPath, getFieldLabel, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
+import { extractRootFields, getByPath, getFieldLabel, groupFieldsByWidth, isFieldHidden, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
 import { FormSection } from './FormSection'
 import { ErrorMapContext, FieldRendererContext, FIELD_WIDTH_BREAKPOINT } from './fields/structural'
 import { FieldRenderer } from './FieldRenderer'
@@ -130,6 +130,25 @@ const segmentFieldsForForm = (fields: ClientField[]): FieldSegment[] => {
  */
 export const canUseNativeFormForFields = (fields: ClientField[]): boolean =>
   fields.every((field) => !containsIncompatibleField(field))
+
+/**
+ * Split into main/sidebar AND drop admin.hidden fields BEFORE section
+ * assembly. FieldRenderer also skips hidden fields, but only at render time
+ * — by then FormSection has already wrapped each one in a 44pt row with
+ * separators between them. Upload collections auto-add ~10 hidden fields
+ * (url, thumbnailURL, filename, mimeType, filesize, width, height,
+ * focalX/focalY, sizes), which is exactly what piled empty rows + dividers
+ * around the Media collection's single visible `alt` field.
+ */
+const splitVisibleFieldsBySidebar = (
+  fields: ClientField[],
+): { mainFields: ClientField[]; sidebarFields: ClientField[] } => {
+  const { mainFields, sidebarFields } = splitFieldsBySidebar(fields)
+  return {
+    mainFields: mainFields.filter((f) => !isFieldHidden(f)),
+    sidebarFields: sidebarFields.filter((f) => !isFieldHidden(f)),
+  }
+}
 
 // Error boundary: catches native Form rendering crashes and auto-falls back
 class FormCrashBoundary extends React.Component<
@@ -412,7 +431,7 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
   const { colors: pc } = useListColors()
 
   const { mainFields, sidebarFields } = useMemo(
-    () => splitFieldsBySidebar(rootFields),
+    () => splitVisibleFieldsBySidebar(rootFields),
     [rootFields],
   )
 
@@ -1010,7 +1029,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
   const { colors: pc } = useListColors()
 
   const { mainFields, sidebarFields } = useMemo(
-    () => splitFieldsBySidebar(rootFields),
+    () => splitVisibleFieldsBySidebar(rootFields),
     [rootFields],
   )
 
@@ -1381,10 +1400,11 @@ const styles = StyleSheet.create({
   statusDraftText: { color: t.colors.warning },
   statusPublishedText: { color: t.colors.success },
 
-  // "Details ›" row — taps to open sidebar sheet
+  // "Details ›" row — taps to open sidebar sheet. Canonical inline row:
+  // 44pt min height, no vertical padding (FormSection row owns the inset).
   detailsRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingVertical: t.spacing.md,
+    minHeight: ROW_MIN_HEIGHT,
   },
   detailsRowLabel: { fontSize: t.fontSize.md, color: t.colors.primary, fontWeight: '500' },
   detailsRowChevron: { fontSize: 20, color: t.colors.textMuted },

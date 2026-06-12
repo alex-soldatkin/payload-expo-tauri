@@ -84,6 +84,12 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
   // Stable @expo/ui: keyboardType / autocorrection / onSubmit are MODIFIERS
   // on iOS (the canary props died).
   const iosModifiers: NativeModifier[] = []
+  // Row contract: stacked-row input text is 16pt — pins the SwiftUI field to
+  // the same size as the JS fallback tier (styles.stackedInput in inputs.tsx)
+  // so native and JS rows are pixel-consistent.
+  if (nativeComponents.font) {
+    iosModifiers.push(nativeComponents.font({ size: 16 }))
+  }
   if (keyboardType && nativeComponents.keyboardType) {
     iosModifiers.push(nativeComponents.keyboardType(keyboardType as Parameters<NonNullable<typeof nativeComponents.keyboardType>>[0]))
   }
@@ -170,10 +176,12 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
 const styles = StyleSheet.create({
   androidWrap: { position: 'relative' },
   androidDisabledWrap: { position: 'relative', opacity: 0.5 },
+  // Zero horizontal inset — the FormSection row owns the 16pt grid, so the
+  // overlay sits exactly where the JC input draws its text.
   placeholderOverlay: {
     position: 'absolute',
-    left: t.spacing.md,
-    right: t.spacing.md,
+    left: 0,
+    right: 0,
     top: 0,
     bottom: 0,
     justifyContent: 'center',

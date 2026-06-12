@@ -22,7 +22,7 @@ import type { ClientSelectField, FieldComponentProps } from '../../types'
 import { defaultTheme as t } from '../../theme'
 import { getFieldDescription, getFieldLabel, normalizeOption } from '../../utils/schemaHelpers'
 import { BottomSheet } from '../../BottomSheet'
-import { FieldShell, fieldShellStyles, nativeComponents } from '../shared'
+import { FieldShell, fieldShellStyles, nativeComponents, ROW_MIN_HEIGHT } from '../shared'
 import { NativeHost } from '../NativeHost'
 import {
   GlassChip,
@@ -105,11 +105,12 @@ const SelectFieldMultiChips: React.FC<FieldComponentProps<ClientSelectField>> = 
         })}
       </View>
 
-      {/* Ordered selection with JS reorder buttons (web parity: isSortable) */}
+      {/* Ordered selection with JS reorder buttons (web parity: isSortable).
+          Borderless fill-bg sub-list — FormSection owns all separators. */}
       {sortable && selected.length > 1 && (
-        <View style={[styles.orderList, { borderColor: palette.separator }]}>
+        <View style={[styles.orderList, { backgroundColor: palette.fill }]}>
           {selected.map((v, i) => (
-            <View key={`${v}-${i}`} style={[styles.orderRow, i > 0 && { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: palette.separator }]}>
+            <View key={`${v}-${i}`} style={styles.orderRow}>
               <Text style={[styles.orderIndex, { color: palette.placeholder }]}>{i + 1}</Text>
               <Text style={[styles.orderLabel, { color: palette.text }]} numberOfLines={1}>{labelFor(v)}</Text>
               {!isDisabled && (
@@ -326,14 +327,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
-    minHeight: 32,
+    minHeight: ROW_MIN_HEIGHT,
   },
   triggerText: { fontSize: t.fontSize.md, flex: 1 },
   chevron: { fontSize: 18, marginLeft: t.spacing.xs },
 
+  // Fill-bg rounded-8 sub-list — NO borders (row contract: FormSection is
+  // the only separator owner; field chrome stays borderless).
   orderList: {
     marginTop: t.spacing.sm,
-    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: t.borderRadius.sm,
     overflow: 'hidden',
   },

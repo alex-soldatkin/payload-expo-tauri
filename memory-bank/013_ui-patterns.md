@@ -962,17 +962,39 @@ Consecutive fields with `admin.width` are automatically grouped into flex rows. 
 4. RowField still uses its own width logic (not `groupFieldsByWidth`) — it wraps ALL children in a flex row regardless of whether they have `admin.width`.
 5. The `widthRow` style is `{ flexDirection: 'row', gap: spacing.md }` — identical to RowField's `rowContainer` minus the `marginBottom`.
 
-### iOS form field styling
+### Canonical Form-Row Contract (implemented Phase 32, 2026-06-12)
 
-Input fields (`inputs.tsx`) use iOS-native form style:
-- No bordered boxes — only `borderBottomWidth: StyleSheet.hairlineWidth` separator
-- Transparent background, flush with form container
-- Textarea and code fields keep a light border (multi-line editing needs visible bounds)
+**Single source of truth for all form field chrome in `admin-native`.**
 
-Field labels (`FieldShell.tsx`) use iOS Settings style:
-- Small, uppercase, muted color, tight `letterSpacing: 0.3`
-- `marginBottom: 2` between label and input (tight coupling)
-- `marginBottom: md` (12px) between fields
+#### Constants (`src/theme/index.ts`, re-exported from `src/fields/shared/index.ts`)
+| Constant | Value | Purpose |
+|---|---|---|
+| `CONTENT_INSET` | 16 | Left/right inset inside every FormSection card; FormSection's row wrapper owns it; field components add zero horizontal inset. |
+| `ROW_MIN_HEIGHT` | 44 | Min height of an inline row (also the FormSection row floor). |
+| `INLINE_ROW_GAP` | 12 | Gap between inline label and control. |
+| `STACKED_LABEL_GAP` | 4 | Gap between stacked label and input. |
+
+#### Row families
+- **INLINE** (checkbox/toggle, date, single select, stepper-number, relationship/upload value rows): `flexDirection: 'row'`, `minHeight: 44`, label 15pt regular (`colors.text`) left (`flexShrink 1`), control right (`flex 1`), `columnGap: 12`.
+- **STACKED** (text, email, textarea, code, json, point, hasMany chips): container `paddingTop 10 / paddingBottom 12`, label 11pt `fontWeight 500` uppercase `letterSpacing 0.4` `colors.textMuted` + `marginBottom 4` + 16pt input. textarea/code/json: fill-bg rounded-8 WITHOUT borders (no `borderWidth`).
+
+#### Separator ownership (the critical invariant)
+**`FormSection` is the ONLY separator owner.** Hairline (`colors.separator`) drawn BETWEEN children only — never after last child, never for a single child. `marginLeft: CONTENT_INSET` on the hairline. Field components MUST render zero `borderBottom` / hairlines of their own.
+
+#### FieldShell (`src/fields/shared/FieldShell.tsx`)
+Renders ALL label/description/error chrome. `children` = the control only. `layout` prop: `'inline'` (default) or `'stacked'`. Description (12pt `textPlaceholder`, `marginTop: 2`) and error (12pt `colors.error`, `marginTop: 4`) render BELOW the row; container gets `paddingBottom: 10` only when a caption is present.
+
+#### FormSection (`src/FormSection.tsx`)
+One glass card per section (GlassView `'regular'` on iOS 26+, `colors.card` View otherwise), `borderRadius 10`, `overflow hidden`. Each child wraps in a row: `paddingHorizontal CONTENT_INSET`, `minHeight ROW_MIN_HEIGHT`, `justifyContent center`. `React.Children.toArray(...).filter(Boolean)` drops condition-null children so no phantom rows/separators.
+
+#### DocumentForm (`src/DocumentForm.tsx`)
+`splitVisibleFieldsBySidebar` drops `admin.hidden` fields BEFORE section assembly (fixes the Media symptom: ~10 hidden upload fields excluded → alt-text is the single child → one clean card, zero internal separators).
+
+#### Per-family field files
+All field components under `src/fields/` conform: no field-owned row borders. Sub-card tiers (array/blocks row cards) keep their glass/border tier but align to the 16pt grid. Modal-internal sheet chrome (optionRow separators, picker headers) is out of scope.
+
+#### join.tsx + richtext.tsx (carve-outs, outside FormSection)
+Own their internal list separators (hairline, 16pt left inset). Decorative `borderWidth: 1` container borders removed (Phase 32). richtext `editorContainer` and `fallbackInput` are fill-bg rounded without borders.
 
 ---
 

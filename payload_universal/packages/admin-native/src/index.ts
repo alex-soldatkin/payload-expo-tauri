@@ -317,8 +317,8 @@ export type {
   PayloadFormReturn,
 } from './hooks/usePayloadForm'
 
-// Theme
-export { defaultTheme } from './theme'
+// Theme + canonical form-row metrics (FieldShell/FormSection row contract)
+export { CONTENT_INSET, defaultTheme, INLINE_ROW_GAP, ROW_MIN_HEIGHT, STACKED_LABEL_GAP } from './theme'
 export type { Theme } from './theme'
 
 // Types

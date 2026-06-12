@@ -1133,3 +1133,40 @@ Permanently null — no compatible replacement (documented in registry, Android 
 - All other five targets keep workspace TS 5.9.3: `test_app/node_modules/typescript/bin/tsc`
 
 **All six targets verified at ZERO post-migration.** Metro smoke: `npx expo export --platform ios --dev` succeeded (21 MB bundle, zero resolution errors).
+
+### Phase 32 — Field chrome unification (2026-06-12)
+
+**Goal:** Eliminate the two user-reported symptoms — (a) Media collection edit screen: multiple dividers around a single alt-text field; (b) label/control misalignment across field families — by implementing a single canonical row contract throughout `admin-native`.
+
+**Contract constants (single source: `src/theme/index.ts`, re-exported from `src/fields/shared/index.ts`):**
+- `CONTENT_INSET = 16` — left/right inset inside every FormSection card; FormSection's row wrapper owns it; field components add zero horizontal inset.
+- `ROW_MIN_HEIGHT = 44` — min height of an inline row.
+- `INLINE_ROW_GAP = 12` — gap between inline label and control.
+- `STACKED_LABEL_GAP = 4` — gap between stacked label and input.
+
+**Separator ownership:** FormSection is the ONLY separator owner — hairline (`colors.separator`) BETWEEN children only (never after last, never for single child), `marginLeft CONTENT_INSET`. Field components render ZERO `borderBottom` / hairlines of their own.
+
+**Row families:**
+- INLINE (checkbox/toggle, date, single select, stepper-number, relationship/upload value rows): `flexDirection row`, `minHeight 44`, label 15pt regular left, control right, `columnGap 12`.
+- STACKED (text, email, textarea, code, json, point, hasMany chips): 11pt uppercase muted label + 4pt gap + 16pt input; textarea/code/json use fill-bg rounded-8 without borders.
+
+**Owners / modified files:**
+- `src/FormSection.tsx` — separator logic (React.Children filter + between-only rule).
+- `src/DocumentForm.tsx` — `splitVisibleFieldsBySidebar` drops `admin.hidden` fields before section assembly (fixes Media pile-up: ~10 hidden upload fields excluded, leaving alt as single-child → one clean card).
+- `src/fields/shared/FieldShell.tsx` — unified label/description/error chrome for both families.
+- `src/fields/inputs.tsx` + `src/fields/inputs/NativeTextRow.tsx` + `src/fields/inputs/HasManyChips.tsx` — INPUT family conformed.
+- `src/fields/controls.tsx` — checkbox/date CONTROL family conformed.
+- `src/fields/pickers/{select,radio,relationship,upload}.tsx` + `src/fields/pickers/shared.tsx` — PICKER family conformed.
+- `src/fields/structural/{common,group,collapsible,array,blocks,tabs}.tsx` — STRUCTURAL family conformed; `SubFieldRows` added to `common.tsx` for nested separator system.
+- `src/fields/join.tsx` — removed decorative `borderWidth: 1` container border (carve-out owns internal hairlines per contract).
+- `src/fields/richtext.tsx` — removed `borderWidth: 1` on `editorContainer` and `fallbackInput`; both now fill-bg rounded without borders; error indication via FieldShell only.
+
+**Verification:**
+- All six typecheck targets at ZERO: admin-native (TS 5.9.3), mobile-expo app (TS 6.0.3), admin-schema, client-validators, local-db, server.
+- Metro smoke: `npx expo export --platform ios --dev` → 21 MB bundle, zero resolution errors.
+- Separator regression grep: all remaining `borderBottomWidth`/`hairlineWidth` occurrences are contract-sanctioned (FormSection separator, SubFieldRows separator, sub-card borders in array/blocks, modal-internal sheet chrome).
+
+**UI parity audit items resolved:**
+- Media single-field section: alt-text field renders as one clean rounded card with zero internal dividers.
+- Label alignment: all field families share the CONTENT_INSET grid via FormSection row wrapper.
+- Dark mode: all field chrome uses `useListColors()` / `useInputColors()` — no hardcoded light-mode colours in row-plane styles.

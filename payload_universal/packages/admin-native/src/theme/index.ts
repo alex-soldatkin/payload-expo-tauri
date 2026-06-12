@@ -47,3 +47,23 @@ export const defaultTheme = {
 } as const
 
 export type Theme = typeof defaultTheme
+
+// ---------------------------------------------------------------------------
+// Canonical form-row metrics — the single source of truth shared by
+// FormSection (separator/row chrome owner) and FieldShell (label/error
+// chrome owner). Field components MUST align to these instead of inventing
+// their own insets/heights. See FieldShell.tsx for the full row contract.
+// ---------------------------------------------------------------------------
+
+/** Left/right content inset inside every FormSection card (pt). Every row's
+ *  label AND control align to it; separators are inset by it on the left. */
+export const CONTENT_INSET = 16
+
+/** Minimum height of an INLINE row (label left, control right). */
+export const ROW_MIN_HEIGHT = 44
+
+/** Horizontal gap between an inline row's label and its control. */
+export const INLINE_ROW_GAP = 12
+
+/** Vertical gap between a STACKED row's uppercase label and its input. */
+export const STACKED_LABEL_GAP = 4

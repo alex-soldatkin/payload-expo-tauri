@@ -29,8 +29,8 @@ import {
 } from 'react-native'
 
 import type { ClientField, FormErrors } from '../../types'
-import { defaultTheme as t } from '../../theme'
-import { groupFieldsByWidth } from '../../utils/schemaHelpers'
+import { CONTENT_INSET, defaultTheme as t, ROW_MIN_HEIGHT } from '../../theme'
+import { groupFieldsByWidth, isFieldHidden } from '../../utils/schemaHelpers'
 import { nativeComponents } from '../shared'
 import { NativeHost } from '../NativeHost'
 import { BottomSheet } from '../../BottomSheet'
@@ -174,6 +174,12 @@ export const useCompactFields = (): boolean => {
  *
  * When `compact` is true (small screens), width-grouped fields are rendered
  * stacked vertically instead of in rows, treating admin.width as guidance.
+ *
+ * Fields that would render as empty placeholders are dropped BEFORE any row
+ * wrapper exists (canonical section contract): `admin.hidden` sub-fields are
+ * filtered up front, and condition-hidden fields (renderFn returns null) skip
+ * their Fragment wrapper entirely — so SubFieldRows / FormSection never wrap
+ * an empty row or draw a separator around one.
  */
 export const renderSubFieldsWithWidth = (
   fields: ClientField[],
@@ -182,16 +188,20 @@ export const renderSubFieldsWithWidth = (
   keyPrefix: string,
   compact = false,
 ): React.ReactNode[] => {
-  const groups = groupFieldsByWidth(fields)
+  const groups = groupFieldsByWidth(fields.filter((f) => !isFieldHidden(f)))
   return groups.map((group, gi) => {
     if (group.type === 'width-row') {
+      const rendered = group.fields
+        .map((sub) => ({ sub, node: renderFn(sub, buildPath(sub)) }))
+        .filter(({ node }) => node != null && node !== false)
+      if (rendered.length === 0) return null
       if (compact) {
         // On small screens: render each field full-width, stacked vertically
         return (
           <React.Fragment key={`${keyPrefix}-wrow-${gi}`}>
-            {group.fields.map((sub) => (
+            {rendered.map(({ sub, node }) => (
               <React.Fragment key={sub.name || `${keyPrefix}-wf-${gi}`}>
-                {renderFn(sub, buildPath(sub))}
+                {node}
               </React.Fragment>
             ))}
           </React.Fragment>
@@ -200,21 +210,52 @@ export const renderSubFieldsWithWidth = (
       // On wide screens: render side-by-side with proportional flex
       return (
         <View key={`${keyPrefix}-wrow-${gi}`} style={commonStyles.widthRow}>
-          {group.fields.map((sub) => (
+          {rendered.map(({ sub, node }) => (
             <View key={sub.name || `${keyPrefix}-wf-${gi}`} style={{ flex: parseFloat(sub.admin!.width!) / 100 }}>
-              {renderFn(sub, buildPath(sub))}
+              {node}
             </View>
           ))}
         </View>
       )
     }
     const sub = group.field
+    const node = renderFn(sub, buildPath(sub))
+    if (node == null || node === false) return null
     return (
       <React.Fragment key={sub.name || `${keyPrefix}-${gi}`}>
-        {renderFn(sub, buildPath(sub))}
+        {node}
       </React.Fragment>
     )
   })
+}
+
+// ---------------------------------------------------------------------------
+// SubFieldRows — the FormSection separator system for NESTED field lists
+// (group/collapsible bodies, array/blocks row cards). The enclosing card is
+// supplied by the caller (glass or fill); this component owns the row chrome:
+//   - each child wraps in a row with the canonical CONTENT_INSET and the
+//     ROW_MIN_HEIGHT floor (centered) — children add no horizontal inset
+//   - hairline separators BETWEEN rows only (never after the last, never for
+//     a single child), inset CONTENT_INSET from the left, flush right
+// Children must arrive pre-filtered (renderSubFieldsWithWidth drops hidden /
+// condition-null fields), mirroring the FormSection caller contract.
+// ---------------------------------------------------------------------------
+
+export const SubFieldRows: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const palette = usePalette()
+  const rows = React.Children.toArray(children).filter(Boolean)
+  return (
+    <>
+      {rows.map((child, index) => (
+        <React.Fragment key={`subrow-${index}`}>
+          <View style={commonStyles.subRow}>{child}</View>
+          {index < rows.length - 1 && (
+            <View style={[commonStyles.subRowSeparator, { backgroundColor: palette.separator }]} />
+          )}
+        </React.Fragment>
+      ))}
+    </>
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -716,6 +757,18 @@ export const AddRowButton: React.FC<{
 
 export const commonStyles = StyleSheet.create({
   widthRow: { flexDirection: 'row' as const, gap: t.spacing.md },
+
+  // Nested field-list rows (SubFieldRows) — mirrors FormSection's row chrome:
+  // the canonical inset + 44pt floor; separators between rows only.
+  subRow: {
+    paddingHorizontal: CONTENT_INSET,
+    minHeight: ROW_MIN_HEIGHT,
+    justifyContent: 'center',
+  },
+  subRowSeparator: {
+    height: StyleSheet.hairlineWidth,
+    marginLeft: CONTENT_INSET, // inset from left, flush on right
+  },
 
   // Error badge (collapsible, tabs, array/block rows)
   errorBadge: {

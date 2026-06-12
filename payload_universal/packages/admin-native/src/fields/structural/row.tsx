@@ -2,6 +2,11 @@
  * Row field — lays sub-fields out side-by-side (stacked on compact screens
  * and inside native SwiftUI Forms, which are single-column).
  *
+ * Canonical grid: the enclosing FormSection row (or SubFieldRows row) owns
+ * the 16pt CONTENT_INSET; this container adds NO horizontal inset, so the
+ * first child's label starts at the grid and the flex children keep their
+ * admin.width proportions. Children render ZERO borders/insets of their own.
+ *
  * INTERNAL — import via the `fields/structural` barrel only.
  */
 import React from 'react'

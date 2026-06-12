@@ -118,7 +118,7 @@ export const HasManyChipsEditor: React.FC<HasManyChipsEditorProps> = ({
     <View style={styles.container}>
       {chipsRow}
       {!disabled && !atMax && (
-        <View style={[styles.addRow, { borderColor: colors.separator }]}>
+        <View style={styles.addRow}>
           <TextInput
             style={[styles.addInput, { color: colors.text }]}
             value={draft}
@@ -175,17 +175,16 @@ const styles = StyleSheet.create({
   chipText: { fontSize: t.fontSize.sm },
   chipRemove: { fontSize: t.fontSize.xs },
 
-  // Inline add field
+  // Inline add field — NO hairline of its own (FormSection is the only
+  // separator owner); zero horizontal inset (the section row owns the grid).
   addRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.sm,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    paddingBottom: t.spacing.xs,
   },
   addInput: {
     flex: 1,
-    fontSize: t.fontSize.md,
+    fontSize: 16, // stacked-row contract: input text 16pt
     paddingVertical: t.spacing.xs,
     paddingHorizontal: 0,
     backgroundColor: 'transparent',

@@ -962,9 +962,8 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
           <View
             style={[
               styles.editorContainer,
-              { backgroundColor: rtColors.card, borderColor: rtColors.border },
+              { backgroundColor: rtColors.card },
               isDisabled && [styles.editorDisabled, { backgroundColor: rtColors.pressed }],
-              error && { borderColor: rtColors.error },
             ]}
           >
             {editorElement}
@@ -1085,9 +1084,8 @@ const RichTextFieldFallback: React.FC<FieldComponentProps<ClientRichTextField>> 
       <TextInput
         style={[
           styles.fallbackInput,
-          { backgroundColor: fbColors.card, borderColor: fbColors.border, color: fbColors.text },
+          { backgroundColor: fbColors.card, color: fbColors.text },
           disabled && [styles.editorDisabled, { backgroundColor: fbColors.pressed }],
-          error && { borderColor: fbColors.error },
         ]}
         value={plainText}
         onChangeText={(text) => {
@@ -1131,8 +1129,6 @@ export const RichTextField: React.FC<FieldComponentProps<ClientRichTextField>> =
 
 const styles = StyleSheet.create({
   editorContainer: {
-    borderWidth: 1,
-    borderColor: t.colors.border,
     borderRadius: t.borderRadius.sm,
     backgroundColor: t.colors.surface,
     minHeight: 160,
@@ -1166,8 +1162,6 @@ const styles = StyleSheet.create({
   },
   badgeText: { fontSize: t.fontSize.xs, color: t.colors.textMuted },
   fallbackInput: {
-    borderWidth: 1,
-    borderColor: t.colors.border,
     borderRadius: t.borderRadius.sm,
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.sm + 2,

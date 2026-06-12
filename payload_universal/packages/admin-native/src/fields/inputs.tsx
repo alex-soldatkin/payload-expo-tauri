@@ -2,11 +2,17 @@
  * TextInput-based field components: text, email, number, textarea, code,
  * json, point.
  *
- * iOS 26 Mail compose style — simple fields use inline layout (label left,
- * input right) and render native SwiftUI TextField/SecureField (iOS) or JC
- * TextInput (Android) through the registry when available, with the pure-JS
- * RN TextInput as the final fallback tier. Multiline fields (textarea, code,
- * json) use stacked layout. hasMany text/number render a chip editor.
+ * CANONICAL ROW CONTRACT (see FieldShell/FormSection): every text-entry field
+ * here is a STACKED row — uppercase 11pt label via FieldShell, input below at
+ * the shared 16pt grid (the FormSection row owns the inset; components add
+ * ZERO horizontal inset, borders or separators of their own). Single-line
+ * fields render native SwiftUI TextField/SecureField (iOS) or JC TextInput
+ * (Android) through the registry when available, with the pure-JS RN
+ * TextInput as the final fallback tier — both tiers at 16pt text so native
+ * and JS rows are pixel-consistent. Multiline fields (textarea, code, json)
+ * keep a subtle filled rounded-8 background WITHOUT borders. The bounded
+ * stepper number is the one INLINE row (label left, control right). hasMany
+ * text/number render a chip editor under a stacked label.
  *
  * Native text inputs are UNCONTROLLED (defaultValue + onChangeText) and are
  * bridged to react-hook-form via useUncontrolledTextBridge — external resets
@@ -85,7 +91,7 @@ const TextFieldNative: React.FC<FieldComponentProps<ClientTextField> & { secure:
   })
 
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <NativeTextRow
         bridge={bridge}
         secure={secure}
@@ -103,9 +109,9 @@ const TextFieldFallback: React.FC<FieldComponentProps<ClientTextField> & { secur
 }) => {
   const c = useInputColors()
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <TextInput
-        style={[styles.inlineInput, { color: c.text }, disabled && styles.disabled]}
+        style={[styles.stackedInput, { color: c.text }, disabled && styles.disabled]}
         value={value != null ? String(value) : ''}
         onChangeText={(v) => onChange(v)}
         placeholder={field.admin?.placeholder}
@@ -163,7 +169,7 @@ const EmailFieldNative: React.FC<FieldComponentProps<ClientEmailField>> = ({
   })
 
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <NativeTextRow
         bridge={bridge}
         placeholder={field.admin?.placeholder || 'email@example.com'}
@@ -180,9 +186,9 @@ const EmailFieldFallback: React.FC<FieldComponentProps<ClientEmailField>> = ({
 }) => {
   const c = useInputColors()
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <TextInput
-        style={[styles.inlineInput, { color: c.text }, disabled && styles.disabled]}
+        style={[styles.stackedInput, { color: c.text }, disabled && styles.disabled]}
         value={value != null ? String(value) : ''}
         onChangeText={(v) => onChange(v)}
         placeholder={field.admin?.placeholder || 'email@example.com'}
@@ -275,7 +281,10 @@ const NumberFieldNative: React.FC<FieldComponentProps<ClientNumberField>> = ({
     ]
     // Stable @expo/ui: keyboardType / autocorrection / onSubmit are MODIFIERS
     // (the canary TextField props died); initial text via bridge.attachRef.
+    // font 16 keeps number-entry text the same size whether or not the
+    // bounded stepper is present (NativeTextRow applies the same size).
     const textFieldModifiers = [
+      ...(nativeComponents.font ? [nativeComponents.font({ size: 16 })] : []),
       ...(nativeComponents.keyboardType ? [nativeComponents.keyboardType(keyboardType)] : []),
       ...(nativeComponents.autocorrectionDisabled ? [nativeComponents.autocorrectionDisabled(true)] : []),
       ...(nativeComponents.onSubmit ? [nativeComponents.onSubmit(() => { void bridge.ref.current?.blur?.() })] : []),
@@ -316,8 +325,16 @@ const NumberFieldNative: React.FC<FieldComponentProps<ClientNumberField>> = ({
     )
   }
 
+  // Row contract: the bounded stepper is an INLINE row (label left, control
+  // right); a plain number entry is a STACKED row like text/email.
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell
+      label={getFieldLabel(field)}
+      description={getFieldDescription(field)}
+      required={field.required}
+      error={error}
+      layout={showStepper ? 'inline' : 'stacked'}
+    >
       {content}
     </FieldShell>
   )
@@ -328,9 +345,9 @@ const NumberFieldFallback: React.FC<FieldComponentProps<ClientNumberField>> = ({
 }) => {
   const c = useInputColors()
   return (
-    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error}>
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <TextInput
-        style={[styles.inlineInput, { color: c.text }, disabled && styles.disabled]}
+        style={[styles.stackedInput, { color: c.text }, disabled && styles.disabled]}
         value={value != null ? String(value) : ''}
         onChangeText={(v) => {
           if (v === '' || v === '-') { onChange(v); return }
@@ -384,7 +401,9 @@ export const NumberField: React.FC<FieldComponentProps<ClientNumberField>> = (pr
 // Textarea (stacked — multiline, auto-grows up to ~40% of the screen)
 // ---------------------------------------------------------------------------
 
-const TEXTAREA_LINE_HEIGHT = Math.round(t.fontSize.md * 1.4)
+/** Stacked-row contract: input text is 16pt (matches the single-line tiers). */
+const TEXTAREA_FONT_SIZE = 16
+const TEXTAREA_LINE_HEIGHT = Math.round(TEXTAREA_FONT_SIZE * 1.4)
 /**
  * Vertical padding lives on a WRAPPER View, never on the TextInput itself.
  * RN maps a multiline TextInput's padding to UITextView.textContainerInset on
@@ -423,7 +442,7 @@ export const TextareaField: React.FC<FieldComponentProps<ClientTextareaField>> =
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
-      <View style={styles.multilineWrapper}>
+      <View style={[styles.multilineWrapper, { backgroundColor: c.fill }]}>
         <TextInput
           style={[styles.multilineInput, { color: c.text, height }, disabled && styles.disabled]}
           value={value != null ? String(value) : ''}
@@ -483,7 +502,9 @@ export const CodeField: React.FC<FieldComponentProps<ClientCodeField>> = ({
 
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
-      <View style={[styles.codeContainer, { borderColor: c.border }]}>
+      {/* Filled rounded-8 box, NO border (row contract); the gutter's extra
+          fill stacks on the box fill for a subtly darker line-number strip. */}
+      <View style={[styles.codeContainer, { backgroundColor: c.fill }]}>
         <Text style={[styles.codeGutter, { color: c.textPlaceholder, backgroundColor: c.fill }]}>
           {gutterNumbers}
         </Text>
@@ -594,7 +615,7 @@ export const JSONField: React.FC<FieldComponentProps<ClientJSONField>> = ({
   return (
     <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} required={field.required} error={error} layout="stacked">
       <TextInput
-        style={[styles.jsonInput, { color: c.text }, disabled && styles.disabled]}
+        style={[styles.jsonInput, { color: c.text, backgroundColor: c.fill }, disabled && styles.disabled]}
         value={text}
         onChangeText={handleChange}
         placeholder="{}"
@@ -700,12 +721,13 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
       description={getFieldDescription(field)}
       required={field.required}
       error={error ?? localError}
+      layout="stacked"
     >
       <View style={styles.pointRow}>
         <View style={styles.pointCol}>
           <Text style={[styles.pointAxisLabel, { color: c.textPlaceholder }]}>LNG</Text>
           <TextInput
-            style={[styles.inlineInput, { color: c.text }, disabled && styles.disabled]}
+            style={[styles.stackedInput, { color: c.text }, disabled && styles.disabled]}
             value={lngText}
             onChangeText={(v) => handleAxis('lng', v)}
             placeholder="-180 to 180"
@@ -717,7 +739,7 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
         <View style={styles.pointCol}>
           <Text style={[styles.pointAxisLabel, { color: c.textPlaceholder }]}>LAT</Text>
           <TextInput
-            style={[styles.inlineInput, { color: c.text }, disabled && styles.disabled]}
+            style={[styles.stackedInput, { color: c.text }, disabled && styles.disabled]}
             value={latText}
             onChangeText={(v) => handleAxis('lat', v)}
             placeholder="-90 to 90"
@@ -736,25 +758,27 @@ export const PointField: React.FC<FieldComponentProps<ClientPointField>> = ({
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Inline input — borderless, fills the right side of the row
-  inlineInput: {
-    fontSize: t.fontSize.md,
-    color: t.colors.text,
+  // Stacked single-line input — borderless, zero horizontal inset (the
+  // FormSection row owns the 16pt grid), 16pt text per the row contract.
+  // Matches the native NativeTextRow tier (font({ size: 16 })) pixel-for-pixel.
+  stackedInput: {
+    fontSize: 16,
     paddingVertical: 0,
     paddingHorizontal: 0,
     backgroundColor: 'transparent',
-    flex: 1,
     textAlign: 'left',
   },
-  // Multiline textarea — padding sits on the wrapper so the input's measured
-  // content size never includes it (see TEXTAREA_V_PAD).
+  // Multiline textarea — subtle filled rounded-8 box, NO border (row
+  // contract); fill color injected at render (useInputColors). Padding sits
+  // on the wrapper so the input's measured content size never includes it
+  // (see TEXTAREA_V_PAD).
   multilineWrapper: {
+    borderRadius: t.borderRadius.sm,
     paddingHorizontal: t.spacing.sm,
     paddingVertical: TEXTAREA_V_PAD,
   },
   multilineInput: {
-    fontSize: t.fontSize.md,
-    color: t.colors.text,
+    fontSize: TEXTAREA_FONT_SIZE,
     paddingHorizontal: 0,
     paddingVertical: 0,
     backgroundColor: 'transparent',
@@ -762,10 +786,9 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.5 },
 
-  // Code
+  // Code — filled rounded-8 box, NO border (fill injected at render).
   codeContainer: {
     flexDirection: 'row',
-    borderWidth: StyleSheet.hairlineWidth,
     borderRadius: t.borderRadius.sm,
     overflow: 'hidden',
     minHeight: 140,
@@ -793,30 +816,30 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
 
-  // JSON
+  // JSON — filled rounded-8 box, NO border (fill injected at render).
   jsonInput: {
     fontFamily: CODE_FONT,
     fontSize: t.fontSize.sm,
     lineHeight: CODE_LINE_HEIGHT,
     minHeight: 140,
+    borderRadius: t.borderRadius.sm,
     paddingHorizontal: t.spacing.sm,
     paddingVertical: t.spacing.sm,
-    backgroundColor: 'transparent',
     textAlignVertical: 'top',
   },
+  // Toolbar aligns to the box edge (= the 16pt grid; no extra inset).
   jsonToolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: t.spacing.xs + 2,
     marginTop: t.spacing.xs,
-    paddingHorizontal: t.spacing.sm,
   },
   jsonDot: { width: 8, height: 8, borderRadius: 4 },
   jsonStatus: { flex: 1, fontSize: t.fontSize.xs },
   jsonFormatButton: { fontSize: t.fontSize.sm, fontWeight: '600' },
 
-  // Point
-  pointRow: { flexDirection: 'row', gap: t.spacing.md, flex: 1 },
+  // Point — two borderless axis columns under the stacked label.
+  pointRow: { flexDirection: 'row', gap: t.spacing.md },
   pointCol: { flex: 1 },
   pointAxisLabel: { fontSize: t.fontSize.xs, letterSpacing: 0.5, marginBottom: 2 },
 })

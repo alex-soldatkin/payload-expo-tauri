@@ -1,7 +1,14 @@
 /**
- * Group field — named groups render as a titled section (native SwiftUI
- * Section inside a Form, GlassView card on iOS 26+, plain section otherwise).
- * Unnamed groups render their sub-fields transparently.
+ * Group field — named groups render as a nested sub-section that follows the
+ * canonical section contract: uppercase muted header OUTSIDE/above the card
+ * at the 16pt inset, one card for the body (GlassView on iOS 26+, subtle fill
+ * otherwise), description as a footer BELOW the card. The body's field list
+ * uses the FormSection separator system via SubFieldRows — the group draws no
+ * hairlines or gutters of its own (FormSection separates the group from its
+ * sibling rows). Unnamed groups render their sub-fields transparently.
+ *
+ * Inside a SwiftUI Form (dormant opt-in nativeForm path) a native Section is
+ * used instead — the Form supplies grouping and separators.
  *
  * INTERNAL — import via the `fields/structural` barrel only.
  */
@@ -9,13 +16,14 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import type { ClientGroupField, FieldComponentProps } from '../../types'
-import { defaultTheme as t } from '../../theme'
+import { CONTENT_INSET, defaultTheme as t } from '../../theme'
 import { getFieldDescription, getFieldLabel } from '../../utils/schemaHelpers'
 import { nativeComponents, useIsInsideNativeForm } from '../shared'
 import {
   GlassView,
   liquidGlassAvailable,
   renderSubFieldsWithWidth,
+  SubFieldRows,
   subPath,
   useCompactFields,
   usePalette,
@@ -51,62 +59,54 @@ export const GroupField: React.FC<FieldComponentProps<ClientGroupField>> = ({
     )
   }
 
-  // ── Fallback ──
-  const content = (
-    <>
-      {field.label && (
-        <View style={styles.groupHeader}>
-          <Text style={[styles.groupLabel, { color: palette.textMuted }]}>{getFieldLabel(field)}</Text>
-          {description && <Text style={[styles.groupDesc, { color: palette.textFaint }]}>{description}</Text>}
-        </View>
-      )}
-      <View style={styles.groupBody}>{renderedFields}</View>
-    </>
-  )
-
-  if (liquidGlassAvailable && GlassView) {
-    return (
-      <GlassView
-        style={[
-          styles.glassGroupCard,
-          !(field.admin?.hideGutter ?? false) && [styles.groupGutter, { borderLeftColor: palette.textMuted }],
-        ]}
-        glassEffectStyle="regular"
-      >
-        {content}
-      </GlassView>
-    )
-  }
+  // ── Fallback — canonical sub-section: header outside, one card, footer ──
+  const body = <SubFieldRows>{renderedFields}</SubFieldRows>
 
   return (
-    <View
-      style={[
-        styles.groupCard,
-        { borderTopColor: palette.separator },
-        !(field.admin?.hideGutter ?? false) && [styles.groupGutter, { borderLeftColor: palette.textMuted }],
-      ]}
-    >
-      {content}
+    <View style={styles.groupWrapper}>
+      {field.label ? (
+        <Text style={[styles.groupLabel, { color: palette.textMuted }]}>
+          {getFieldLabel(field).toUpperCase()}
+        </Text>
+      ) : null}
+      {liquidGlassAvailable && GlassView ? (
+        <GlassView style={styles.groupCard} glassEffectStyle="regular">{body}</GlassView>
+      ) : (
+        <View style={[styles.groupCard, { backgroundColor: palette.cardBg }]}>{body}</View>
+      )}
+      {description ? (
+        <Text style={[styles.groupDesc, { color: palette.textFaint }]}>{description}</Text>
+      ) : null}
     </View>
   )
 }
 
 const styles = StyleSheet.create({
-  // Group — clean section divider (no card/shadow)
-  groupCard: {
+  groupWrapper: {
     marginTop: t.spacing.sm,
     marginBottom: t.spacing.xs,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingTop: t.spacing.xs,
   },
-  glassGroupCard: {
-    marginBottom: t.spacing.xs,
-    borderRadius: t.borderRadius.md,
+  // Section-header style — uppercase 12pt muted at the card's 16pt inset
+  // (matches FormSection's title chrome).
+  groupLabel: {
+    fontSize: 12,
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+    fontWeight: '400',
+    paddingHorizontal: CONTENT_INSET,
+    paddingBottom: t.spacing.sm,
+  },
+  // One card per group body — glass on iOS 26+, subtle fill otherwise.
+  // No borders, no gutters: SubFieldRows owns the inner separators.
+  groupCard: {
+    borderRadius: 10,
     overflow: 'hidden',
   },
-  groupGutter: { borderLeftWidth: 2 },
-  groupHeader: { paddingVertical: 4 },
-  groupLabel: { fontSize: t.fontSize.sm, fontWeight: '600' },
-  groupDesc: { fontSize: 12, marginTop: 1, marginBottom: t.spacing.xs },
-  groupBody: {},
+  // Footer below the card at the same inset (FormSection footer chrome).
+  groupDesc: {
+    fontSize: 12,
+    paddingHorizontal: CONTENT_INSET,
+    paddingTop: t.spacing.sm,
+    lineHeight: 12 * 1.4,
+  },
 })

@@ -25,7 +25,7 @@ import React, { useContext, useMemo, useState } from 'react'
 import { Alert, LayoutAnimation, Pressable, StyleSheet, Text, View } from 'react-native'
 
 import type { ClientArrayField, ClientField, ComponentSlot, FieldComponentProps } from '../../types'
-import { defaultTheme as t } from '../../theme'
+import { CONTENT_INSET, defaultTheme as t, ROW_MIN_HEIGHT } from '../../theme'
 import { getFieldLabel } from '../../utils/schemaHelpers'
 import { nativeComponents, useIsInsideNativeForm } from '../shared'
 import { SwipeToDeleteRow } from '../../SwipeToDeleteRow'
@@ -44,6 +44,7 @@ import {
   RowActionsMenu,
   RowLabelContext,
   SegmentedIndexPicker,
+  SubFieldRows,
   usePalette,
   useCompactFields,
   useRenderField,
@@ -294,7 +295,7 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
           {pluralLabel}
           {field.required && <Text style={{ color: t.colors.error }}> *</Text>}
         </Text>
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error && <Text style={[styles.error, { color: palette.destructive }]}>{error}</Text>}
         {items.map((_, index) => (
           <NativeSection
             key={`${path}.${index}`}
@@ -367,7 +368,9 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
         </View>
         {expanded && (
           <View key={`g${generation}`} style={styles.rowBody}>
-            {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`, compact)}
+            <SubFieldRows>
+              {renderSubFieldsWithWidth(subFields, (sub) => `${path}.${index}.${sub.name ?? ''}`, renderField, `arr-${index}`, compact)}
+            </SubFieldRows>
           </View>
         )}
       </>
@@ -409,7 +412,7 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
   return (
     <View style={styles.container}>
       {header}
-      {error && <Text style={styles.error}>{error}</Text>}
+      {error && <Text style={[styles.error, { color: palette.destructive }]}>{error}</Text>}
       {mode === 'switcher' ? switcherContent : stackedContent}
       {addButton}
     </View>
@@ -418,7 +421,8 @@ export const ArrayField: React.FC<FieldComponentProps<ClientArrayField>> = ({
 
 const styles = StyleSheet.create({
   container: { marginBottom: t.spacing.xs },
-  error: { fontSize: 12, color: t.colors.error, marginTop: 2 },
+  // Colour injected at render (palette.destructive) — dark-mode aware.
+  error: { fontSize: 12, marginTop: 2 },
 
   // Field header
   arrayHeader: {
@@ -429,7 +433,14 @@ const styles = StyleSheet.create({
     marginTop: t.spacing.sm,
     gap: t.spacing.sm,
   },
-  fieldLabel: { fontSize: t.fontSize.sm, fontWeight: '600' },
+  // Section-header style (matches FormSection title chrome) — the array is a
+  // sub-section: header above the row cards at the grid the section provides.
+  fieldLabel: {
+    fontSize: 12,
+    fontWeight: '400',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
   arrayCount: { fontSize: 12, marginTop: 1 },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.md },
   glassHeaderActions: {
@@ -444,17 +455,17 @@ const styles = StyleSheet.create({
   headerAction: { fontSize: t.fontSize.sm, fontWeight: '500' },
   modeToggle: { fontSize: 18, paddingHorizontal: 2 },
 
-  // Stacked row cards
+  // Stacked row cards — the card keeps its glass/border tier but owns NO
+  // horizontal padding: the header row and SubFieldRows rows carry the
+  // canonical CONTENT_INSET so inner separators inset like FormSection's.
   rowCard: {
     borderRadius: t.borderRadius.md,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: t.spacing.sm,
     paddingVertical: 2,
     marginBottom: t.spacing.xs,
   },
   glassRowCard: {
     borderRadius: t.borderRadius.md,
-    paddingHorizontal: t.spacing.sm,
     paddingVertical: 2,
     marginBottom: t.spacing.xs,
     overflow: 'hidden',
@@ -464,7 +475,13 @@ const styles = StyleSheet.create({
   rowSwipeWrap: { marginBottom: t.spacing.xs },
   rowCardInSwipe: { marginBottom: 0 },
   rowSwipeAction: { borderRadius: t.borderRadius.md },
-  rowHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 40, gap: t.spacing.xs },
+  rowHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    minHeight: ROW_MIN_HEIGHT,
+    gap: t.spacing.xs,
+    paddingHorizontal: CONTENT_INSET,
+  },
   rowHeaderPress: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs },
   rowChevron: { fontSize: 13, width: 14, textAlign: 'center' },
   rowTitle: { fontSize: t.fontSize.md, fontWeight: '500', flexShrink: 1 },
@@ -472,7 +489,7 @@ const styles = StyleSheet.create({
   rowBody: { paddingBottom: t.spacing.sm },
 
   // Switcher mode
-  switcherToolbar: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, marginBottom: 2, minHeight: 32 },
+  switcherToolbar: { flexDirection: 'row', alignItems: 'center', gap: t.spacing.xs, marginBottom: 2, minHeight: ROW_MIN_HEIGHT },
   switcherTitle: { flex: 1, flexDirection: 'row', alignItems: 'center' },
 
   removeText: { fontSize: t.fontSize.sm },
