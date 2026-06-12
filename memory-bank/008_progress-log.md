@@ -960,6 +960,13 @@ Refinement pass over Phase 27. Two parallel agents (swift / js) cross-verified. 
 
 **Verification:** admin-native 0, mobile-expo 0, server 0, admin-schema 0, local-db 0, client-validators 0 errors (pinned tsc binary); `npx expo export --platform ios --dev` 26 MB, clean. Swift remains compile-unverified until the next EAS build (no local pods). Highest-confidence previous risk (`calendarBlended(with:ratio:)` called but undefined) is now fixed.
 
+### Phase 28 — DayView pod collision resolution + ship (2026-06-12)
+
+- **EAS builds 3-5 failed** on an ObjC class collision: CalendarKit and HorizonCalendar both export an unprefixed `DayView` class. Xcode regenerates each Swift static-lib pod's PRODUCT modulemap at build time and appends the generated `.Swift` compatibility submodule — so suppressing header generation (build 4: dangling reference, "header not found") and stripping the Target Support Files modulemap (build 5: wrong file, Xcode regenerates) both fail. **Rule: never add two pods whose ObjC-visible class names collide; build-settings/modulemap workarounds do not stick.**
+- Resolution: dropped the HorizonCalendar pod; month view is the feature-complete JS MonthGridFallback (titled spanning bars, chips, "+N more", dots on compact). CalendarKit keeps the native day/week timeline (all-day row via isAllDay). `NativeCalendarMonth` export is permanently null; CalendarView falls through automatically. **Build 6 (3283576c) FINISHED** — first good binary with the calendar module, peek dark mode, and UIUserInterfaceStyle Automatic.
+- Same-night inline fixes: kanban static-hold peek disambiguation (release <8pt travel opens preview; drop path gated on the same measurement), DocumentForm sidebar edge tab on wide layouts (Notes-style glass grab-tab; toolbar sidebar button now phone-only), unsaved-changes guard restored to usePreventRemove on Metro-pinned @react-navigation singletons (expo-router resolved 7.1.28 vs app 7.2.2 — dual instance broke context AND native sheet bounce-back).
+- Everything committed and pushed: `0eca960` (251 files).
+
 ## Commands
 - Start everything: `pnpm -C test_app dev:all`
 - Server only: `pnpm -C test_app dev:server`
