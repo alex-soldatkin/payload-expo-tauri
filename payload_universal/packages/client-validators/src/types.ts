@@ -6,6 +6,48 @@
  */
 
 // ---------------------------------------------------------------------------
+// Field shape
+// ---------------------------------------------------------------------------
+
+/**
+ * A select/radio option from the schema. Labels may be plain strings or
+ * localized maps; validators only ever read `value`.
+ */
+export type FieldOption = { label?: string | Record<string, string>; value: string } | string
+
+/**
+ * Minimal client-side field shape — mirrors the relevant subset of
+ * admin-native's ClientField without importing it (this package is
+ * dependency-free). Shared by the validation runner here and by
+ * local-db's validated mutation hooks.
+ */
+export type AnyField = {
+  name?: string
+  type: string
+  label?: string | Record<string, string>
+  required?: boolean
+  admin?: {
+    hidden?: boolean
+    readOnly?: boolean
+    position?: string
+    [key: string]: unknown
+  }
+  // Constraint metadata
+  minLength?: number
+  maxLength?: number
+  min?: number
+  max?: number
+  minRows?: number
+  maxRows?: number
+  hasMany?: boolean
+  options?: FieldOption[]
+  // Structural children
+  fields?: AnyField[]
+  tabs?: Array<{ name?: string; fields?: AnyField[]; [key: string]: unknown }>
+  blocks?: Array<{ slug: string; fields?: AnyField[]; [key: string]: unknown }>
+}
+
+// ---------------------------------------------------------------------------
 // Validator types
 // ---------------------------------------------------------------------------
 
@@ -32,8 +74,8 @@ export type ClientValidateOptions = {
   minRows?: number
   maxRows?: number
   hasMany?: boolean
-  /** Select/radio options from schema. */
-  options?: Array<{ label?: string; value: string } | string>
+  /** Select/radio options from schema. Labels may be localized maps; validators only read `value`. */
+  options?: FieldOption[]
 }
 
 /**

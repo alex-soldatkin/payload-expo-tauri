@@ -1,4 +1,4 @@
-import type { ClientField, SerializedSchemaMap } from '../types'
+import type { ClientField, ClientFieldBase, SerializedSchemaMap } from '../types'
 
 /** Deserialize schema entries back to a Map. */
 export const deserializeSchemaMap = <T>(entries: SerializedSchemaMap<T>): Map<string, T> =>
@@ -25,8 +25,8 @@ const resolveLabel = (
   return label.en || Object.values(label)[0] || fallback
 }
 
-/** Get a human-readable label for a field. */
-export const getFieldLabel = (field: ClientField, fallback?: string): string => {
+/** Get a human-readable label for a field. Accepts any field shape (only `label`/`name` are read). */
+export const getFieldLabel = (field: ClientFieldBase, fallback?: string): string => {
   if (field.label) return resolveLabel(field.label, field.name || fallback || 'Untitled')
   if (field.name) {
     // "createdAt" → "Created At"

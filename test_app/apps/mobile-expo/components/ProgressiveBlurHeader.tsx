@@ -10,7 +10,7 @@
  *   - `hasProgressiveBlur` — static boolean for layout config.
  */
 import React from 'react'
-import { Animated, Platform, StyleSheet, UIManager, View } from 'react-native'
+import { Animated, Platform, StyleSheet, UIManager, useColorScheme, View } from 'react-native'
 
 // ---------------------------------------------------------------------------
 // Optional native modules
@@ -119,17 +119,22 @@ try {
   /* use hand-tuned stops */
 }
 
-const PAPER = { r: 246, g: 244, b: 241 }
+// Paper tint behind the blur — scheme-aware so headerTintColor (palette
+// text) always contrasts with the bar. Light = #f6f4f1, dark = #141414
+// (mirrors the --color-paper / useListColors background tokens).
+const PAPER_LIGHT = { r: 246, g: 244, b: 241 }
+const PAPER_DARK = { r: 20, g: 20, b: 20 }
 
-// Light tint behind the blur — lowered opacity for more translucency
-const tintColors = [
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.55)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.45)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.3)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.15)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0.05)`,
-  `rgba(${PAPER.r},${PAPER.g},${PAPER.b},0)`,
+const makeTintColors = ({ r, g, b }: { r: number; g: number; b: number }) => [
+  `rgba(${r},${g},${b},0.55)`,
+  `rgba(${r},${g},${b},0.45)`,
+  `rgba(${r},${g},${b},0.3)`,
+  `rgba(${r},${g},${b},0.15)`,
+  `rgba(${r},${g},${b},0.05)`,
+  `rgba(${r},${g},${b},0)`,
 ]
+const tintColorsLight = makeTintColors(PAPER_LIGHT)
+const tintColorsDark = makeTintColors(PAPER_DARK)
 const tintLocations = [0, 0.25, 0.5, 0.7, 0.88, 1]
 
 // ---------------------------------------------------------------------------
@@ -157,6 +162,8 @@ export function ProgressiveBlurHeader({
   blurIntensity = 35,
   scrollY,
 }: ProgressiveBlurHeaderProps) {
+  const isDark = useColorScheme() === 'dark'
+  const tintColors = isDark ? tintColorsDark : tintColorsLight
   const totalHeight = headerHeight + blurExtension
 
   // Scroll-driven opacity (transparent at top, fully blurred when scrolled)
@@ -178,7 +185,7 @@ export function ProgressiveBlurHeader({
         <GlassView
           style={StyleSheet.absoluteFill}
           glassEffectStyle="regular"
-          tintColor="rgba(246, 244, 241, 0.5)"
+          tintColor={isDark ? 'rgba(20, 20, 20, 0.5)' : 'rgba(246, 244, 241, 0.5)'}
         />
       </Animated.View>
     )
@@ -231,6 +238,7 @@ export function ProgressiveBlurHeader({
 // ---------------------------------------------------------------------------
 
 export function HeaderBackgroundFallback() {
+  const isDark = useColorScheme() === 'dark'
   if (BlurView) {
     const Blur = BlurView
     try {
@@ -245,7 +253,14 @@ export function HeaderBackgroundFallback() {
       /* fall through */
     }
   }
-  return <View style={[StyleSheet.absoluteFill, styles.translucentHeader]} />
+  return (
+    <View
+      style={[
+        StyleSheet.absoluteFill,
+        isDark ? styles.translucentHeaderDark : styles.translucentHeader,
+      ]}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -264,5 +279,10 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(246, 244, 241, 0.65)',
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: 'rgba(0, 0, 0, 0.08)',
+  },
+  translucentHeaderDark: {
+    backgroundColor: 'rgba(20, 20, 20, 0.7)',
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
 })

@@ -456,6 +456,33 @@ function buildTree(tokens: Token[]): HtmlNode[] {
   return root
 }
 
+/**
+ * Document-level container tags that carry no meaning of their own.
+ *
+ * react-native-enriched's `getHTML()` wraps its output in `<html>...</html>`
+ * (and pasted/external HTML may carry `<body>`). These must be unwrapped
+ * BEFORE block conversion: they aren't in BLOCK_TAGS, so without unwrapping
+ * the whole document is treated as one inline run — block structure is
+ * flattened into a single paragraph and inter-tag newlines become literal
+ * "\n" text nodes.
+ */
+const DOCUMENT_CONTAINER_TAGS = new Set(['html', 'body'])
+
+function unwrapDocumentContainers(nodes: HtmlNode[]): HtmlNode[] {
+  const result: HtmlNode[] = []
+  for (const node of nodes) {
+    if (node.kind === 'element') {
+      if (node.tag === 'head') continue // metadata, never content
+      if (DOCUMENT_CONTAINER_TAGS.has(node.tag)) {
+        result.push(...unwrapDocumentContainers(node.children))
+        continue
+      }
+    }
+    result.push(node)
+  }
+  return result
+}
+
 // ---------------------------------------------------------------------------
 // Convert HTML tree to Lexical nodes
 // ---------------------------------------------------------------------------
@@ -932,9 +959,10 @@ export function htmlToLexical(html: string): LexicalEditorState | null {
   const trimmed = html.trim()
   if (trimmed.length === 0) return null
 
-  // Tokenise and build tree
+  // Tokenise and build tree, then strip document containers (<html>/<body>)
+  // so block-level conversion sees the actual content nodes.
   const tokens = tokenise(trimmed)
-  const tree = buildTree(tokens)
+  const tree = unwrapDocumentContainers(buildTree(tokens))
 
   if (tree.length === 0) return null
 

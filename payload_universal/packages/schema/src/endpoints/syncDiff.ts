@@ -11,12 +11,15 @@
  *   sinceId     — cursor ID within the same timestamp
  *   limit       — batch size (default 200)
  */
-import type { Config } from 'payload'
+import type { Config, Where } from 'payload'
 
 export const createSyncDiffEndpoint = (): NonNullable<Config['endpoints']>[number] => ({
   method: 'get',
   path: '/sync/diff',
   handler: async (req) => {
+    if (!req.url) {
+      return Response.json({ error: 'missing request URL' }, { status: 400 })
+    }
     const url = new URL(req.url)
     const collectionSlug = url.searchParams.get('collection')
     const since = url.searchParams.get('since')
@@ -29,7 +32,7 @@ export const createSyncDiffEndpoint = (): NonNullable<Config['endpoints']>[numbe
 
     try {
       // Query only id + updatedAt using Payload's select to minimize transfer
-      const where: Record<string, unknown> = {}
+      const where: Where = {}
       if (since) {
         where.updatedAt = { greater_than_equal: since }
       }

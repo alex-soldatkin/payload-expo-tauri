@@ -1,5 +1,6 @@
 import type { I18n } from '@payloadcms/translations'
 import type {
+  ClientBlock,
   ClientConfig,
   ClientField,
   ClientFieldSchemaMap,
@@ -64,9 +65,17 @@ export const traverseFields = ({
           const block =
             typeof _block === 'string'
               ? config.blocksMap
-                ? config.blocksMap[_block]
+                ? // blocksMap is keyed by the generated BlockSlug union (which can
+                  // collapse to `never` when no blocks are registered) — index it
+                  // as a plain string-keyed record.
+                  (config.blocksMap as Record<string, ClientBlock | undefined>)[_block]
                 : config.blocks.find((block) => typeof block !== 'string' && block.slug === _block)
               : _block
+
+          if (!block) {
+            // Unresolvable block reference (slug missing from config) — skip.
+            return
+          }
 
           const blockSchemaPath = `${schemaPath}.${block.slug}`
 

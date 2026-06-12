@@ -19,6 +19,7 @@ import {
 } from 'react-native'
 
 import { defaultTheme as t } from '../theme'
+import { useListColors } from '../hooks/useListColors'
 
 // ---------------------------------------------------------------------------
 // Optional: GlassView for liquid glass on iOS 26+
@@ -260,6 +261,7 @@ const Cell: React.FC<{
   onFocus: () => void
   onBlur: () => void
 }> = React.memo(({ cell, isFocused, disabled, onChangeText, onFocus, onBlur }) => {
+  const { dark, colors: c } = useListColors()
   const isHeader = cell.headerState === 1
   const text = getCellText(cell)
 
@@ -267,20 +269,21 @@ const Cell: React.FC<{
     <View
       style={[
         styles.cell,
-        isHeader && styles.cellHeader,
-        isFocused && styles.cellFocused,
+        { borderColor: c.separator },
+        isHeader && { backgroundColor: dark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.03)' },
+        isFocused && [styles.cellFocused, { borderColor: c.primary }],
         cell.width ? { width: Math.max(cell.width, MIN_CELL_WIDTH) } : { minWidth: MIN_CELL_WIDTH },
       ]}
     >
       <TextInput
-        style={[styles.cellInput, isHeader && styles.cellInputHeader]}
+        style={[styles.cellInput, { color: c.text }, isHeader && styles.cellInputHeader]}
         value={text}
         onChangeText={onChangeText}
         onFocus={onFocus}
         onBlur={onBlur}
         editable={!disabled}
         placeholder={isHeader ? 'Header' : ''}
-        placeholderTextColor={t.colors.textPlaceholder}
+        placeholderTextColor={c.textPlaceholder}
         returnKeyType="next"
         blurOnSubmit={false}
         multiline={false}

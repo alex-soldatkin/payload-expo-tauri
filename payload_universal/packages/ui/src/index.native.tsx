@@ -11,8 +11,11 @@ import { Link as ExpoLink } from 'expo-router'
 // Since admin-native depends on this, actually ui peers admin-native.
 import { FieldShell } from '@payload-universal/admin-native'
 import { useField } from './hooks.native'
+import { NativeActionButton } from './NativeActionButton.native'
 
 export * from './hooks.native'
+export { NativeActionButton }
+export type { NativeActionButtonProps } from './NativeActionButton.native'
 
 export const getTranslation = (label: any, i18n: any) => {
   if (typeof label === 'string') return label;
@@ -27,10 +30,22 @@ export const Card = ({ children, style, className }: any) => (
   </View>
 )
 
-export const Button = ({ children, onClick, onPress, style, className }: any) => (
-  <Pressable onPress={onPress || onClick} style={[{ padding: 12, backgroundColor: '#000', borderRadius: 4 }, style]} className={className}>
-    <Text style={{ color: 'white', textAlign: 'center' }}>{children}</Text>
-  </Pressable>
+/**
+ * Payload `Button` shim — delegates to NativeActionButton so codegen'd
+ * components using @payloadcms/ui Button get the native (glass/bordered)
+ * look. Payload's buttonStyle maps onto the variant; size/el/etc. are
+ * ignored (native styling wins).
+ */
+export const Button = ({ children, onClick, onPress, disabled, buttonStyle, style, id }: any) => (
+  <NativeActionButton
+    onPress={onPress || onClick}
+    disabled={disabled}
+    variant={buttonStyle === 'primary' ? 'primary' : buttonStyle === 'error' ? 'destructive' : 'default'}
+    style={style}
+    testID={id}
+  >
+    {children}
+  </NativeActionButton>
 )
 
 export const Link = ExpoLink
@@ -69,6 +84,9 @@ export const Loading = () => <ActivityIndicator />
 
 export const NavGroup = Collapsible
 
+/** BrowseByFolderButton — web-only folder browser, renders nothing on native. */
+export const BrowseByFolderButton = (_props: any) => null
+
 // Form Components
 export const FieldLabel = ({ label }: any) => (
   <Text style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 4 }}>{label}</Text>
@@ -95,7 +113,13 @@ export const TextInput = ({ path, label, description, required, onChange, value:
   const handleChange = onChange || setValue
 
   return (
-    <FieldShell field={{ type: 'text', name: path, required, label, admin: { description } } as any} error={errorMessage}>
+    <FieldShell
+      label={getTranslation(label ?? path, undefined)}
+      description={description ? getTranslation(description, undefined) : undefined}
+      required={required}
+      error={errorMessage}
+      layout="stacked"
+    >
        <RNTextInput
          value={String(val || '')}
          onChangeText={handleChange}

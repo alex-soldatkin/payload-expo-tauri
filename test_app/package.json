@@ -11,6 +11,7 @@
     "dev:mobile:ios": "pnpm --filter @payload-universal-test/mobile-expo ios",
     "dev:mobile:android": "pnpm --filter @payload-universal-test/mobile-expo android",
     "dev:all": "concurrently -k -n server,web,web-next,desktop,mobile \"pnpm dev:server\" \"pnpm dev:web\" \"pnpm dev:web-next\" \"pnpm dev:desktop\" \"pnpm dev:mobile\"",
+    "reset:db": "pnpm --filter @payload-universal-test/server reset:db",
     "test": "vitest",
     "test:playwright": "playwright test",
     "test:mobile": "pnpm --filter @payload-universal-test/mobile-expo test",

@@ -150,6 +150,74 @@ export const CheckboxField = (props) =>
 
 ---
 
+## Native SwiftUI Button (2026-04-04)
+
+### Registry
+`Button`, `buttonStyle`, `controlSize`, `tint` added to `NativeComponentRegistry`:
+```tsx
+const NativeButton = nativeComponents.Button
+const btnStyle = nativeComponents.buttonStyle
+const ctrlSize = nativeComponents.controlSize
+const tintMod = nativeComponents.tint
+```
+
+### Usage — selection action bar
+Each button gets its own `NativeHost` inside a RN `View` with `flexDirection: 'row'`:
+```tsx
+<View style={{ flexDirection: 'row', gap: 8 }}>
+  <NativeHost matchContents>
+    <NativeButton
+      label="Publish Selected"
+      role="default"
+      systemImage="arrow.up.doc"
+      onPress={handlePublish}
+      modifiers={[
+        btnStyle('borderedProminent'),
+        ctrlSize('regular'),
+        tintMod('#007AFF'),
+      ]}
+    />
+  </NativeHost>
+  <NativeHost matchContents>
+    <NativeButton
+      label="Archive"
+      role="destructive"
+      systemImage="archivebox"
+      onPress={handleArchive}
+      modifiers={[
+        btnStyle('borderedProminent'),
+        ctrlSize('regular'),
+        // destructive role auto-renders in red — no tint needed
+      ]}
+    />
+  </NativeHost>
+  <NativeHost matchContents>
+    <NativeButton
+      label="Done"
+      role="cancel"
+      onPress={exitSelectionMode}
+      modifiers={[
+        btnStyle('bordered'),
+        ctrlSize('regular'),
+      ]}
+    />
+  </NativeHost>
+</View>
+```
+
+### Available buttonStyle values
+`'automatic'` | `'bordered'` | `'borderedProminent'` | `'borderless'` | `'glass'` | `'glassProminent'` | `'plain'`
+
+### Key rules
+1. **Use `matchContents={{ height: true }}`** — SwiftUI must report button height; RN controls width via flex layout
+2. **`role="destructive"` for red buttons** — SwiftUI applies native red tint automatically
+3. **`role="cancel"` for grey/dismiss buttons** — SwiftUI applies native secondary styling
+4. **`buttonStyle('borderedProminent')` for filled buttons**, `'bordered'` for outline, `'glass'` / `'glassProminent'` for liquid glass
+5. **Do NOT apply `glassEffect` modifier directly to Button** — use `buttonStyle('glass')` instead, otherwise gesture handlers conflict
+6. **Fallback to Pressable on Android** — no SwiftUI Button equivalent
+
+---
+
 ## Collection Card Summary Fields
 
 ### How it works
@@ -909,3 +977,265 @@ Field labels (`FieldShell.tsx`) use iOS Settings style:
 
 ### Cache clearing
 If Turbopack fails after config changes, delete `test_app/apps/server/.next` and restart.
+
+---
+
+## JC* Registry Key Convention (2026-06-10)
+
+Android Jetpack Compose components whose APIs diverge from their SwiftUI counterparts get **distinct `JC*` keys** in the native component registry — never overload the iOS key with a different prop shape.
+
+| Key | API shape |
+|---|---|
+| `JCPicker` | `{ options, selectedIndex, onOptionSelected, variant: 'segmented' \| 'radio' }` — options-based, not children-based |
+| `JCBottomSheet` | `{ isOpened, onIsOpenedChange }` |
+| `JCSwitch` | `{ value, onValueChange }` |
+| `JCTextInput` | Uncontrolled (`defaultValue` + `onChangeText`), **no placeholder support** |
+| `JCDateTimePicker` | Compose date/time picker |
+| `JCButton` | Children, not `label` prop |
+| `JCChip`, `JCAlertDialog` | Compose-specific |
+
+Components with matching shapes share keys (`Host`, `Text`, …). Field components branch: `nativeComponents.Picker` (iOS) → `nativeComponents.JCPicker` (Android) → JS fallback. `fields/shared/types.ts` documents the full verified surface (43 iOS components + 38 modifier factories) — **read it for exact shapes; do not trust online docs** (registry reflects the canary binary, see version-pinning gotcha below).
+
+---
+
+## Uncontrolled Native Text Bridge (2026-06-10)
+
+SwiftUI `TextField`/`SecureField` and `JCTextInput` are **UNCONTROLLED**: mount with `defaultValue`, listen via `onChangeText`, set programmatically only via `ref.setText`. Echoing keystrokes back as a controlled `value` causes cursor jumps / dropped input.
+
+`fields/inputs/textBridge.ts` (`useNativeTextBridge`) bridges this to react-hook-form's controlled values via `lastFormValueRef`:
+1. `lastFormValueRef` records the last string the bridge knows the form holds.
+2. Keystrokes flow native → `handleChangeText` → form; the returned canonical string updates `lastFormValueRef` (keystrokes are never pushed back into the native field).
+3. An external-sync effect pushes text INTO the native field via `ref.setText` **only** when the form value changes from outside (RHF `reset` / programmatic `setValue`) — detected as `externalText !== lastFormValueRef.current`.
+
+Same epoch-remount idea applies to the SwiftUI `Stepper` (also uncontrolled, `defaultValue` + `onValueChanged`): remount with a bumped `key` when the external value diverges. The controlled `value`/`onValueChange` props it appears to accept **never fire**.
+
+---
+
+## BottomSheet Detents API (2026-06-10)
+
+`BottomSheet` (still a JS Modal — RNHostView not in registry) accepts `detents?: SheetDetent[]` where a detent is `'medium' | 'large'` (system semantics: 0.5 / ~0.95) or a fraction:
+
+```tsx
+<BottomSheet visible={v} onClose={close} detents={['medium', 'large']}>
+```
+
+- Multiple detents → drag snaps between them with velocity-based snap + rubber-banding at the extremes.
+- Legacy `height` prop still works (treated as a single detent; defaults to 0.5).
+- Keyboard handling and glass/blur/solid background tiers built in.
+- Reminder: any `DocumentForm` rendered inside must pass `nativeForm={false}` (see rule below).
+
+---
+
+## ConditionContext Registration (2026-06-10)
+
+`admin.condition` functions can't serialize through the JSON admin-schema, so they follow the same Metro-bundled pattern as client validators and action handlers:
+
+1. **Server**: admin-schema emits condition markers (which slug→field paths have conditions) and re-attaches `admin.hasCondition`.
+2. **App**: registers the actual functions in `test_app/apps/mobile-expo/src/conditions/index.ts` — a `ConditionRegistry` keyed `{ [slug]: { [fieldPath]: (data, siblingData) => boolean } }`.
+3. **Mount**: `ConditionRegistryProvider` in `app/_layout.tsx` (next to ActionRegistryProvider).
+4. **Evaluate**: `FieldRenderer` resolves via `resolveFieldCondition` / `evaluateFieldVisibility` (`admin-native/src/contexts/ConditionContext.tsx`) against **live form data**. **Fail-open**: a field whose condition is marked but unregistered (or throws) stays visible — never hide data on a registry miss.
+
+---
+
+## nativeForm={false} in Sheets (2026-06-10) — superseded 2026-06-11
+
+> **Phase 25 update:** the default flipped. `nativeForm` is now **opt-in** (`nativeForm === true`); see "Native SwiftUI Form Is Opt-In" below. The unsized-container rule below still applies to anyone who opts in.
+
+`DocumentForm` used to default `nativeForm` to true on iOS when all fields are Form-compatible, rendering one full-screen SwiftUI `Form`. A SwiftUI Form needs a sized container to lay out; in an **unsized container the Form's UIKit frame is zero-height and swallows every touch** (same root cause as the `matchContents={false}` hit-testing bug).
+
+**Rule:** every `DocumentForm` mounted inside a formSheet route, the details sheet, a `BottomSheet`, or any other unsized/modal container MUST pass `nativeForm={false}`. Applied in: `[slug]/details.tsx`, list-screen long-press preview, `RelationshipInlineCreate`.
+
+---
+
+## @expo/ui Canary Version Pinning Gotcha (2026-06-10)
+
+Two `@expo/ui` versions coexist in the pnpm workspace:
+- `test_app/apps/mobile-expo/node_modules/@expo/ui` → **`55.0.0-canary-20260128-67ce8d5`** — compiled into the native binary. The only truth.
+- `test_app/node_modules/@expo/ui` (root hoist) → `55.0.6` — wrong; Metro's custom `resolveRequest` pins all `@expo/ui/*` imports to the app copy (see Metro resolver section above), but **tooling, editors, and root-level `require.resolve` will happily find 55.0.6**.
+
+The canary **lacks** `ControlGroup`, `ConfirmationDialog`, and swift-ui `ScrollView` — components that exist in 55.0.6 and in online docs. Writing code against the wrong surface produces undefined-component runtime crashes that typecheck fine.
+
+**Rule:** before using any @expo/ui component or prop, verify it exists in `test_app/apps/mobile-expo/node_modules/@expo/ui/build/` (or check the registry in `fields/shared/types.ts`, which mirrors the verified canary surface). Never trust the hoisted copy or documentation.
+
+---
+
+## Telegram-Style Peek Module (2026-06-11)
+
+`modules/scrollable-preview` rebuilt Telegram-style (sources studied: Telegram-iOS ContextGesture/PeekController/PeekControllerNode). No `UIContextMenuInteraction`.
+
+### Architecture (iOS)
+- **Dedicated `.alert`-level UIWindow** mirroring the host window's frame — source-rect/handoff coordinates map 1:1 even when the trigger is inside an RN Modal, and Modal teardown can never reparent or kill the overlay.
+- **Modal-safety:** a `willMove(toWindow:nil)` hook on the trigger tears the peek down synchronously if the enclosing Modal/BottomSheet closes mid-peek.
+- RN Content reparented into a 16pt-continuous rounded shadowed container over `UIVisualEffectView` blur + dim; spring morph from/to the trigger's on-screen rect (`UIViewPropertyAnimator` 0.42s, damping 0.8); medium impact haptic on open.
+- **Scrolling fix is JS-side:** Trigger resolves the preview size (default 92% w × 65% h; `previewWidth`/`previewHeight`/`previewHeightFraction`) and provides it via internal context; Content styles itself `position:absolute` at exactly that size, so Yoga layout matches the native frame and inner ScrollViews/FlatLists get correct content sizes and scroll natively after finger-lift (interactive mode).
+- Actions: native glass capsule rows; pan-while-held highlight (12pt threshold, selection haptic), lift performs. Dismissal: backdrop tap, scroll-aware swipe-down (engages only when the touched scroll view is at top; spring-back below 140pt / 900pt-per-s), tap-on-preview fires `onPrimaryAction`.
+- Android: full-screen Dialog (`FLAG_DIM_BEHIND` 0.55), rounded clipped card preserving RN-computed layout, pill action rows, tap-outside/back/fling-down dismissal, content restored to original parent on dismiss/detach.
+
+### Consumer rules
+1. Consume ONLY via `useScrollablePreview()` context — fallback-safe (plain rows when the module is absent).
+2. `useIsInsidePreview` (set by BottomSheet) MUST gate peek triggers — never nest native peeks inside sheets/previews.
+3. Interactive Pressables (row up/down/X buttons) stay OUTSIDE the Trigger to avoid recognizer fights.
+4. Peeked `DocumentForm` gets `nativeForm={false}` + `PreviewContextProvider value={true}`.
+5. JS API is backward compatible; `previewHeightFraction` is the only Phase-24 addition. The module exposes NO Modal-safety capability flag — code that must work against an old binary keeps the pure-JS inline preview.
+
+---
+
+## OR-Group Filter Shape (2026-06-11)
+
+`ActiveFilter` carries optional `groupIndex` (default 0). Conditions **AND within a group, groups OR across**:
+- Single group → flat `{ and: [...] }`-equivalent shape (exactly the pre-Phase-24 serialization — backward compatible).
+- Multiple groups → `{ or: [{ and: [...] }, { and: [...] }] }` (web WhereBuilder parity).
+
+UI: FilterBottomSheet OR-group overview step + AND/OR group choice at the value step; the choice rides the existing `onApply` payload (`newGroup` flag) so `DocumentList` integration is unchanged. Chips cluster by group with an 'or' micro-label divider.
+
+**Persistence** (`hooks/useDocumentListFilters.ts`): per collection under `list_filters:{slug}` as versioned `{ v: 2, groups: PersistedFilter[][] }`; a legacy flat `ActiveFilter[]` array is still read gracefully (ids regenerated). Local evaluator handles arbitrary `or`/`and` nesting; empty `or` is vacuous-true. Operator matrix mirrors web `field-types.tsx`; `in`/`not_in` on scalar fields take comma-separated input (accepted by both REST and the local evaluator).
+
+---
+
+## Bulk Edit Flow (2026-06-11)
+
+`src/components/BulkEditSheet.tsx` (app-level, web EditMany parity):
+1. **Field picker** over bulk-editable root fields — flattens row/collapsible/unnamed-tabs; skips richText/join/ui, structural containers, upload-hasMany, polymorphic relationships, unique/hidden/readOnly, `admin.disableBulkEdit`.
+2. **Single-field input** via the normal `FieldRenderer` — renders in non-native-Form fallback mode (NativeFormContext defaults false in the unsized Modal; the `nativeForm={false}` rule by another name) + Save / Save Draft / Publish segmented choice when drafts are enabled (`_status` rides the save mode).
+3. **Apply**: per selected doc, the single-field patch is **merged over the full stripped original** before `useValidatedMutations.update` — whole-doc validation must pass; live "Updating i of N" progress, ok/failed toast, selection-mode exit.
+
+Selection mode is reachable for every collection (iOS Actions toolbar menu always rendered; Android CheckSquare header button unconditional); `SelectionActionBar` prepends 'Edit Selected' ahead of custom `listActions`.
+
+---
+
+## Native SwiftUI Form Is Opt-In (2026-06-11)
+
+The full-screen SwiftUI `Form` path in `DocumentForm` **crashed natively on-device** (no JS stack) for every collection whose entire field tree is Form-compatible — Events and the SiteSettings/Footer globals had no richText/join field to force the carve-out, so `canUseNativeFormForFields` returned true and they rendered one `NativeHost > Form`. `FormCrashBoundary` is `getDerivedStateFromError` — it catches JS render errors only, so the auto-fallback never fired for native crashes.
+
+**Rules:**
+1. The gate is strict `nativeForm === true` in BOTH DocumentForm variants (RHF ~line 547, Legacy ~line 1104). Never restore `nativeForm ?? true`.
+2. No screen currently opts in. Re-enabling requires native-side debugging first; prime suspect: raw RN views (relationship rows, array/blocks editors, upload pickers, Pressables, FlatLists) as direct children of SwiftUI Form/Section cells fighting UIKit/SwiftUI List self-sizing.
+3. Do not rely on `FormCrashBoundary` for anything native — it cannot see native crashes.
+
+---
+
+## initialData Must Be Identity-Stable (2026-06-11)
+
+`initialData={(doc) ?? {}}` (or any inline object/`toJSON()` clone) creates a NEW identity every render. react-hook-form 7.72 re-stores live props on `control._options` EVERY render, so an unstable initialData leaks into dirty tracking (`_getDirty()` deep-compares against `_defaultValues`; with `{}` defaults registered keys never match) and, combined with on-device native control echoes (e.g. DatePicker fires `onDateChange` once at mount; an empty DateField seeding `selection={new Date()}` is a different prop every render), produced "Maximum update depth exceeded" on the details sheet.
+
+**Rules:**
+1. Empty fallbacks are module-scope constants: `const EMPTY_DOC: Record<string, unknown> = {}` — never inline `?? {}` / `initialData={{}}` in JSX.
+2. Mount `DocumentForm` only after the local doc has resolved (loading gate) — RHF captures `defaultValues` AT MOUNT ONLY; mounting with `{}` leaves fields empty forever even after data arrives.
+3. Defense-in-depth: the public `DocumentForm` wrapper runs `useStableInitialData` (deep-equal ref latch via `utils/diff.ts` deepEqual), so a new-but-equal object from any caller returns the same reference. Keep it.
+
+---
+
+## Auto-Grow Measurement Must Exclude Padding (2026-06-11)
+
+RN maps a multiline TextInput's padding to `UITextView.textContainerInset` on iOS, so `onContentSizeChange`'s `contentSize.height` ALREADY includes the padding. Computing `height = contentHeight + padding` double-counts it; and while `scrollEnabled={false}` a UITextView's contentSize tracks `max(textHeight, bounds.height)`, so each applied inflated height echoes back bigger — the textarea grew by 2×padding per cycle and surrounding collapsible LayoutAnimation "went berserk".
+
+**Rules (see TextareaField in `fields/inputs.tsx`):**
+1. Measured size and applied height must share ONE coordinate space: put padding on a wrapper View, zero it on the TextInput.
+2. Clamp into `[minContentHeight, maxContentHeight]` BEFORE storing the measurement; re-clamp at render (rotation can shrink the max).
+3. Guard the setState: functional updater that bails unless the delta exceeds a jitter threshold (>2px for heights, >1px for layout-width estimates) — bounds-derived echoes and Android density rounding must never re-render.
+
+---
+
+## NativeWind Dark Tokens: Runtime vars(), Not Media Queries (2026-06-11)
+
+`@media (prefers-color-scheme: dark)` blocks in global.css compile fine for native but are DEAD at runtime: react-native-css-interop resolves `:root` variables and `dark:` variants against a private module-level `systemColorScheme` observable that is snapshotted once at bundle eval (`Appearance.getColorScheme() ?? 'light'`) and only updated by an Appearance listener that DROPS events while `AppState !== 'active'`. At dev-client launch it sticks on 'light' forever, while RN's `useColorScheme()` correctly reports dark → mixed light/dark UI.
+
+**Rules:**
+1. Native theme tokens come from `ThemeVarsProvider` in `app/_layout.tsx`: NativeWind `vars()` derived from `useListColors` (inline vars beat rootVariables in css-interop's resolution order and re-render via ordinary React state). The :root/media blocks in global.css are web-only + static fallback; keep them in lockstep with `useListColors`.
+2. Avoid `dark:` Tailwind variants in app code — they ride the stuck-prone observable. Use the token classes (paper/surface/ink/ink-muted/line/danger/danger-bg/warn/warn-bg).
+3. The appearance preference goes through nativewind `colorScheme.set(pref)` in `src/preferences.ts` ('system'|'light'|'dark') so RN palettes, the vars provider, and any residual `dark:` variants flip on one switch.
+4. `useListColors` is the single source of truth for scheme-aware color in package JS AND app tokens AND explicit native tints (header/toolbar `tintColor`).
+
+---
+
+## formSheet/Modal Headers Need headerRight Fallbacks (2026-06-11)
+
+`DocumentForm` renders NO submit button — `submitLabel` is a dead prop; saving works ONLY via the exposed form ref from a header/toolbar affordance. create.tsx shipped with zero save UI because nobody wired one. Separately, icon-only `Stack.Toolbar.Button` items inherit the navbar tint and can render invisible; the experimental Stack.Toolbar pipeline (expo-router canary → RNS rightBarButtonItems) can also be silently dropped by an older dev-client binary.
+
+**Rules:**
+1. Every screen mounting `DocumentForm` MUST provide a save affordance via the form ref (headerRight or Stack.Toolbar) — there is no in-form fallback.
+2. Modal/formSheet routes use `headerRight`, not Stack.Toolbar (the experimental toolbar pipeline is unreliable there; the rendered Cancel headerLeft proves headerRight works).
+3. Toolbar save buttons are LABELED text buttons (`children="Save"`, `variant="done"`) with explicit `tintColor` from `useListColors` — icons suppress labels in header items and inherit ambient tints.
+4. Gate native Stack.Toolbar on API presence and render the JS headerRight fallback whenever it is unavailable — on ALL platforms, not just non-iOS. If the toolbar is empty on a device whose binary predates RNS 4.20 bar-button items, force `useNativeHeaderToolbar` to false in `[id].tsx`.
+
+---
+
+## Kanban Board Injection Contract (2026-06-11)
+
+`@payload-universal/admin-native/src/kanban/` (types / KanbanCard / KanbanColumn / KanbanBoard / index barrel). The board NEVER imports expo-router and NEVER fetches — the screen supplies everything (DocumentList renderRow pattern).
+
+**Screen → board contract (`KanbanBoardProps`):**
+- `docs` — already-filtered local-first docs (screen runs `useDocumentListFilters` + `applyWhereToDocs` + sort).
+- `statusField: { name, options, label? }` — the plain select (or radio) driving columns. Eligibility lives in the SCREEN (`isEligibleStatusField`: select `hasMany:false` with options, or radio with options; `admin.hidden` excluded) — the board trusts its input.
+- `columnOrder?` (subset first, missing options appended in option order), `columnColors?` (else `DEFAULT_KANBAN_PALETTE[optionIndex % len]` — stable by OPTION index, not display order), `hiddenColumns?` (docs in hidden columns are DROPPED, not shunted; sentinel `NO_STATUS_COLUMN_VALUE = '__no_status__'` hides the trailing "No <label>" null column).
+- `cardFields?`/`fieldLabels?`/`useAsTitle?` — card body rows, DocumentList value-formatting conventions (`formatKanbanFieldValue`).
+- `onPressCard`, `onMoveCard(doc, toValue: string | null)` (screen patches `{[statusField.name]: value}` via `useValidatedMutations.update`; board swallows rejections — surface errors in the screen), `loadingDocIds` (dimmed mid-move).
+- `onLongPressCard?` — wired ONLY when reanimated-dnd is absent (drag owns long-press otherwise). `renderCard?(doc, defaultCard)` — screen wrapper (e.g. `ScrollablePreview.Trigger` peek); when dnd is active it renders INSIDE a Draggable, so it must stay pure RN (no @expo/ui).
+
+**Internal rules (hard-won):**
+1. dnd is optional-required (try/catch require). The guaranteed fallback is the ellipsis "Move to <column>" menu — registry SwiftUI `Menu` when NOT inside a Draggable; lucide ellipsis + BottomSheet (Modal portals out of the gesture tree) when dnd wraps the card (`insideDraggable` prop downgrades the tier).
+2. Column FlatLists clip on iOS → the board renders a finger-following Animated **drag-overlay copy** (real card hides, layout kept) in the SAME origin+translation space as the lib, so collision detection matches visuals.
+3. Edge-hover auto-scrolls one column per cooldown and re-measures drop targets after EVERY scroll; user scroll locks mid-drag; card taps gate during drag.
+4. Per-collection persistence is app-side: `useKanbanConfig` (`kanban_config:{slug}`) + `useListViewMode` (`list_view_mode:{slug}`), AsyncStorage, corrupt-entry-safe.
+5. View-selector toolbar gotcha: two sibling `Stack.Toolbar placement="right"` elements OVERRIDE each other (both set `unstable_headerRightItems`) — the view-mode Menu group must live FIRST inside the single right toolbar, before the Actions menu.
+6. Customize sheet (app-side `KanbanCustomizeSheet`): reanimated-dnd Sortable rows per the Drag-to-Reorder rules (noop `onMove`, `onDrop` allPositions, lucide-only inside Sortables, `useFlatList=false`, fixed heights); registry `ColorPicker` is null-checked and rendered OUTSIDE both Sortable trees.
+
+---
+
+## View Presets + Query Presets (2026-06-11)
+
+Two preset systems, deliberately different transports:
+
+**View presets (`view-presets` collection — SYNCED).** Slug has no `payload-` prefix, so LocalDBProvider replicates it like any content collection; boards/views work offline. Server access: read = owner OR `accessMode==='everyone'` OR (`'specificUsers'` AND user ∈ `sharedWith`); update/delete OWNER-ONLY; `beforeChange` pins `owner` and always includes the owner in `sharedWith` for specificUsers (lockout prevention). App side: `useViewPresets(slug)` (local-first CRUD, defensive access re-filtering against stale local docs, json-convention sanitizing) + `PresetsSheet` (save-as / My-Shared sections / apply-on-tap / registry-Menu row actions / sharing UI). Lift mapping: `hiddenColumns` has NO server counterpart — dropped on lift, reset to `[]` on apply. Applying a preset sets view mode + board config + BOTH filter pipelines (kanban screen-hosted hook directly; table via an epoch-bumped DocumentList prop).
+
+**Query presets (`payload-query-presets` — REST-ONLY).** Auto-registered by `enableQueryPresets: true` + root `queryPresets` config; powers the WEB admin's filter/column presets. The `payload-` prefix excludes it from RxDB sync BY DESIGN — mobile lists/saves via `payloadApi` REST (`where[relatedCollection][equals]=slug`; create POSTs the canonical `{ title, relatedCollection, where, columns }` shape from payload-main's query-presets config). FilterBottomSheet's overview step hosts the UI: apply-on-tap converts Payload where → the sheet's OR-group model, with inline notes for operators the local evaluator lacks.
+
+**Shared converters** (in `hooks/useDocumentListFilters.ts`, exported): `whereToFilterGroups` / `filtersToWhere` / `setFilterGroups`. Both preset systems and the OR-group sheet ride the same conversion — do not fork it.
+
+---
+
+## Uncontrolled Native Control Echo Rule (2026-06-11)
+
+@expo/ui canary controls that take `defaultValue` (Stepper, DatePicker, the text bridge inputs) are UNCONTROLLED: the initial value is latched once natively, changes flow out via `onValueChanged`/`onDateChange`, and the native side REPLAYS echo events (`.onAppear` fires again whenever the host recreates the control, e.g. toolbar rebuilds; DatePicker fires once at mount; an empty DateField seeded with `selection={new Date()}` is a different prop every render).
+
+**Rule: state must NEVER be echoed back into native props.** `defaultValue` (and labels derived from the state) must come from a mount-time constant or ref — wiring `defaultValue={stateValue}` recreates the control or replays echoes mid-update and re-arms the "Maximum update depth exceeded" class (memory-bank 008 Phase 25 item 2; api.tsx depth Stepper is the reference implementation). External resets go through an explicit remount (epoch key) or imperative `ref.setText`/`setValue` — never through the prop.
+
+---
+
+## usePreventRemove Unsaved-Changes Guard (2026-06-11)
+
+`src/hooks/useUnsavedChangesGuard.ts` — pairs with DocumentForm's `onDirtyChange` contract:
+
+1. The screen tracks dirty via `<DocumentForm onDirtyChange={setFormDirty} />` (RHF `isDirty`; resets after successful submit). The same flag drives the checkmark Save button (`checkmark.circle.fill`, `variant="done"`, enabled+blue when dirty, disabled+gray otherwise, explicit `useListColors` tints).
+2. `usePreventRemove(dirty, cb)` (`@react-navigation/native`) intercepts back/swipe/dismiss and shows the discard confirm; on confirm it dispatches the stashed removal action.
+3. Intentional navigations (save-then-navigate, delete, duplicate) call `allowLeave()` FIRST — a one-shot ref bypass consumed by the next removal attempt. Without it, your own `router.back()` after a successful save hits the guard.
+
+---
+
+## Calendar View Injection Contract (2026-06-12)
+
+`@payload-universal/admin-native/src/calendar/` (types / eventMapping / MonthGridFallback / DayListFallback / CalendarView / index barrel). Mirrors the kanban contract: the component NEVER imports expo-router, NEVER fetches, and NEVER imports the app's native module — the screen injects everything.
+
+**Screen → component contract (`CalendarViewProps`):**
+- `docs` — already-filtered local-first docs (screen runs `useDocumentListFilters` + `applyWhereToDocs` + sort, same pipeline as kanban).
+- `sources: CalendarSource[]` — `{ id, label, startField, endField?, color }`. `startField`/`endField` are **dot-paths** (`'scheduling.scheduledPublish'`) resolved via `getByPath` — the server `view-presets` json convention. Defaults come from `pickDefaultSources(dateFields)` (two-pass: `start*`/`starts*`↔`end*`/`ends*` + `*From`↔`*To` range pairing first, leftover date fields become point sources; ids = start field name, colors = `DEFAULT_CALENDAR_PALETTE[index]`, which IS the kanban palette).
+- `useAsTitle?` — event titles via the `getDocumentTitle` fallback chain.
+- `mode`/`onChangeMode` (`'month' | 'day'`), `selectedDate`/`onChangeSelectedDate` (LOCAL date keys `'YYYY-MM-DD'`) — fully controlled; the screen owns persistence (`useCalendarConfig`, `calendar_config:{slug}`; `sources: null` sentinel = "derive defaults so new date fields keep appearing").
+- `onPressDoc(doc)` — event ids are `{docId}::{sourceId}`; recover the doc with `calendarEventDocId` (split on the LAST `'::'` — doc ids can't contain it, source ids might).
+- `renderDocRow?(doc, defaultRow)` — screen wrapper injection around day-list rows (e.g. `ScrollablePreview.Trigger` peek); the default row already owns the press.
+- `nativeModule?: CalendarNativeModule` — the app's `'@/modules/calendar-view'` module, injected as a prop and typed LOCALLY in the package (`{ isNativeCalendarAvailable, NativeCalendarMonth, NativeCalendarDay }`). `undefined` OR `isNativeCalendarAvailable === false` → pure-JS `MonthGridFallback`/`DayListFallback` render (Expo Go / Android / old dev clients).
+
+**Internal rules:** Month/Day switch rides the registry SegmentedIndexPicker tiers (SwiftUI/JC/pill — @expo/ui via `fields/shared/` only); month paging via PanResponder; glass via expo-glass-effect optional-require with themed fallbacks; all colors `useListColors`. Mapping is tolerant by design: invalid/missing starts skip the (doc, source) pair, inverted ranges swap with a console.warn, `YYYY-MM-DD` values parse as LOCAL midnight and flag `allDay`, spans cap at `MAX_EVENT_SPAN_DAYS = 62`. Eligibility lives in the SCREEN: the calendar view-mode entry renders only when the collection has ≥1 date field (nested dot-paths count), and `isCalendar` re-checks it so a stale persisted mode degrades to table.
+
+---
+
+## Pod Dependencies in Local Expo Modules (2026-06-12)
+
+`modules/calendar-view` is the reference: a local Expo module's podspec can pull third-party CocoaPods (`s.dependency 'HorizonCalendar', '~> 2.0.0'` + `s.dependency 'CalendarKit', '~> 1.1.9'` in `ios/ExpoCalendarView.podspec`) and autolinking picks the module up with zero package.json changes. Rules:
+
+1. **Pin versions** (`~>` pessimistic constraint) and verify each is actually published on CocoaPods trunk AND compatible with the app's deployment target (iOS 15.1) BEFORE writing the podspec — the first compile happens remotely.
+2. **Pods install only on the next EAS build / prebuild.** Locally the Swift never compiles, the native module does not exist in any installed dev client, and `pod install` is never run by Metro. Treat every new-pod module as **REQUIRES NEW EAS BUILD**.
+3. Because of (2), the TS layer MUST be guarded: `requireNativeModule(name)` inside try/catch (it throws in Expo Go and in dev clients built before the module existed), exporting an availability flag (`isNativeCalendarAvailable`) plus empty-View component stubs. Callers branch on the flag and supply JS fallbacks — never assume the native side exists.
+4. iOS-only modules declare `"platforms": ["apple"]` in `expo-module.config.json`; Android then resolves the same JS API with the flag `false` (no empty android/ scaffold needed).
+5. Keep the contracted public API in a `.ts` file (use `React.createElement`, not JSX) when other packages are typed against the exact path; `index.web.tsx` carries web no-ops.
+6. Swift side: parse props defensively (skip bad dates/ids, never crash on user data) and diff prop updates (Equatable) before reloading the native view — RN re-sends props on every render.

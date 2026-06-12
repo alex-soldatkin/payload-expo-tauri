@@ -17,6 +17,7 @@ import React from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { defaultTheme as t } from './theme'
+import { useListColors } from './hooks/useListColors'
 
 // ---------------------------------------------------------------------------
 // Optional: GlassView for liquid glass containers on iOS 26+
@@ -49,6 +50,9 @@ export type FormSectionProps = {
 // ---------------------------------------------------------------------------
 
 export function FormSection({ title, footer, children }: FormSectionProps) {
+  // Dark-mode aware tokens (never hardcode the light palette)
+  const { colors: c } = useListColors()
+
   // Flatten children and filter out nulls so separators land correctly
   const validChildren = React.Children.toArray(children).filter(Boolean)
 
@@ -61,7 +65,9 @@ export function FormSection({ title, footer, children }: FormSectionProps) {
       </View>,
     )
     if (index < validChildren.length - 1) {
-      rows.push(<View key={`sep-${index}`} style={styles.separator} />)
+      rows.push(
+        <View key={`sep-${index}`} style={[styles.separator, { backgroundColor: c.separator }]} />,
+      )
     }
   })
 
@@ -73,17 +79,17 @@ export function FormSection({ title, footer, children }: FormSectionProps) {
   return (
     <View style={styles.wrapper}>
       {/* ── Section header ── */}
-      {title ? <Text style={styles.title}>{title.toUpperCase()}</Text> : null}
+      {title ? <Text style={[styles.title, { color: c.textMuted }]}>{title.toUpperCase()}</Text> : null}
 
       {/* ── Grouped container ── */}
       {useGlass ? (
         React.createElement(GlassView as React.ComponentType<any>, { style: styles.glassContainer, glassEffectStyle: 'regular' }, groupContent)
       ) : (
-        <View style={styles.container}>{groupContent}</View>
+        <View style={[styles.container, { backgroundColor: c.card }]}>{groupContent}</View>
       )}
 
       {/* ── Section footer ── */}
-      {footer ? <Text style={styles.footer}>{footer}</Text> : null}
+      {footer ? <Text style={[styles.footer, { color: c.textMuted }]}>{footer}</Text> : null}
     </View>
   )
 }

@@ -52,7 +52,20 @@ Local workspace references
 - payload_universal/packages/admin-native/src/utils/validation.ts for Zod validation from Payload fields.
 - payload_universal/packages/admin-native/src/utils/iconRegistry.ts for lucide icon registry + SF Symbol mappings.
 - payload_universal/packages/admin-native/src/contexts/CustomComponentContext.tsx for custom component overrides.
+- payload_universal/packages/admin-native/src/contexts/ActionContext.tsx for ActionRegistryProvider, useListActionHandlers, useEditActionHandlers.
 - payload_universal/packages/admin-native/src/contexts/PreviewContext.ts for preview context (Link.Preview control).
+- payload_universal/packages/admin-native/src/contexts/ConditionContext.tsx for ConditionRegistryProvider + resolveFieldCondition/evaluateFieldVisibility (admin.condition support, fail-open).
+- payload_universal/packages/admin-native/src/fields/shared/types.ts for the verified @expo/ui canary registry surface (43 iOS components + 38 modifiers; JC* keys for divergent Android APIs).
+- payload_universal/packages/admin-native/src/fields/inputs/ for the uncontrolled native text bridge (textBridge.ts), NativeTextRow, HasManyChips.
+- payload_universal/packages/admin-native/src/fields/pickers/ for select/radio/relationship/upload field components (one file each + shared.tsx).
+- payload_universal/packages/admin-native/src/fields/structural/ for array/blocks/group/collapsible/row/tabs (common.tsx has RowLabelContext + resolveI18nText).
+- payload_universal/packages/admin-native/src/hooks/useListColors.ts for the dark-mode-aware list color palette (reuse; never hardcode light colors).
+- test_app/apps/mobile-expo/src/actions/index.ts for the test app's custom native action handlers.
+- test_app/apps/mobile-expo/src/conditions/index.ts for the test app's admin.condition function registry (mounted via ConditionRegistryProvider in app/_layout.tsx).
+- test_app/apps/mobile-expo/src/hooks/useAutosave.ts, useLocaleEditing.ts, useCollectionCounts.ts for autosave polling, dual-path locale editing (REST for non-default locales), reactive RxDB doc counts.
+- test_app/apps/mobile-expo/src/preferences.ts for persisted appearance + admin language preferences.
+- test_app/apps/mobile-expo/src/components/RelationshipInlineCreate.tsx for the relationship inline-create provider (injects onRequestCreate into the relationship field).
+- test_app/apps/mobile-expo/app/(admin)/collections/[slug]/api.tsx for the API inspector formSheet route.
 - payload_universal/packages/admin-native/src/fields/richtext.tsx for full EnrichedTextInput rich text editor with Lexical JSON round-trip.
 - payload_universal/packages/admin-native/src/fields/RichTextToolbar.tsx for single-row pill-toggle formatting toolbar with glass effect.
 - payload_universal/packages/admin-native/src/fields/MentionPicker.tsx for document mention picker (queries all collections from local RxDB).
@@ -62,6 +75,8 @@ Local workspace references
 - payload_universal/packages/admin-native/src/theme/index.ts for design tokens and theming.
 - payload_universal/packages/admin-native/src/types/index.ts for shared TypeScript types.
 - test_app/apps/server/src/payload.config.ts for the app-owned collections and server config.
+- test_app/apps/server/src/collections/Pages.ts, Products.ts, Events.ts for the comprehensive sample collections (blocks/named tabs/localization/autosave; filterOptions/ui field/action metadata; timezone dates/conditions/RowLabel).
+- test_app/apps/server/src/globals/SiteSettings.ts and Footer.ts for the sample globals.
 - test_app/apps/mobile-expo/app/_layout.tsx for the Expo root layout (auth, local DB, storage init).
 - test_app/apps/mobile-expo/metro.config.js for Metro resolver (singleton pinning for react, react-native, @expo/ui).
 - test_app/apps/mobile-expo/babel.config.js for Babel config (do NOT add @react-native/babel-plugin-codegen — crashes on RN 0.83).

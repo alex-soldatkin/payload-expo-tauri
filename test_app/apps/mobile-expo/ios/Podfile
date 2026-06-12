@@ -61,5 +61,15 @@ target 'PayloadUniversalMobile' do
       :mac_catalyst_enabled => false,
       :ccache_enabled => ccache_enabled?(podfile_properties),
     )
+
+    # NOTE: do NOT add a second calendar pod alongside CalendarKit without
+    # checking ObjC class names. CalendarKit and HorizonCalendar both export
+    # an unprefixed `DayView` class; Xcode appends each pod's generated
+    # `.Swift` compatibility submodule to the PRODUCT modulemap (regenerated
+    # at build time — header suppression and modulemap stripping both fail),
+    # and any compilation loading both modules hard-errors with "'DayView'
+    # has different definitions in different modules" (EAS builds 001040f7,
+    # 26700d0c, 3decfce6). HorizonCalendar was dropped; the month grid is the
+    # JS MonthGridFallback in admin-native.
   end
 end

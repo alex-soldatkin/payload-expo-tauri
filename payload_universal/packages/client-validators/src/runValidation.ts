@@ -6,7 +6,7 @@
  * directly compatible with admin-native's FormErrors type.
  */
 import type {
-  ClientFieldConfig,
+  AnyField,
   ClientHooksConfig,
   ClientValidateOptions,
   ValidationErrors,
@@ -14,36 +14,6 @@ import type {
 } from './types'
 
 import { builtinValidators } from './builtinValidators'
-
-// ---------------------------------------------------------------------------
-// ClientField shape (mirrors admin-native/src/types.ts without importing it)
-// ---------------------------------------------------------------------------
-
-type AnyField = {
-  name?: string
-  type: string
-  label?: string | Record<string, string>
-  required?: boolean
-  admin?: {
-    hidden?: boolean
-    readOnly?: boolean
-    position?: string
-    [key: string]: unknown
-  }
-  // Constraint metadata
-  minLength?: number
-  maxLength?: number
-  min?: number
-  max?: number
-  minRows?: number
-  maxRows?: number
-  hasMany?: boolean
-  options?: Array<{ label?: string; value: string } | string>
-  // Structural children
-  fields?: AnyField[]
-  tabs?: Array<{ name?: string; fields?: AnyField[]; [key: string]: unknown }>
-  blocks?: Array<{ slug: string; fields?: AnyField[]; [key: string]: unknown }>
-}
 
 // ---------------------------------------------------------------------------
 // Helpers

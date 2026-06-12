@@ -7,11 +7,16 @@ import {
   usePayloadField,
   useFormData,
   usePayloadNative,
+  useRowLabelContext,
 } from '@payload-universal/admin-native'
 
 // 1. useField
 export function useField<Value = any>(props: { path: string }) {
-  const fieldProps = usePayloadField({ name: props.path })
+  // usePayloadField requires the RHF control — resolve it from the enclosing
+  // form context (DocumentForm's FormProvider). RHF's useController falls
+  // back to context when control is undefined, so this stays safe in-form.
+  const formContext = usePayloadFormContext()
+  const fieldProps = usePayloadField({ control: formContext?.control, name: props.path })
   return {
     value: fieldProps?.value as Value,
     setValue: fieldProps?.onChange,
@@ -87,10 +92,30 @@ export function usePreferences() {
 
 // 9. useEntityVisibility
 export function useEntityVisibility() {
-  return { 
+  return {
     visibleEntities: {
       collections: [] as string[],
       globals: [] as string[]
     }
   }
+}
+
+// 10. useRowLabel — reads admin-native's RowLabelContext (provided by
+// ArrayField around custom RowLabel components from the codegen registry).
+// Web parity (@payloadcms/ui): `rowNumber` is the 0-BASED row index —
+// ArrayRow/BlockRow pass `rowNumber={rowIndex}`, and consumers render
+// `rowNumber + 1` for display. admin-native's context carries a 1-based
+// `rowNumber` plus a 0-based `index`; we expose `index` here to match.
+// Outside a row the web context defaults to {data:{}, path:'', rowNumber:
+// undefined} — mirrored so the hook is safe to call unconditionally.
+export type UseRowLabelReturn<T = unknown> = {
+  data: T
+  path: string
+  rowNumber: number | undefined
+}
+
+export function useRowLabel<T = unknown>(): UseRowLabelReturn<T> {
+  const ctx = useRowLabelContext()
+  if (!ctx) return { data: {} as T, path: '', rowNumber: undefined }
+  return { data: ctx.data as T, path: ctx.path, rowNumber: ctx.index }
 }

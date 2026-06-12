@@ -28,10 +28,10 @@ export const useAdminSchema = (): AdminSchema | null => usePayloadNative().schem
 /** Shorthand: the menu model extracted from the schema. */
 export const useMenuModel = (): MenuModel | null => usePayloadNative().schema?.menuModel ?? null
 
-/** Shorthand: auth state + login/logout helpers. */
+/** Shorthand: auth state + login/logout/firstRegister helpers. */
 export const useAuth = () => {
-  const { auth, login, logout } = usePayloadNative()
-  return { ...auth, login, logout }
+  const { auth, login, firstRegister, logout } = usePayloadNative()
+  return { ...auth, login, firstRegister, logout }
 }
 
 /** Shorthand: the configured base URL. */
@@ -98,29 +98,97 @@ export const PayloadNativeProvider: React.FC<Props> = ({
 
   // ---- Auth actions ----
 
+  /**
+   * Map a failed fetch response to a human-readable error message.
+   * Error mapping table:
+   *   TypeError (network)  → 'Cannot reach server — check the server URL and your connection'
+   *   HTTP 401             → server message (e.g. 'The email or password provided is incorrect')
+   *   HTTP 423             → server lock message (account locked by maxLoginAttempts)
+   *   Any other non-ok     → body.errors[0].message || body.message || 'Login failed (status N)'
+   */
+  const mapLoginError = (err: unknown, status?: number, body?: Record<string, unknown>): Error => {
+    if (err instanceof TypeError) {
+      return new Error('Cannot reach server — check the server URL and your connection')
+    }
+    if (body && status) {
+      const serverMsg =
+        (body.errors as Array<{ message: string }> | undefined)?.[0]?.message ||
+        (body.message as string | undefined)
+      if (serverMsg) return new Error(serverMsg)
+      return new Error(`Login failed (${status})`)
+    }
+    if (err instanceof Error) return err
+    return new Error('Login failed')
+  }
+
+  /** Persist auth state and load the admin schema after a successful auth response. */
+  const applyAuthResponse = useCallback(
+    async (data: { token: string; user: Record<string, unknown> }) => {
+      setAuth({ token: data.token, user: data.user, isAuthenticated: true, isLoading: false })
+      persistToken(data.token)
+      await loadSchema(data.token)
+    },
+    [persistToken, loadSchema],
+  )
+
   const login = useCallback(
     async (email: string, password: string) => {
       setAuth((prev) => ({ ...prev, isLoading: true }))
+      let res: Response | undefined
       try {
-        const res = await fetch(`${baseURL}/api/${authCollection}/login`, {
+        res = await fetch(`${baseURL}/api/${authCollection}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         })
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({}))
-          throw new Error(body.message || body.errors?.[0]?.message || `Login failed (${res.status})`)
-        }
-        const data = await res.json()
-        setAuth({ token: data.token, user: data.user, isAuthenticated: true, isLoading: false })
-        persistToken(data.token)
-        await loadSchema(data.token)
+      } catch (networkErr) {
+        setAuth((prev) => ({ ...prev, isLoading: false }))
+        throw mapLoginError(networkErr)
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>
+        setAuth((prev) => ({ ...prev, isLoading: false }))
+        throw mapLoginError(undefined, res.status, body)
+      }
+      try {
+        const data = await res.json() as { token: string; user: Record<string, unknown> }
+        await applyAuthResponse(data)
       } catch (err) {
         setAuth((prev) => ({ ...prev, isLoading: false }))
         throw err
       }
     },
-    [baseURL, authCollection, persistToken, loadSchema],
+    [baseURL, authCollection, applyAuthResponse],
+  )
+
+  const firstRegister = useCallback(
+    async (email: string, password: string, confirmPassword: string) => {
+      setAuth((prev) => ({ ...prev, isLoading: true }))
+      let res: Response | undefined
+      try {
+        res = await fetch(`${baseURL}/api/${authCollection}/first-register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password, 'confirm-password': confirmPassword }),
+        })
+      } catch (networkErr) {
+        setAuth((prev) => ({ ...prev, isLoading: false }))
+        throw mapLoginError(networkErr)
+      }
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({})) as Record<string, unknown>
+        setAuth((prev) => ({ ...prev, isLoading: false }))
+        throw mapLoginError(undefined, res.status, body)
+      }
+      try {
+        const data = await res.json() as { token: string; user: Record<string, unknown> }
+        await applyAuthResponse(data)
+      } catch (err) {
+        setAuth((prev) => ({ ...prev, isLoading: false }))
+        throw err
+      }
+    },
+    [baseURL, authCollection, applyAuthResponse],
   )
 
   const logout = useCallback(async () => {
@@ -174,8 +242,8 @@ export const PayloadNativeProvider: React.FC<Props> = ({
   // ---- Memoised context value ----
 
   const value = useMemo<PayloadNativeContextValue>(
-    () => ({ schema, auth, baseURL, login, logout, refreshSchema, isSchemaLoading, schemaError }),
-    [schema, auth, baseURL, login, logout, refreshSchema, isSchemaLoading, schemaError],
+    () => ({ schema, auth, baseURL, login, firstRegister, logout, refreshSchema, isSchemaLoading, schemaError }),
+    [schema, auth, baseURL, login, firstRegister, logout, refreshSchema, isSchemaLoading, schemaError],
   )
 
   return (

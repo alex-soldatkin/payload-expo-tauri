@@ -28,6 +28,7 @@ import { VersionDiff } from './VersionDiff'
 import { payloadApi, type PayloadAPIConfig, type VersionDoc } from './utils/api'
 import { extractRootFields } from './utils/schemaHelpers'
 import { defaultTheme as t } from './theme'
+import { useListColors, type ListColorPalette } from './hooks/useListColors'
 import type { ClientField, SerializedSchemaMap } from './types'
 
 type Props = {
@@ -89,6 +90,11 @@ export const VersionsBottomSheet: React.FC<Props> = ({
   schemaMap,
   onRestore,
 }) => {
+  // Dark-mode aware palette (the sheet background is glass/blur — text and
+  // pills must follow the system scheme)
+  const { colors } = useListColors()
+  const styles = useMemo(() => createStyles(colors), [colors])
+
   // State
   const [mode, setMode] = useState<Mode>('list')
   const [versions, setVersions] = useState<VersionDoc[]>([])
@@ -226,7 +232,11 @@ export const VersionsBottomSheet: React.FC<Props> = ({
 
   const renderVersionItem = useCallback(({ item }: { item: VersionDoc }) => {
     const isSelected = selectedIds.includes(item.id)
-    const status = (item.version as Record<string, unknown>)?._status as string | undefined
+    const versionData = item.version as Record<string, unknown> | undefined
+    const status = versionData?._status as string | undefined
+    // Autosave flag lives on the version doc itself (REST) — tolerate it
+    // nested in the version data too (older Payload shapes).
+    const isAutosave = item.autosave === true || versionData?.autosave === true
 
     return (
       <Pressable
@@ -234,7 +244,7 @@ export const VersionsBottomSheet: React.FC<Props> = ({
         onPress={() => toggleSelection(item.id)}
       >
         <View style={[styles.checkCircle, isSelected && styles.checkCircleSelected]}>
-          {isSelected && <Check size={14} color="#fff" />}
+          {isSelected && <Check size={14} color={colors.primaryText} />}
         </View>
         <View style={styles.versionInfo}>
           <View style={styles.versionDateRow}>
@@ -249,14 +259,16 @@ export const VersionsBottomSheet: React.FC<Props> = ({
                 </Text>
               </View>
             )}
-            {item.autosave && (
-              <Text style={styles.autosaveLabel}>Autosave</Text>
+            {isAutosave && (
+              <View style={[styles.versionStatusPill, styles.autosavePill]}>
+                <Text style={[styles.versionStatusText, styles.autosaveColor]}>Autosave</Text>
+              </View>
             )}
           </View>
         </View>
       </Pressable>
     )
-  }, [selectedIds, toggleSelection])
+  }, [selectedIds, toggleSelection, styles, colors])
 
   // ---------------------------------------------------------------------------
   // Render
@@ -322,7 +334,7 @@ export const VersionsBottomSheet: React.FC<Props> = ({
               onPress={() => handleRestore(selectedIds[0])}
               disabled={restoring}
             >
-              <RotateCcw size={18} color="#fff" />
+              <RotateCcw size={18} color={colors.primaryText} />
               <Text style={styles.restoreBtnText}>
                 {restoring ? 'Restoring...' : 'Restore this version'}
               </Text>
@@ -335,7 +347,7 @@ export const VersionsBottomSheet: React.FC<Props> = ({
           {/* Header */}
           <View style={styles.header}>
             <Pressable style={styles.backBtn} onPress={() => setMode('list')}>
-              <ArrowLeft size={20} color={t.colors.text} />
+              <ArrowLeft size={20} color={colors.text} />
             </Pressable>
             <Text style={[styles.title, { flex: 1 }]}>Compare Versions</Text>
           </View>
@@ -373,7 +385,7 @@ export const VersionsBottomSheet: React.FC<Props> = ({
               onPress={() => handleRestore(versionTo.id)}
               disabled={restoring}
             >
-              <RotateCcw size={18} color="#fff" />
+              <RotateCcw size={18} color={colors.primaryText} />
               <Text style={styles.restoreBtnText}>
                 {restoring ? 'Restoring...' : 'Restore this version'}
               </Text>
@@ -389,7 +401,7 @@ export const VersionsBottomSheet: React.FC<Props> = ({
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
+const createStyles = (c: ListColorPalette) => StyleSheet.create({
   container: { flex: 1 },
 
   // Header
@@ -402,7 +414,7 @@ const styles = StyleSheet.create({
   title: {
     fontSize: t.fontSize.lg,
     fontWeight: '700',
-    color: t.colors.text,
+    color: c.text,
   },
   backBtn: {
     padding: t.spacing.xs,
@@ -411,7 +423,7 @@ const styles = StyleSheet.create({
   // Selection hint
   selectionHint: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    color: c.textMuted,
     marginBottom: t.spacing.sm,
     fontStyle: 'italic',
   },
@@ -419,7 +431,7 @@ const styles = StyleSheet.create({
   // Compare button
   compareBtn: {
     marginLeft: 'auto',
-    backgroundColor: t.colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.xs + 2,
     borderRadius: t.borderRadius.sm,
@@ -427,7 +439,7 @@ const styles = StyleSheet.create({
   compareBtnText: {
     fontSize: t.fontSize.sm,
     fontWeight: '600',
-    color: t.colors.primaryText,
+    color: c.primaryText,
   },
 
   // List
@@ -445,11 +457,11 @@ const styles = StyleSheet.create({
     paddingVertical: t.spacing.md,
     paddingHorizontal: t.spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
+    borderBottomColor: c.separator,
     gap: t.spacing.md,
   },
   versionRowSelected: {
-    backgroundColor: '#f8f8f8',
+    backgroundColor: c.pressed,
   },
 
   // Check circle
@@ -458,13 +470,13 @@ const styles = StyleSheet.create({
     height: 24,
     borderRadius: 12,
     borderWidth: 2,
-    borderColor: t.colors.border,
+    borderColor: c.border,
     alignItems: 'center',
     justifyContent: 'center',
   },
   checkCircleSelected: {
-    backgroundColor: t.colors.primary,
-    borderColor: t.colors.primary,
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
 
   // Version info
@@ -477,11 +489,11 @@ const styles = StyleSheet.create({
   versionDate: {
     fontSize: t.fontSize.sm,
     fontWeight: '600',
-    color: t.colors.text,
+    color: c.text,
   },
   versionRelative: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    color: c.textMuted,
   },
   versionMeta: {
     flexDirection: 'row',
@@ -496,21 +508,22 @@ const styles = StyleSheet.create({
     paddingVertical: 2,
     borderRadius: 4,
   },
-  statusDraftPill: { backgroundColor: '#fefce8' },
-  statusPublishedPill: { backgroundColor: '#f0fdf4' },
+  statusDraftPill: { backgroundColor: c.warningBackground },
+  statusPublishedPill: { backgroundColor: c.successBackground },
   versionStatusText: {
     fontSize: t.fontSize.xs,
     fontWeight: '600',
     textTransform: 'uppercase',
     letterSpacing: 0.3,
   },
-  statusDraftColor: { color: '#ca8a04' },
-  statusPublishedColor: { color: '#16a34a' },
-  autosaveLabel: {
-    fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
-    fontStyle: 'italic',
+  statusDraftColor: { color: c.warning },
+  statusPublishedColor: { color: c.success },
+  autosavePill: {
+    backgroundColor: c.pressed,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: c.border,
   },
+  autosaveColor: { color: c.textMuted },
 
   // Comparison dates
   compareDates: {
@@ -520,21 +533,21 @@ const styles = StyleSheet.create({
   },
   compareDate: {
     flex: 1,
-    backgroundColor: '#fafafa',
+    backgroundColor: c.pressed,
     padding: t.spacing.sm,
     borderRadius: t.borderRadius.sm,
     borderWidth: 1,
-    borderColor: t.colors.border,
+    borderColor: c.border,
   },
   compareDateLabel: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    color: c.textMuted,
     fontWeight: '500',
     marginBottom: 2,
   },
   compareDateValue: {
     fontSize: t.fontSize.sm,
-    color: t.colors.text,
+    color: c.text,
     fontWeight: '600',
   },
 
@@ -548,7 +561,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     gap: t.spacing.sm,
-    backgroundColor: t.colors.primary,
+    backgroundColor: c.primary,
     paddingVertical: t.spacing.md,
     borderRadius: t.borderRadius.sm,
     marginTop: t.spacing.sm,
@@ -557,7 +570,7 @@ const styles = StyleSheet.create({
   restoreBtnText: {
     fontSize: t.fontSize.md,
     fontWeight: '600',
-    color: t.colors.primaryText,
+    color: c.primaryText,
   },
 
   // Loading / error / empty states
@@ -569,12 +582,12 @@ const styles = StyleSheet.create({
   },
   errorText: {
     fontSize: t.fontSize.sm,
-    color: t.colors.error,
+    color: c.error,
     textAlign: 'center',
     marginBottom: t.spacing.md,
   },
   retryBtn: {
-    backgroundColor: t.colors.primary,
+    backgroundColor: c.primary,
     paddingHorizontal: t.spacing.lg,
     paddingVertical: t.spacing.sm,
     borderRadius: t.borderRadius.sm,
@@ -582,10 +595,10 @@ const styles = StyleSheet.create({
   retryBtnText: {
     fontSize: t.fontSize.sm,
     fontWeight: '600',
-    color: t.colors.primaryText,
+    color: c.primaryText,
   },
   emptyText: {
     fontSize: t.fontSize.sm,
-    color: t.colors.textMuted,
+    color: c.textMuted,
   },
 })

@@ -20,33 +20,11 @@ import {
   runBeforeChangeHooks,
   runAfterChangeHooks,
 } from '@payload-universal/client-validators'
-import type { ClientHooksConfig, ValidationErrors } from '@payload-universal/client-validators'
+import type { AnyField, ClientHooksConfig, ValidationErrors } from '@payload-universal/client-validators'
 
 import { useLocalMutations } from './hooks'
 import { useClientValidatorConfig } from '../contexts/ClientValidatorContext'
 import type { PayloadLocalDB } from '../database'
-
-// ---------------------------------------------------------------------------
-// AnyField shape (minimal to avoid importing admin-native types)
-// ---------------------------------------------------------------------------
-
-type AnyField = {
-  name?: string
-  type: string
-  required?: boolean
-  admin?: { hidden?: boolean; readOnly?: boolean; [k: string]: unknown }
-  minLength?: number
-  maxLength?: number
-  min?: number
-  max?: number
-  minRows?: number
-  maxRows?: number
-  hasMany?: boolean
-  options?: Array<{ label?: string; value: string } | string>
-  fields?: AnyField[]
-  tabs?: Array<{ name?: string; fields?: AnyField[]; [k: string]: unknown }>
-  blocks?: Array<{ slug: string; fields?: AnyField[]; [k: string]: unknown }>
-}
 
 // ---------------------------------------------------------------------------
 // Result type

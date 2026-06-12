@@ -22,6 +22,7 @@ import {
   getCollectionLabel,
   getGlobalLabel,
   getSFSymbol,
+  useListColors,
   useMenuModel,
 } from '@payload-universal/admin-native'
 import { useResponsive, SIDEBAR_WIDTH } from '@/hooks/useResponsive'
@@ -97,13 +98,14 @@ type TabItemProps = {
 
 function TabItem({ icon: Icon, label, isFocused, onPress }: TabItemProps) {
   const color = isFocused ? ACTIVE_COLOR : INACTIVE_COLOR
+  const { colors: c } = useListColors()
   return (
     <Pressable
       onPress={onPress}
       style={styles.tabItem}
     >
       {({ pressed }) => (
-        <View style={[styles.tabItemContent, pressed && styles.tabItemPressed]}>
+        <View style={[styles.tabItemContent, pressed && { backgroundColor: c.pressed }]}>
           <Icon size={22} color={color} />
           <Text style={[styles.tabLabel, { color }]}>{label}</Text>
         </View>
@@ -126,6 +128,7 @@ function CollectionsTabItem({
   const color = isFocused ? ACTIVE_COLOR : INACTIVE_COLOR
   const router = useRouter()
   const menuModel = useMenuModel()
+  const { colors: c } = useListColors()
 
   const visible = menuModel?.collections.filter((c) => !c.hidden) ?? []
   const groups = menuModel?.groups ?? []
@@ -152,7 +155,8 @@ function CollectionsTabItem({
   if (SMenu && SButton && SHost && visible.length > 0) {
     return (
       <View style={styles.tabItem}>
-        <SHost matchContents colorScheme="light">
+        {/* Follow the system colour scheme — never force light */}
+        <SHost matchContents>
           <SMenu label={inner} onPrimaryAction={onPress}>
             {/* Ungrouped collections */}
             {ungrouped.map((col) => (
@@ -200,7 +204,7 @@ function CollectionsTabItem({
   return (
     <Pressable onPress={onPress} style={styles.tabItem}>
       {({ pressed }) => (
-        <View style={[styles.tabItemContent, pressed && styles.tabItemPressed]}>
+        <View style={[styles.tabItemContent, pressed && { backgroundColor: c.pressed }]}>
           <LayoutList size={22} color={color} />
           <Text style={[styles.tabLabel, { color }]}>Collections</Text>
         </View>
@@ -217,12 +221,13 @@ function CustomTabBar({ state, navigation }: any) {
   const insets = useSafeAreaInsets()
   const { width: barWidth } = useWindowDimensions()
   const menuModel = useMenuModel()
+  const { dark, colors: c } = useListColors()
   const globalsCount =
     menuModel?.globals.filter((g) => !g.hidden).length ?? 0
 
   return (
     <View
-      style={[styles.bar, { paddingBottom: Math.max(insets.bottom, 8), width: barWidth }]}
+      style={[styles.bar, { borderTopColor: c.hairline }, { paddingBottom: Math.max(insets.bottom, 8), width: barWidth }]}
     >
       {/* Background – translucent blur or frosted fallback */}
       {BlurView ? (
@@ -232,7 +237,12 @@ function CustomTabBar({ state, navigation }: any) {
           tint="systemUltraThinMaterial"
         />
       ) : (
-        <View style={[StyleSheet.absoluteFill, styles.barFallback]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: dark ? 'rgba(30,30,30,0.78)' : 'rgba(249,249,249,0.65)' },
+          ]}
+        />
       )}
 
       <View style={styles.barRow}>
@@ -319,7 +329,8 @@ function SidebarNavItem({
   indent?: boolean
   customIcon?: React.ReactNode
 }) {
-  const color = isActive ? ACTIVE_COLOR : '#1f1f1f'
+  const { colors: c } = useListColors()
+  const color = isActive ? ACTIVE_COLOR : c.text
 
   const innerContent = (
     <>
@@ -357,7 +368,7 @@ function SidebarNavItem({
             sidebarStyles.item,
             isActive && sidebarStyles.itemActive,
             indent && sidebarStyles.itemIndented,
-            pressed && !isActive && sidebarStyles.itemPressed,
+            pressed && !isActive && { backgroundColor: c.pressed },
           ]}
         >
           {innerContent}
@@ -376,6 +387,7 @@ function Sidebar() {
   const pathname = usePathname()
   const insets = useSafeAreaInsets()
   const menuModel = useMenuModel()
+  const { dark, colors: c } = useListColors()
 
   const visibleCollections =
     menuModel?.collections.filter((c) => !c.hidden) ?? []
@@ -411,6 +423,7 @@ function Sidebar() {
     <View
       style={[
         sidebarStyles.container,
+        { borderRightColor: c.hairline },
         { paddingTop: insets.top, paddingBottom: insets.bottom },
       ]}
     >
@@ -422,7 +435,12 @@ function Sidebar() {
           tint="systemUltraThinMaterial"
         />
       ) : (
-        <View style={[StyleSheet.absoluteFill, sidebarStyles.fallbackBg]} />
+        <View
+          style={[
+            StyleSheet.absoluteFill,
+            { backgroundColor: dark ? 'rgba(30,30,30,0.88)' : 'rgba(249,249,249,0.85)' },
+          ]}
+        />
       )}
 
       {/* Scrollable nav content */}
@@ -431,7 +449,7 @@ function Sidebar() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={{ paddingBottom: 8 }}
       >
-        <Text style={sidebarStyles.title}>Payload Admin</Text>
+        <Text style={[sidebarStyles.title, { color: c.text }]}>Payload Admin</Text>
 
         {/* Home */}
         <SidebarNavItem
@@ -465,7 +483,7 @@ function Sidebar() {
                       currentSection === 'collections' &&
                       currentSlug === col.slug
                         ? ACTIVE_COLOR
-                        : '#666'
+                        : INACTIVE_COLOR
                     }
                   />
                 }
@@ -498,7 +516,7 @@ function Sidebar() {
                       currentSection === 'collections' &&
                       currentSlug === col.slug
                         ? ACTIVE_COLOR
-                        : '#666'
+                        : INACTIVE_COLOR
                     }
                   />
                 }
@@ -530,7 +548,7 @@ function Sidebar() {
       </ScrollView>
 
       {/* Account – pinned at bottom */}
-      <View style={sidebarStyles.bottomSection}>
+      <View style={[sidebarStyles.bottomSection, { borderTopColor: c.hairline }]}>
         <SidebarNavItem
           icon={User}
           label="Account"
@@ -607,17 +625,13 @@ const layoutStyles = StyleSheet.create({
 
 // Phone: bottom tab bar
 const styles = StyleSheet.create({
-  // Tab bar container
+  // Tab bar container — borderTopColor comes from the palette (c.hairline)
   bar: {
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.12)',
-  },
-  barFallback: {
-    backgroundColor: 'rgba(249,249,249,0.65)',
   },
   barRow: {
     flexDirection: 'row',
@@ -661,15 +675,11 @@ const styles = StyleSheet.create({
   },
 })
 
-// Tablet: sidebar
+// Tablet: sidebar — border/text colors come from the palette (useListColors)
 const sidebarStyles = StyleSheet.create({
   container: {
     width: SIDEBAR_WIDTH,
     borderRightWidth: StyleSheet.hairlineWidth,
-    borderRightColor: 'rgba(0,0,0,0.12)',
-  },
-  fallbackBg: {
-    backgroundColor: 'rgba(249,249,249,0.85)',
   },
   scroll: {
     flex: 1,
@@ -677,7 +687,6 @@ const sidebarStyles = StyleSheet.create({
   title: {
     fontSize: 22,
     fontWeight: '800',
-    color: '#1f1f1f',
     paddingHorizontal: 20,
     paddingTop: 16,
     paddingBottom: 16,
@@ -719,7 +728,6 @@ const sidebarStyles = StyleSheet.create({
   },
   bottomSection: {
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: 'rgba(0,0,0,0.08)',
     paddingTop: 8,
     paddingBottom: 4,
   },

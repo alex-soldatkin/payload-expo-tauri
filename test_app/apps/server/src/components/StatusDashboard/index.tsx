@@ -12,7 +12,6 @@ import {
   useForm,
   useAuth,
   useTranslation,
-  Card,
   Pill,
   Banner,
   Button,
@@ -20,17 +19,18 @@ import {
   Gutter,
   FieldLabel,
   FieldDescription,
-  Loading,
 } from '@payloadcms/ui'
 
 const statusColors: Record<string, string> = {
   draft: 'warning',
+  review: 'light',
   published: 'success',
   archived: 'light-gray',
 }
 
 const statusMessages: Record<string, string> = {
   draft: 'This post is not yet visible to the public.',
+  review: 'This post is awaiting editorial review before publishing.',
   published: 'This post is live and visible to all visitors.',
   archived: 'This post has been archived and is no longer visible.',
 }
@@ -68,7 +68,7 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
   }, [title])
 
   return (
-    <Card>
+    <div className="card" style={{ flexDirection: 'column' }}>
       <div style={{ marginBottom: 12 }}>
         <FieldLabel label="Post Status Overview" />
       </div>
@@ -116,7 +116,7 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
 
       {/* Collapsible history section */}
       <div style={{ marginTop: 16 }}>
-        <Collapsible label="Status History" initCollapsed>
+        <Collapsible header="Status History" initCollapsed>
           <div style={{ padding: 8 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
               <Pill pillStyle="light-gray">v3</Pill>
@@ -134,8 +134,11 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
         </Collapsible>
       </div>
 
-      <FieldDescription description="Status dashboard powered by @payloadcms/ui custom components" />
-    </Card>
+      <FieldDescription
+        description="Status dashboard powered by @payloadcms/ui custom components"
+        path={path}
+      />
+    </div>
   )
 }
 

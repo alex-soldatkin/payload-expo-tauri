@@ -50,8 +50,9 @@ import {
   removeRxDatabase,
   type RxCollection,
   type RxDatabase,
-  type RxReplicationState,
 } from 'rxdb'
+// The RxReplicationState class lives in the replication plugin, not the core entry.
+import type { RxReplicationState } from 'rxdb/plugins/replication'
 import { getRxStorageMemory } from 'rxdb/plugins/storage-memory'
 import { RxDBQueryBuilderPlugin } from 'rxdb/plugins/query-builder'
 import { RxDBMigrationSchemaPlugin } from 'rxdb/plugins/migration-schema'
@@ -189,8 +190,9 @@ export const createLocalDB = async ({
   // atomic call that also clears RxDB's internal registry), then re-open.
   if (needsRetry) {
     try { await db.remove() } catch {
-      // Fallback if .remove() fails: destroy + wipe separately
-      try { await db.destroy() } catch { /* ignore */ }
+      // Fallback if .remove() fails: close + wipe separately
+      // (RxDB v16 renamed destroy() to close())
+      try { await db.close() } catch { /* ignore */ }
       try { await removeRxDatabase('payload_local', resolvedStorage) } catch { /* ignore */ }
     }
 
@@ -277,7 +279,9 @@ export const createLocalDB = async ({
   }
 
   const pushNow = async () => {
-    if (syncState) {
+    // The WS sync state is pull-only (push is handled by the polling
+    // replication's live push), so pushNow is optional — guard the call.
+    if (syncState?.pushNow) {
       await syncState.pushNow()
     }
   }
@@ -288,7 +292,8 @@ export const createLocalDB = async ({
     for (const rep of Object.values(replications)) {
       await rep.cancel()
     }
-    await db.destroy()
+    // RxDB v16 renamed destroy() to close()
+    await db.close()
   }
 
   const instance: PayloadLocalDB = {

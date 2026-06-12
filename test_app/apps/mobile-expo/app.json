@@ -9,7 +9,7 @@
       "ios",
       "android"
     ],
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "automatic",
     "sdkVersion": "55.0.0",
     "ios": {
       "bundleIdentifier": "com.alexsoldatkin.payload-universal-mobile",

@@ -22,3 +22,23 @@ export function groupNavItems(entities: EntityToGroup[], permissions: any, i18n:
     }
   ]
 }
+
+/** formatAdminURL — builds admin panel URLs (@payloadcms/ui/shared parity). */
+export function formatAdminURL({
+  adminRoute = '/admin',
+  path = '',
+}: {
+  adminRoute?: string
+  path?: string
+}): string {
+  const base = adminRoute.replace(/\/$/, '')
+  const suffix = path.startsWith('/') ? path : `/${path}`
+  return `${base}${suffix}`
+}
+
+/** PREFERENCE_KEYS — matches Payload's preference keys. */
+export const PREFERENCE_KEYS = {
+  NAV: 'nav',
+  THEME: 'theme',
+  LOCALE: 'locale',
+} as const

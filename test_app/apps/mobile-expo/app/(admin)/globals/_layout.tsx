@@ -7,6 +7,7 @@ import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useListColors } from '@payload-universal/admin-native'
 import {
   ProgressiveBlurHeader,
   HeaderBackgroundFallback,
@@ -23,15 +24,18 @@ function GlobalsStack() {
   const insets = useSafeAreaInsets()
   const headerHeight = insets.top + NAV_BAR_HEIGHT
   const scrollY = useHeaderScrollY()
+  // Palette-driven tint — must match the scheme-aware header background so
+  // toolbar icons are never white-on-white in either scheme.
+  const { colors: c } = useListColors()
 
   return (
     <View style={styles.container}>
       <Stack
         screenOptions={{
           headerTransparent: true,
-          headerTintColor: '#1f1f1f',
+          headerTintColor: c.text,
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
-          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           headerShadowVisible: false,
           ...(hasProgressiveBlur
             ? {}

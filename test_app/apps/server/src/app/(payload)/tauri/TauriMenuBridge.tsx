@@ -211,7 +211,11 @@ const buildTauriMenuItems = async (nodes: MenuNode[]) => {
   const menuApi = await import('@tauri-apps/api/menu')
   const { MenuItem, Submenu, PredefinedMenuItem } = menuApi
 
-  const items = [] as Array<Awaited<ReturnType<typeof MenuItem.new>>>
+  const items = [] as Array<
+    | Awaited<ReturnType<typeof MenuItem.new>>
+    | Awaited<ReturnType<typeof PredefinedMenuItem.new>>
+    | Awaited<ReturnType<typeof Submenu.new>>
+  >
 
   for (const node of nodes) {
     if (node.type === 'separator') {

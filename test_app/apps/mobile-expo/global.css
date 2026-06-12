@@ -1,3 +1,55 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Theme tokens as CSS variables.
+ *
+ * WEB: the `prefers-color-scheme` media query below works natively in the
+ * browser, so these :root blocks are the complete web implementation.
+ *
+ * NATIVE: do NOT rely on this media query. react-native-css-interop compiles
+ * it correctly (rootVariables {light,dark}), but resolves it against its own
+ * module-level `systemColorScheme` observable, which is captured from
+ * Appearance.getColorScheme() at JS-init and only updated by an Appearance
+ * listener that drops events while AppState !== 'active' (i.e. during app
+ * launch — exactly when the real scheme and the stored preference override
+ * are applied). The observable can therefore stay stuck on 'light' while
+ * React Native's useColorScheme() correctly reports 'dark'.
+ *
+ * The app instead re-provides these variables at runtime via NativeWind
+ * `vars()` in app/_layout.tsx (ThemeVarsProvider), keyed off useListColors /
+ * RN useColorScheme — the same source the JS palettes use — so Tailwind
+ * tokens and palette components can never disagree. Inline vars() take
+ * precedence over these :root values on native.
+ *
+ * Values mirror useListColors (packages/admin-native/src/hooks/useListColors.ts)
+ * — that hook is the single source of truth for the palette.
+ */
+@layer base {
+  :root {
+    --color-ink: #1f1f1f;
+    --color-ink-muted: #666666;
+    --color-paper: #f6f4f1;
+    --color-surface: #ffffff;
+    --color-line: #e5e5e5;
+    --color-danger: #dc2626;
+    --color-danger-bg: #fef2f2;
+    --color-warn: #ca8a04;
+    --color-warn-bg: #fefce8;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --color-ink: #f2f2f2;
+      --color-ink-muted: #9d9d9d;
+      --color-paper: #141414;
+      --color-surface: #1e1e1e;
+      --color-line: #3a3a3c;
+      --color-danger: #ff6b66;
+      --color-danger-bg: #2d1413;
+      --color-warn: #fbbf24;
+      --color-warn-bg: #2d2410;
+    }
+  }
+}

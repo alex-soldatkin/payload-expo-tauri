@@ -12,6 +12,7 @@ import { useHeaderHeight } from '@react-navigation/elements'
 import {
   CollectionIcon,
   getCollectionLabel,
+  useListColors,
   useMenuModel,
 } from '@payload-universal/admin-native'
 
@@ -26,6 +27,9 @@ export default function CollectionsIndexScreen() {
   const headerHeight = useHeaderHeight()
   const scrollY = useHeaderScrollY()
   const { columns } = useResponsive()
+  // Animated.ScrollView can't take className — use the shared palette so the
+  // page background matches bg-paper in both schemes.
+  const { colors: c } = useListColors()
 
   const scrollHandler = useMemo(
     () =>
@@ -57,7 +61,7 @@ export default function CollectionsIndexScreen() {
 
   return (
     <Animated.ScrollView
-      style={{ flex: 1, backgroundColor: '#f6f4f1' }}
+      style={{ flex: 1, backgroundColor: c.background }}
       contentContainerStyle={{ paddingTop: headerHeight + 8, paddingBottom: 40, paddingHorizontal: columns > 1 ? 32 : 20, flexGrow: 1 }}
       onScroll={scrollHandler}
       scrollEventThrottle={16}
@@ -70,7 +74,7 @@ export default function CollectionsIndexScreen() {
               className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
               onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
             >
-              <CollectionIcon icon={col.icon} size={22} color="#555" />
+              <CollectionIcon icon={col.icon} size={22} color="#8E8E93" />
               <View>
                 <Text className="text-base font-semibold text-ink">
                   {getCollectionLabel(menuModel!, col.slug)}
@@ -97,7 +101,7 @@ export default function CollectionsIndexScreen() {
                       className="mb-2 flex-row items-center gap-3 rounded-2xl bg-surface p-4"
                       onPress={() => router.push(`/(admin)/collections/${col.slug}`)}
                     >
-                      <CollectionIcon icon={col.icon} size={22} color="#555" />
+                      <CollectionIcon icon={col.icon} size={22} color="#8E8E93" />
                       <View>
                         <Text className="text-base font-semibold text-ink">
                           {getCollectionLabel(menuModel!, col.slug)}

@@ -28,6 +28,9 @@ export type { UsePreferencesReturn } from './usePreferences.native'
 export { useEntityVisibility } from './useEntityVisibility.native'
 export type { UseEntityVisibilityReturn } from './useEntityVisibility.native'
 
+export { useRowLabel } from './useRowLabel.native'
+export type { UseRowLabelReturn } from './useRowLabel.native'
+
 // Stubs for hooks that have no native equivalent yet
 export const useOperation = () => ({ operation: 'update' as const })
 export const useNav = () => ({ navOpen: false, setNavOpen: () => {} })

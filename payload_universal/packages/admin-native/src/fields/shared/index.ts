@@ -5,7 +5,7 @@
  * - nativeComponents:  Platform-resolved @expo/ui component registry
  * - types:             Registry type definitions
  */
-export { FieldShell, fieldShellStyles } from './FieldShell'
+export { FieldShell, fieldShellStyles, NativeFormContext, useIsInsideNativeForm } from './FieldShell'
 export { nativeComponents } from './native'
-export type { NativeComponentRegistry } from './types'
+export type { JCModifier, NativeComponentRegistry, NativeModifier } from './types'
 export { emptyRegistry } from './types'

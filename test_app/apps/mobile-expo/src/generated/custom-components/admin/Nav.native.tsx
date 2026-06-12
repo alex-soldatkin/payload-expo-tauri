@@ -23,7 +23,7 @@ const baseClass = 'nav'
 export const NativeNav: React.FC = () => {
     const pathname = usePathname()
     const { config } = useConfig()
-    const { permissions } = useAuth()
+    const { permissions } = (useAuth() as { user: any; permissions: Record<string, any> })
     const { visibleEntities } = useEntityVisibility()
     const { i18n } = useTranslation()
     const { getPreference } = usePreferences()
@@ -32,7 +32,7 @@ export const NativeNav: React.FC = () => {
     useEffect(() => {
         let mounted = true
         void (async () => {
-            const prefs = await getPreference<NavPreferences>(PREFERENCE_KEYS.NAV)
+            const prefs = await (getPreference(PREFERENCE_KEYS.NAV) as Promise<NavPreferences | null>)
             if (mounted) {
                 setNavPreferences(prefs)
             }
@@ -75,7 +75,7 @@ export const NativeNav: React.FC = () => {
     const viewingRootFolderView = pathname.startsWith(folderURL)
 
     return (
-        <View baseClass={baseClass}>
+        <View>
             <View className={`${baseClass}__wrap`}>
                 {config.folders && config.folders.browseByFolder && (
                     <BrowseByFolderButton active={viewingRootFolderView} />
@@ -135,7 +135,7 @@ export const NativeNav: React.FC = () => {
             </View>
             <View className={`${baseClass}__header`}>
                 <View className={`${baseClass}__header-content`}>
-                    <View baseClass={baseClass} />
+                    <View />
                 </View>
             </View>
         </View>

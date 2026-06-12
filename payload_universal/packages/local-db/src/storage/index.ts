@@ -59,9 +59,19 @@ import {
   type SQLiteQueryWithParams,
 } from 'rxdb/plugins/storage-sqlite'
 
-import { mangoSelectorToSQL, mangoSortToSQL, fieldToSQL } from './mango-to-sql'
+import { mangoSelectorToSQL, mangoSortToSQL, fieldToSQL, type SQLParam } from './mango-to-sql'
 
 // ------------------------------------------------------------------ types
+
+/**
+ * rxdb's `SQLiteQueryWithParams` types params as `(string | number | boolean)[]`,
+ * but SQLite (and expo-sqlite) also accept NULL bindings — which our
+ * mango-to-sql translation produces for `IS NULL`-adjacent operators.
+ * Widen at our boundary and narrow back when handing to rxdb's helpers.
+ */
+type SQLiteQueryWithNullableParams = Omit<SQLiteQueryWithParams, 'params'> & {
+  params: (SQLParam | boolean)[]
+}
 
 export type SQLiteStorageSettings = {
   sqliteBasics: SQLiteBasics<any>
@@ -140,14 +150,14 @@ class RxStorageInstanceSQLite<RxDocType> {
 
   // ---- low-level SQL helpers ----
 
-  private run(db: any, q: SQLiteQueryWithParams): Promise<void> {
-    if (this.devMode) ensureParamsCountIsCorrect(q)
-    return this.sqliteBasics.run(db, q)
+  private run(db: any, q: SQLiteQueryWithNullableParams): Promise<void> {
+    if (this.devMode) ensureParamsCountIsCorrect(q as SQLiteQueryWithParams)
+    return this.sqliteBasics.run(db, q as SQLiteQueryWithParams)
   }
 
-  private all(db: any, q: SQLiteQueryWithParams): Promise<any[]> {
-    if (this.devMode) ensureParamsCountIsCorrect(q)
-    return this.sqliteBasics.all(db, q)
+  private all(db: any, q: SQLiteQueryWithNullableParams): Promise<any[]> {
+    if (this.devMode) ensureParamsCountIsCorrect(q as SQLiteQueryWithParams)
+    return this.sqliteBasics.all(db, q as SQLiteQueryWithParams)
   }
 
   // ---- bulkWrite ----

@@ -1,7 +1,20 @@
 {
   "compilerOptions": {
     "paths": {
-      "@/*": ["./*"]
+      "@/*": ["./*"],
+      // Dedupe react-native typings: pnpm links a second react-native instance
+      // into payload_universal/packages/*, which would miss the nativewind
+      // `className` module augmentation (declared against the app's instance).
+      "react-native": ["./node_modules/react-native/types/index.d.ts"],
+      // Local typed wrapper for @payload-universal/local-db: the package ships
+      // raw TS source with pre-existing (accepted-baseline) rxdb typing errors
+      // that would otherwise fail this app's typecheck. types/local-db is a
+      // declaration snapshot generated from the package source via:
+      //   cd payload_universal/packages/local-db && tsc -p tsconfig.json \
+      //     --emitDeclarationOnly --outDir <app>/types/local-db
+      // Regenerate it (or remove this mapping) once the package's rxdb
+      // typings are fixed.
+      "@payload-universal/local-db": ["./types/local-db/index.d.ts"]
     }
   },
   "extends": "expo/tsconfig.base"

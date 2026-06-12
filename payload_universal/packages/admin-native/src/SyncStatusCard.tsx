@@ -5,6 +5,18 @@
 import React, { useEffect, useRef } from 'react'
 import { Animated, Pressable, StyleSheet, Text, View } from 'react-native'
 import { defaultTheme as t } from './theme'
+import { useListColors } from './hooks/useListColors'
+
+// Optional: GlassView for liquid glass cards on iOS 26+ (graceful fallback)
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* not available */
+}
 
 type Status = 'pending' | 'uploading' | 'completed' | 'error'
 
@@ -35,6 +47,7 @@ export const SyncStatusCard: React.FC<Props> = ({
   timestamp,
 }) => {
   const config = STATUS_CONFIG[status]
+  const { colors: c } = useListColors()
   const pulseAnim = useRef(new Animated.Value(1)).current
 
   // Pulse animation for uploading status
@@ -62,8 +75,8 @@ export const SyncStatusCard: React.FC<Props> = ({
     }
   }
 
-  return (
-    <View style={styles.card}>
+  const cardContent = (
+    <>
       {/* Status dot */}
       <Animated.View
         style={[styles.dot, { backgroundColor: config.color, opacity: pulseAnim }]}
@@ -72,31 +85,46 @@ export const SyncStatusCard: React.FC<Props> = ({
       {/* Content */}
       <View style={styles.content}>
         <View style={styles.headerRow}>
-          <Text style={styles.collection}>{collectionName}</Text>
+          <Text style={[styles.collection, { color: c.textMuted }]}>{collectionName}</Text>
           <Text style={[styles.statusLabel, { color: config.color }]}>{config.label}</Text>
         </View>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
+        <Text style={[styles.title, { color: c.text }]} numberOfLines={1}>{title}</Text>
         {errorMessage && (
-          <Text style={styles.error} numberOfLines={2}>{errorMessage}</Text>
+          <Text style={[styles.error, { color: c.error }]} numberOfLines={2}>{errorMessage}</Text>
         )}
         {timestamp && (
-          <Text style={styles.timestamp}>{formatTime(timestamp)}</Text>
+          <Text style={[styles.timestamp, { color: c.textMuted }]}>{formatTime(timestamp)}</Text>
         )}
       </View>
 
       {/* Actions */}
       <View style={styles.actions}>
         {status === 'error' && onRetry && (
-          <Pressable onPress={onRetry} style={styles.retryBtn}>
-            <Text style={styles.retryText}>Retry</Text>
+          <Pressable onPress={onRetry} style={[styles.retryBtn, { backgroundColor: c.primary }]}>
+            <Text style={[styles.retryText, { color: c.primaryText }]}>Retry</Text>
           </Pressable>
         )}
         {(status === 'completed' || status === 'error') && onRemove && (
           <Pressable onPress={onRemove} hitSlop={8}>
-            <Text style={styles.removeText}>✕</Text>
+            <Text style={[styles.removeText, { color: c.textMuted }]}>✕</Text>
           </Pressable>
         )}
       </View>
+    </>
+  )
+
+  // Liquid glass card on iOS 26+ — themed bordered card elsewhere
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <GlassView style={styles.glassCard} glassEffectStyle="regular">
+        {cardContent}
+      </GlassView>
+    )
+  }
+
+  return (
+    <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }]}>
+      {cardContent}
     </View>
   )
 }
@@ -105,13 +133,20 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: t.colors.surface,
     borderRadius: t.borderRadius.md,
     borderWidth: 1,
-    borderColor: t.colors.border,
     padding: t.spacing.md,
     marginBottom: t.spacing.sm,
     gap: t.spacing.md,
+  },
+  glassCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: t.borderRadius.md,
+    padding: t.spacing.md,
+    marginBottom: t.spacing.sm,
+    gap: t.spacing.md,
+    overflow: 'hidden',
   },
   dot: {
     width: 10,

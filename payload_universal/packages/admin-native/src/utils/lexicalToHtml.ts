@@ -248,7 +248,11 @@ function serializeNode(node: LexicalNode): string {
         id = (v.id as string | number) ?? ''
         title = String(v.title ?? v.name ?? v.email ?? v.id ?? '')
       } else {
-        id = r.value ?? ''
+        // Explicit typeof narrowing -- works under both strict and non-strict
+        // consumer tsconfigs (the `&&`-else above leaves the union widened
+        // without strictNullChecks).
+        const v = r.value
+        id = typeof v === 'string' || typeof v === 'number' ? v : ''
         title = String(id)
       }
 
@@ -266,12 +270,15 @@ function serializeNode(node: LexicalNode): string {
       return `<tr>${cells}</tr>`
     }
     case 'tablecell': {
-      const tag = (node.headerState && node.headerState > 0) ? 'th' : 'td'
-      const content = (node.children || []).map(serializeNode).join('')
+      // LexicalElementNode's `type: string` keeps the union from narrowing on
+      // the literal -- assert the table-cell shape like the other leaf cases.
+      const cell = node as LexicalTableCellNode
+      const tag = (cell.headerState && cell.headerState > 0) ? 'th' : 'td'
+      const content = (cell.children || []).map(serializeNode).join('')
       const attrs: string[] = []
-      if (node.colSpan && node.colSpan > 1) attrs.push(`colspan="${node.colSpan}"`)
-      if (node.rowSpan && node.rowSpan > 1) attrs.push(`rowspan="${node.rowSpan}"`)
-      if (node.backgroundColor) attrs.push(`style="background-color:${node.backgroundColor}"`)
+      if (cell.colSpan && cell.colSpan > 1) attrs.push(`colspan="${cell.colSpan}"`)
+      if (cell.rowSpan && cell.rowSpan > 1) attrs.push(`rowspan="${cell.rowSpan}"`)
+      if (cell.backgroundColor) attrs.push(`style="background-color:${cell.backgroundColor}"`)
       const attrStr = attrs.length ? ' ' + attrs.join(' ') : ''
       return `<${tag}${attrStr}>${content}</${tag}>`
     }
@@ -342,15 +349,45 @@ function serializeNode(node: LexicalNode): string {
  * Convert a Payload Lexical editor state JSON object to react-native-enriched
  * compatible HTML.
  *
+ * Also accepts a JSON-stringified editor state (some sync/storage layers
+ * stringify rich text values) — anything else non-object returns ''.
+ *
  * Returns an empty string for null / undefined / empty input.
  */
 export function lexicalToHtml(editorState: unknown): string {
   if (editorState == null) return ''
-  if (typeof editorState !== 'object') return ''
 
-  const state = editorState as Partial<LexicalEditorState>
+  let candidate = editorState
+  if (typeof candidate === 'string') {
+    const trimmed = candidate.trim()
+    if (!trimmed.startsWith('{')) return ''
+    try {
+      candidate = JSON.parse(trimmed)
+    } catch {
+      return ''
+    }
+  }
+  if (candidate == null || typeof candidate !== 'object') return ''
+
+  const state = candidate as Partial<LexicalEditorState>
   if (!state.root || !Array.isArray(state.root.children)) return ''
   if (state.root.children.length === 0) return ''
 
   return state.root.children.map(serializeNode).join('')
+}
+
+/**
+ * Wrap editor HTML in the `<html>...</html>` envelope that
+ * react-native-enriched requires for parsing.
+ *
+ * Both native implementations gate HTML parsing on this exact wrapper
+ * (iOS `InputParser initiallyProcessHtml`, Android
+ * `EnrichedTextInputView.parseText`: `startsWith("<html>") &&
+ * endsWith("</html>")`). Bare fragments like `<p>...</p>` fail the check and
+ * are inserted as PLAIN TEXT — the editor then displays raw HTML source.
+ * Always pass `defaultValue` / `setValue` content through this wrapper.
+ */
+export function wrapEditorHtml(html: string): string {
+  if (!html) return ''
+  return `<html>\n${html}\n</html>`
 }

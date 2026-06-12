@@ -133,6 +133,18 @@ Client-side validation and hooks (2026-04-03)
 - `onFieldEdit` callback clears individual field errors as the user types
 - **Critical**: validation failures NEVER reach RxDB — data integrity enforced at the UI layer before the local-first write
 
+Custom collection action buttons (2026-04-04)
+- Payload config `admin.listActions` / `admin.editActions` metadata flows through admin schema to mobile
+- `ActionRegistryProvider` context provides handler functions (Metro-bundled, like client validators)
+- `useListActionHandlers(slug)` / `useEditActionHandlers(slug)` hooks for screens
+- Collection list: multi-select mode with circular checkboxes + selection action bar at bottom
+- iOS: `Stack.Toolbar.Menu` with `ellipsis.circle` shows custom actions as `Stack.Toolbar.MenuAction`
+- Android: `CheckSquare` toggle for selection + action buttons in bottom bar
+- Document edit: custom actions merged into existing `...` menu alongside Versions/Publish/Unpublish
+- `DocumentActionsMenu` extended with `extraActions` prop for Android/fallback
+- Codegen discovers `listMenuItems` / `editMenuItems` web components and adds them to registry
+- Example actions: bulk publish, bulk archive (list); share post, duplicate post (edit)
+
 UI and state
 - Create packages/admin-native that implements field and view components in React Native.
 - Reuse packages/admin-core for form state, validation, schema maps, and API calls.

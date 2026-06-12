@@ -16,6 +16,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 import { WebView as RNWebView } from 'react-native-webview'
 import { defaultTheme as t } from './theme'
+import { useListColors } from './hooks/useListColors'
 import type { ClientField, FieldValue } from './types'
 
 // ---------------------------------------------------------------------------
@@ -71,6 +72,7 @@ export const WebViewFieldBridge: React.FC<WebViewFieldBridgeProps> = ({
   webViewComponent: WebViewProp,
 }) => {
   const webViewRef = useRef<any>(null)
+  const { colors: c } = useListColors()
   const [height, setHeight] = useState(minHeight)
   const [ready, setReady] = useState(false)
 
@@ -173,11 +175,11 @@ export const WebViewFieldBridge: React.FC<WebViewFieldBridgeProps> = ({
   if (!WebView) {
     const name = componentName ?? field.name ?? 'Unknown'
     return (
-      <View style={styles.placeholder}>
-        <Text style={styles.placeholderTitle}>
+      <View style={[styles.placeholder, { backgroundColor: c.pressed }]}>
+        <Text style={[styles.placeholderTitle, { color: c.textMuted }]}>
           Custom Component: {name}
         </Text>
-        <Text style={styles.placeholderText}>
+        <Text style={[styles.placeholderText, { color: c.textPlaceholder }]}>
           This field uses a web-only component.{'\n'}
           Edit on the web admin panel, or install{'\n'}
           react-native-webview for WebView fallback.
@@ -222,10 +224,16 @@ function generateFallbackHTML(field: ClientField, componentName?: string): strin
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
-    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; margin: 0; color: #333; }
+    :root { color-scheme: light dark; }
+    body { font-family: -apple-system, system-ui, sans-serif; padding: 16px; margin: 0; color: #333; background: transparent; }
     .placeholder { text-align: center; padding: 24px; background: #f5f5f5; border-radius: 8px; }
     .title { font-weight: 600; margin-bottom: 8px; }
     .hint { color: #999; font-size: 13px; }
+    @media (prefers-color-scheme: dark) {
+      body { color: #e5e5e5; }
+      .placeholder { background: #2a2a2c; }
+      .hint { color: #8e8e93; }
+    }
   </style>
 </head>
 <body>

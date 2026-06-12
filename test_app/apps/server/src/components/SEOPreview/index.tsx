@@ -13,7 +13,6 @@ import {
   useField,
   useForm,
   useConfig,
-  Card,
   Banner,
   Button,
   Pill,
@@ -118,7 +117,7 @@ export const SEOPreview: React.FC<{ path: string }> = ({ path }) => {
         </div>
 
         {showPreview && (
-          <Card>
+          <div className="card" style={{ flexDirection: 'column' }}>
             <div style={{ fontFamily: 'Arial, sans-serif' }}>
               <h3 style={{ color: '#1a0dab', fontSize: 18, margin: 0, marginBottom: 4, textDecoration: 'none' }}>
                 {pageTitle || 'Page Title'}
@@ -130,7 +129,7 @@ export const SEOPreview: React.FC<{ path: string }> = ({ path }) => {
                 {pageDesc || 'No description set. Add a meta description for better search results.'}
               </p>
             </div>
-          </Card>
+          </div>
         )}
       </div>
     </div>

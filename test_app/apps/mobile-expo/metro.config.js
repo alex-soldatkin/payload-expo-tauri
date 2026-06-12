@@ -28,6 +28,24 @@ const expoUIReal = fs.realpathSync(
   path.resolve(projectRoot, 'node_modules/@expo/ui')
 )
 
+// Pin @react-navigation/* to the copies EXPO-ROUTER resolves. pnpm gives the
+// app and expo-router different physical copies; @react-navigation context
+// objects then differ per copy, so app-level useNavigation/usePreventRemove
+// crash with "Couldn't find a navigation object" (2026-06-12, unsaved-changes
+// guard). Anchoring resolution at expo-router's own directory guarantees one
+// shared instance — and usePreventRemove's NATIVE dismiss prevention (sheet
+// bounce-back on cancel) only works when the instances match.
+const expoRouterDir = path.dirname(
+  require.resolve('expo-router/package.json', { paths: [projectRoot] })
+)
+const navNativeDir = path.dirname(
+  require.resolve('@react-navigation/native/package.json', { paths: [expoRouterDir] })
+)
+const navSingletonAnchors = {
+  '@react-navigation/native': expoRouterDir,
+  '@react-navigation/core': navNativeDir,
+}
+
 config.resolver = {
   ...config.resolver,
   nodeModulesPaths: [
@@ -54,6 +72,17 @@ config.resolver = {
           // returns the app's own copy and gives Metro a path it can watch.
           // (fs.realpathSync on the pnpm store path points outside watchFolders.)
           const resolved = require.resolve(moduleName, { paths: [projectRoot] })
+          return { filePath: resolved, type: 'sourceFile' }
+        } catch { /* let default resolver handle it */ }
+      }
+    }
+
+    // Pin @react-navigation/native + core (incl. deep imports) to the copies
+    // expo-router resolves — single navigation context instance app-wide.
+    for (const [pkg, anchorDir] of Object.entries(navSingletonAnchors)) {
+      if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {
+        try {
+          const resolved = require.resolve(moduleName, { paths: [anchorDir] })
           return { filePath: resolved, type: 'sourceFile' }
         } catch { /* let default resolver handle it */ }
       }

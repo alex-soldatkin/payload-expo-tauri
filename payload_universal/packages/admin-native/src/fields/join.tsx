@@ -33,6 +33,7 @@ import { usePayloadNative } from '../PayloadNativeProvider'
 import { useFormData } from '../contexts/FormDataContext'
 import { payloadApi } from '../utils/api'
 import { FieldShell } from './shared'
+import { useListColors, type ListColorPalette } from '../hooks/useListColors'
 
 // No expo-router imports — shared packages must never use router hooks directly.
 // Navigation is handled via onRowPress callback prop.
@@ -98,6 +99,9 @@ export const JoinField: React.FC<FieldComponentProps<ClientJoinField>> = ({
 }) => {
   const { baseURL, auth, schema } = usePayloadNative()
   const formCtx = useFormData()
+  // Dark-mode aware table palette
+  const { colors: jc } = useListColors()
+  const styles = useMemo(() => createStyles(jc), [jc])
   const [docs, setDocs] = useState<Array<Record<string, unknown>>>([])
   const [loading, setLoading] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
@@ -463,12 +467,12 @@ export const JoinField: React.FC<FieldComponentProps<ClientJoinField>> = ({
 // Styles
 // ---------------------------------------------------------------------------
 
-const styles = StyleSheet.create({
+const createStyles = (c: ListColorPalette) => StyleSheet.create({
   container: {
     borderWidth: 1,
-    borderColor: t.colors.border,
+    borderColor: c.border,
     borderRadius: t.borderRadius.sm,
-    backgroundColor: t.colors.surface,
+    backgroundColor: c.card,
     overflow: 'hidden',
   },
   tableHeader: {
@@ -478,12 +482,12 @@ const styles = StyleSheet.create({
     paddingHorizontal: t.spacing.md,
     paddingVertical: t.spacing.sm,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
-    backgroundColor: t.colors.background,
+    borderBottomColor: c.separator,
+    backgroundColor: c.background,
   },
   countText: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    color: c.textMuted,
     fontWeight: '500',
   },
   badgeContainer: {
@@ -492,24 +496,24 @@ const styles = StyleSheet.create({
   },
   collectionBadge: {
     fontSize: t.fontSize.xs,
-    color: t.colors.textMuted,
+    color: c.textMuted,
     fontWeight: '500',
     paddingHorizontal: t.spacing.sm,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: c.pressed,
     overflow: 'hidden',
   },
   collectionBadgeActive: {
-    color: t.colors.primary,
+    color: c.primary,
     fontWeight: '600',
-    backgroundColor: '#e8e8e8',
+    backgroundColor: c.hairline,
   },
   headerRow: {
     flexDirection: 'row',
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.border,
-    backgroundColor: t.colors.background,
+    borderBottomColor: c.border,
+    backgroundColor: c.background,
   },
   headerCell: {
     paddingHorizontal: t.spacing.md,
@@ -519,16 +523,16 @@ const styles = StyleSheet.create({
   headerText: {
     fontSize: t.fontSize.xs,
     fontWeight: '600',
-    color: t.colors.textMuted,
+    color: c.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
   headerTextActive: {
-    color: t.colors.primary,
+    color: c.primary,
   },
   rowPressable: {
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: t.colors.separator,
+    borderBottomColor: c.separator,
   },
   dataRow: {
     flexDirection: 'row',
@@ -540,7 +544,7 @@ const styles = StyleSheet.create({
   },
   cellText: {
     fontSize: t.fontSize.sm,
-    color: t.colors.text,
+    color: c.text,
   },
   emptyContainer: {
     paddingVertical: t.spacing.xxl,
@@ -548,7 +552,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: t.fontSize.sm,
-    color: t.colors.textMuted,
+    color: c.textMuted,
     fontStyle: 'italic',
   },
   footer: {
@@ -559,14 +563,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: t.spacing.lg,
     paddingVertical: t.spacing.sm,
     borderRadius: t.borderRadius.sm,
-    backgroundColor: t.colors.background,
+    backgroundColor: c.background,
     borderWidth: 1,
-    borderColor: t.colors.border,
+    borderColor: c.border,
   },
   loadMoreText: {
     fontSize: t.fontSize.sm,
     fontWeight: '600',
-    color: t.colors.primary,
+    color: c.primary,
   },
   spinner: {
     marginVertical: t.spacing.xl,

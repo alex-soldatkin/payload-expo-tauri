@@ -3,6 +3,8 @@
  */
 export { Card } from './Card.native'
 export { Button } from './Button.native'
+export { NativeActionButton } from './NativeActionButton.native'
+export type { NativeActionButtonProps } from './NativeActionButton.native'
 export { Banner } from './Banner.native'
 export { Pill } from './Pill.native'
 export { Loading } from './Loading.native'

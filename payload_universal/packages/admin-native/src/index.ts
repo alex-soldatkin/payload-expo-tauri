@@ -22,18 +22,88 @@ export type { IconComponent } from './utils/iconRegistry'
 
 // Core components
 export { BottomSheet } from './BottomSheet'
+export type { SheetDetent } from './BottomSheet'
 export { DocumentActionsMenu } from './DocumentActionsMenu'
 export { FormSection } from './FormSection'
-export { DocumentForm, FormDataContext, useFormData } from './DocumentForm'
+export { DocumentForm, FormDataContext, useFormData, canUseNativeFormForFields } from './DocumentForm'
 export type { DocumentFormHandle, FormDataContextValue } from './DocumentForm'
-export { DocumentList } from './DocumentList'
+export { DocumentList, getSortableFields, sortToQueryString } from './DocumentList'
+export type { DocumentListSort } from './DocumentList'
 export { FieldRenderer } from './FieldRenderer'
 export { FilterBottomSheet } from './FilterBottomSheet'
+export type { FilterApplyPayload } from './FilterBottomSheet'
 export { FilterChips } from './FilterChips'
+export { SwipeToDeleteRow, closeOpenSwipeRow } from './SwipeToDeleteRow'
+export type { SwipeToDeleteRowProps } from './SwipeToDeleteRow'
 export { SyncStatusCard } from './SyncStatusCard'
 export { SyncStatusSection } from './SyncStatusSection'
 export { VersionDiff } from './VersionDiff'
 export { VersionsBottomSheet } from './VersionsBottomSheet'
+
+// Kanban board — liquid-glass, injection-friendly (the screen supplies docs
+// and move/press callbacks; drag-drop loads from the app's optional
+// react-native-reanimated-dnd with an ellipsis "Move to" menu fallback)
+export { KanbanBoard, KanbanCard, KanbanColumn } from './kanban'
+export {
+  buildKanbanColumns,
+  DEFAULT_KANBAN_PALETTE,
+  formatKanbanFieldValue,
+  getKanbanColumnValue,
+  KANBAN_CARD_WIDTH,
+  KANBAN_COLUMN_GAP,
+  KANBAN_COLUMN_WIDTH,
+  NO_STATUS_COLUMN_COLOR,
+  NO_STATUS_COLUMN_VALUE,
+} from './kanban'
+export type {
+  KanbanBoardProps,
+  KanbanCardProps,
+  KanbanCardRow,
+  KanbanColumnProps,
+  KanbanColumnSpec,
+  KanbanDoc,
+  KanbanMoveTarget,
+  KanbanStatusField,
+  KanbanStatusOption,
+} from './kanban'
+
+// Calendar view — config-driven calendar over Payload docs (the screen
+// supplies docs, date sources and callbacks; the app's native `calendar-view`
+// module is injected via the nativeModule prop with pure-JS month-grid /
+// day-list fallbacks when it is absent)
+export { CalendarEventRow, CalendarView, DayListFallback, MonthGridFallback } from './calendar'
+export {
+  addDaysToKey,
+  buildEventsByDateKey,
+  calendarEventDocId,
+  DEFAULT_CALENDAR_PALETTE,
+  docsToCalendarEvents,
+  eventOccursOnDate,
+  formatEventTimeRange,
+  formatLongDate,
+  formatTimeOfDay,
+  isMultiDayEvent,
+  MAX_EVENT_SPAN_DAYS,
+  MAX_MONTH_CELL_DOTS,
+  MAX_MONTH_CELL_STRIPS,
+  normalizeDateKey,
+  parseDateKey,
+  pickDefaultSources,
+  toDateKey,
+  todayDateKey,
+} from './calendar'
+export type {
+  CalendarDoc,
+  CalendarEvent,
+  CalendarEventRowProps,
+  CalendarFieldLike,
+  CalendarMode,
+  CalendarNativeModule,
+  CalendarSource,
+  CalendarViewProps,
+  DayListFallbackProps,
+  MonthGridFallbackProps,
+} from './calendar'
 
 // Custom component overrides
 export {
@@ -53,6 +123,18 @@ export {
   useListActionHandlers,
 } from './contexts/ActionContext'
 
+// Client-side admin.condition registry — Metro-bundled condition functions
+// matched by collection slug + field schema path. Fields with a hasCondition
+// marker but no registered condition stay visible (fail open).
+export {
+  ConditionRegistryProvider,
+  evaluateFieldVisibility,
+  resolveFieldCondition,
+  useCollectionConditions,
+  useConditionRegistry,
+} from './contexts/ConditionContext'
+export type { ClientFieldCondition, ConditionRegistry } from './contexts/ConditionContext'
+
 // WebView fallback bridge
 export { WebViewFieldBridge } from './WebViewFieldBridge'
 export type { WebViewFieldBridgeProps } from './WebViewFieldBridge'
@@ -68,8 +150,18 @@ export type { ScrollablePreviewModule } from './contexts/ScrollablePreviewContex
 export { ToastProvider, useToast } from './Toast'
 
 // Search & filter hooks
-export { useDocumentListFilters } from './hooks/useDocumentListFilters'
-export type { ActiveFilter } from './hooks/useDocumentListFilters'
+export {
+  applyWhereToDocs,
+  filtersToWhere,
+  matchesWhere,
+  useDocumentListFilters,
+  whereToFilterGroups,
+} from './hooks/useDocumentListFilters'
+export type { ActiveFilter, FilterCondition, FilterGroup, WhereClause } from './hooks/useDocumentListFilters'
+
+// Dark-mode aware list palette (follows useColorScheme — never hardcoded light)
+export { useListColors } from './hooks/useListColors'
+export type { ListColorPalette } from './hooks/useListColors'
 
 // Filter utilities
 export { getOperatorsForFieldType, isFieldFilterable, getFilterableFieldTypes } from './utils/filterOperators'
@@ -77,6 +169,19 @@ export type { FilterOperator } from './utils/filterOperators'
 
 // Field registry
 export { fieldRegistry, getFieldComponent, FieldRendererContext } from './fields'
+
+// Field chrome — label/description/error shell around custom field inputs.
+// The @payload-universal/ui native shim imports this from the MAIN barrel
+// (not ./fields), so it must be re-exported here.
+export { FieldShell, fieldShellStyles } from './fields'
+
+// Relationship field public props (onRequestCreate injection point)
+export type { RelationshipFieldProps } from './fields/pickers'
+
+// Array row label context — ArrayField provides it around custom RowLabel
+// components; the @payload-universal/ui native shim's useRowLabel reads it.
+export { RowLabelContext, useRowLabelContext } from './fields/structural'
+export type { RowLabelContextValue } from './fields/structural'
 
 // Field components (for direct use or overriding)
 export {
@@ -101,6 +206,7 @@ export {
   TabsField,
   TextField,
   TextareaField,
+  UIField,
   UploadField,
 } from './fields'
 

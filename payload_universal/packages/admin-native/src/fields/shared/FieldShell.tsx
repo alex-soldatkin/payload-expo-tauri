@@ -14,7 +14,9 @@ import React, { createContext, useContext } from 'react'
 import { StyleSheet, Text, View } from 'react-native'
 
 import { defaultTheme as t } from '../../theme'
+import { useListColors } from '../../hooks/useListColors'
 import { nativeComponents } from './native'
+import type { NativeModifier } from './types'
 
 // ---------------------------------------------------------------------------
 // NativeFormContext — set by DocumentForm when wrapping in a SwiftUI Form.
@@ -23,6 +25,38 @@ import { nativeComponents } from './native'
 
 export const NativeFormContext = createContext(false)
 export const useIsInsideNativeForm = () => useContext(NativeFormContext)
+
+// ---------------------------------------------------------------------------
+// Native caption helpers — small muted/error text rendered as SwiftUI Text
+// inside Form sections. Modifiers are FACTORY CALLS from the registry
+// (never object literals) and every factory is null-checked.
+// ---------------------------------------------------------------------------
+
+/** iOS systemGray — legible in both light and dark appearance. */
+const NATIVE_MUTED_COLOR = '#8E8E93'
+
+const nativeCaptionModifiers = (color: string): NativeModifier[] | undefined => {
+  const mods: NativeModifier[] = []
+  if (nativeComponents.font) mods.push(nativeComponents.font({ size: 13 }))
+  if (nativeComponents.foregroundColor) mods.push(nativeComponents.foregroundColor(color))
+  return mods.length > 0 ? mods : undefined
+}
+
+/**
+ * Caption line (description / error) inside a native Form Section.
+ * Prefers SwiftUI Text (proper Form row appearance); degrades to RN Text.
+ */
+const NativeFormCaption: React.FC<{ color: string; fallbackStyle: any; children: string }> = ({
+  color,
+  fallbackStyle,
+  children,
+}) => {
+  const NativeText = nativeComponents.Text
+  if (NativeText) {
+    return <NativeText modifiers={nativeCaptionModifiers(color)}>{children}</NativeText>
+  }
+  return <Text style={fallbackStyle}>{children}</Text>
+}
 
 // ---------------------------------------------------------------------------
 // FieldShell
@@ -52,6 +86,9 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   const insideNativeForm = useIsInsideNativeForm()
   const NativeLabeledContent = nativeComponents.LabeledContent
   const NativeText = nativeComponents.Text
+  // Dark-mode aware tokens for the JS fallback layouts (the native Form
+  // path inherits system appearance from SwiftUI automatically).
+  const { colors: c } = useListColors()
 
   const displayLabel = `${label}${required ? ' *' : ''}`
 
@@ -63,26 +100,44 @@ export const FieldShell: React.FC<FieldShellProps> = ({
         <NativeLabeledContent label={displayLabel}>
           {children}
         </NativeLabeledContent>
-        {description && NativeText ? (
-          <NativeText modifiers={nativeComponents.tag ? [nativeComponents.tag('desc')] : undefined}>
+        {description ? (
+          <NativeFormCaption color={NATIVE_MUTED_COLOR} fallbackStyle={styles.description}>
             {description}
-          </NativeText>
-        ) : description ? (
-          <Text style={styles.description}>{description}</Text>
+          </NativeFormCaption>
         ) : null}
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error ? (
+          <NativeFormCaption color={t.colors.error} fallbackStyle={styles.error}>
+            {error}
+          </NativeFormCaption>
+        ) : null}
       </>
     )
   }
 
-  // ── Stacked layout inside SwiftUI Form — let the Form handle chrome ──
-  if (insideNativeForm && layout === 'stacked') {
+  // ── Inside SwiftUI Form, stacked layout (textarea/code/json) or inline
+  //    without LabeledContent — minimal chrome, the Form supplies row
+  //    separators and grouping (no custom hairlines inside Form cells). ──
+  if (insideNativeForm) {
     return (
       <>
-        <Text style={styles.stackedLabel}>{displayLabel}</Text>
+        {NativeText ? (
+          <NativeText modifiers={nativeCaptionModifiers(NATIVE_MUTED_COLOR)}>
+            {displayLabel}
+          </NativeText>
+        ) : (
+          <Text style={[styles.stackedLabel, { color: c.textMuted }]}>{displayLabel}</Text>
+        )}
         {children}
-        {description && <Text style={styles.description}>{description}</Text>}
-        {error && <Text style={styles.error}>{error}</Text>}
+        {description ? (
+          <NativeFormCaption color={NATIVE_MUTED_COLOR} fallbackStyle={styles.description}>
+            {description}
+          </NativeFormCaption>
+        ) : null}
+        {error ? (
+          <NativeFormCaption color={t.colors.error} fallbackStyle={styles.error}>
+            {error}
+          </NativeFormCaption>
+        ) : null}
       </>
     )
   }
@@ -91,10 +146,10 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   if (layout === 'stacked') {
     return (
       <View style={styles.container}>
-        <Text style={styles.stackedLabel}>{displayLabel}</Text>
+        <Text style={[styles.stackedLabel, { color: c.textMuted }]}>{displayLabel}</Text>
         {children}
-        {description && <Text style={styles.description}>{description}</Text>}
-        <View style={[styles.separator, error && styles.separatorError]} />
+        {description && <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>}
+        <View style={[styles.separator, { backgroundColor: c.separator }, error && styles.separatorError]} />
         {error && <Text style={styles.error}>{error}</Text>}
       </View>
     )
@@ -104,11 +159,11 @@ export const FieldShell: React.FC<FieldShellProps> = ({
   return (
     <View style={styles.container}>
       <View style={styles.inlineRow}>
-        <Text style={styles.inlineLabel} numberOfLines={1}>{displayLabel}</Text>
+        <Text style={[styles.inlineLabel, { color: c.textMuted }]} numberOfLines={1}>{displayLabel}</Text>
         <View style={styles.inlineContent}>{children}</View>
       </View>
-      {description && <Text style={styles.description}>{description}</Text>}
-      <View style={[styles.separator, error && styles.separatorError]} />
+      {description && <Text style={[styles.description, { color: c.textPlaceholder }]}>{description}</Text>}
+      <View style={[styles.separator, { backgroundColor: c.separator }, error && styles.separatorError]} />
       {error && <Text style={styles.error}>{error}</Text>}
     </View>
   )

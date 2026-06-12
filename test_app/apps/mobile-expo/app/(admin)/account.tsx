@@ -4,8 +4,8 @@
  *
  * On tablet, content is constrained to a comfortable reading width.
  */
-import React, { useEffect, useRef } from 'react'
-import { Alert, Animated, Platform, Pressable, ScrollView, Text, View } from 'react-native'
+import React, { useEffect, useRef, useState } from 'react'
+import { Alert, Animated, Platform, Pressable, ScrollView, Text, useColorScheme, View } from 'react-native'
 
 // Optional: GlassView for liquid glass cards on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -18,6 +18,27 @@ try {
   /* not available */
 }
 
+// App screens MAY import @expo/ui/swift-ui directly (tab layout precedent).
+// SwiftUI modifiers MUST be factory calls from '@expo/ui/swift-ui/modifiers'.
+let SHost: any = null
+let SPicker: any = null
+let SText: any = null
+let pickerStyleMod: ((style: string) => any) | null = null
+let tagMod: ((tag: string) => any) | null = null
+if (Platform.OS === 'ios') {
+  try {
+    const ui = require('@expo/ui/swift-ui')
+    const mods = require('@expo/ui/swift-ui/modifiers')
+    SHost = ui.Host
+    SPicker = ui.Picker
+    SText = ui.Text
+    pickerStyleMod = mods.pickerStyle
+    tagMod = mods.tag
+  } catch {
+    /* @expo/ui not available */
+  }
+}
+
 import {
   SyncStatusSection,
   useAdminSchema,
@@ -28,6 +49,93 @@ import {
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalDBStatus, usePendingUploads } from '@payload-universal/local-db'
 import { useResponsive } from '@/hooks/useResponsive'
+import {
+  ADMIN_LANGUAGE_OPTIONS,
+  APPEARANCE_OPTIONS,
+  getStoredAdminLanguage,
+  getStoredAppearance,
+  setAdminLanguage,
+  setAppearancePreference,
+  type AdminLanguage,
+  type AppearancePreference,
+} from '@/src/preferences'
+
+// ---------------------------------------------------------------------------
+// Settings-style segmented picker row — native SwiftUI Picker when available,
+// chip fallback otherwise.
+// ---------------------------------------------------------------------------
+
+function PreferencePickerRow<T extends string>({
+  label,
+  options,
+  optionLabels,
+  value,
+  onChange,
+}: {
+  label: string
+  options: T[]
+  optionLabels: Record<string, string>
+  value: T
+  onChange: (value: T) => void
+}) {
+  const isDark = useColorScheme() === 'dark'
+  if (SHost && SPicker && SText && pickerStyleMod && tagMod) {
+    return (
+      <View style={{ paddingVertical: 6 }}>
+        <Text className="mb-2 text-sm font-semibold text-ink">{label}</Text>
+        {/* matchContents — zero-height hosts swallow touches */}
+        <SHost matchContents={{ vertical: true }} style={{ width: '100%' }}>
+          <SPicker
+            selection={value}
+            onSelectionChange={(sel: string | number | null) => {
+              if (typeof sel === 'string' && (options as string[]).includes(sel)) {
+                onChange(sel as T)
+              }
+            }}
+            modifiers={[pickerStyleMod('segmented')]}
+          >
+            {options.map((opt) => (
+              <SText key={opt} modifiers={[tagMod!(opt)]}>
+                {optionLabels[opt] ?? opt}
+              </SText>
+            ))}
+          </SPicker>
+        </SHost>
+      </View>
+    )
+  }
+
+  // JS fallback — chip row
+  return (
+    <View style={{ paddingVertical: 6 }}>
+      <Text className="mb-2 text-sm font-semibold text-ink">{label}</Text>
+      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
+        {options.map((opt) => (
+          <Pressable
+            key={opt}
+            onPress={() => onChange(opt)}
+            style={{
+              paddingHorizontal: 14,
+              paddingVertical: 6,
+              borderRadius: 16,
+              backgroundColor: value === opt ? '#007AFF' : 'rgba(120,120,128,0.16)',
+            }}
+          >
+            <Text
+              style={{
+                fontSize: 13,
+                fontWeight: '600',
+                color: value === opt ? '#fff' : isDark ? '#f2f2f2' : '#1f1f1f',
+              }}
+            >
+              {optionLabels[opt] ?? opt}
+            </Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  )
+}
 
 // ---------------------------------------------------------------------------
 // Animated progress bar
@@ -38,6 +146,7 @@ const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: st
   syncing,
   current,
 }) => {
+  const isDark = useColorScheme() === 'dark'
   const widthAnim = useRef(new Animated.Value(0)).current
 
   useEffect(() => {
@@ -58,7 +167,7 @@ const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: st
         style={{
           height: 6,
           borderRadius: 3,
-          backgroundColor: 'rgba(0,0,0,0.06)',
+          backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
           overflow: 'hidden',
         }}
       >
@@ -79,10 +188,10 @@ const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: st
 
       {/* Label */}
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-        <Text style={{ fontSize: 11, color: '#888' }}>
+        <Text style={{ fontSize: 11, color: '#8E8E93' }}>
           {current ? `Syncing ${current}...` : syncing ? 'Starting sync...' : 'Sync complete'}
         </Text>
-        <Text style={{ fontSize: 11, fontVariant: ['tabular-nums'], color: '#888' }}>
+        <Text style={{ fontSize: 11, fontVariant: ['tabular-nums'], color: '#8E8E93' }}>
           {percent}%
         </Text>
       </View>
@@ -105,6 +214,27 @@ export default function AccountScreen() {
   const localDB = useLocalDB()
   const dbStatus = useLocalDBStatus()
   const uploads = usePendingUploads(localDB)
+
+  // ── App preferences (persisted; appearance applied on boot in _layout) ──
+  const [appearance, setAppearance] = useState<AppearancePreference>('system')
+  const [adminLanguage, setAdminLanguageState] = useState<AdminLanguage>('en')
+
+  useEffect(() => {
+    getStoredAppearance().then(setAppearance).catch(() => {})
+    getStoredAdminLanguage().then(setAdminLanguageState).catch(() => {})
+  }, [])
+
+  const handleAppearanceChange = (pref: AppearancePreference) => {
+    setAppearance(pref)
+    setAppearancePreference(pref).catch(() => {})
+  }
+
+  const handleAdminLanguageChange = (lang: AdminLanguage) => {
+    setAdminLanguageState(lang)
+    // NOTE: the app has no i18n/getTranslation pipeline yet — the value is
+    // persisted for future use (see src/preferences.ts).
+    setAdminLanguage(lang).catch(() => {})
+  }
 
   const displayName =
     (user?.name as string) ||
@@ -198,8 +328,8 @@ export default function AccountScreen() {
       <View style={isTablet ? { maxWidth: 600, width: '100%', alignSelf: 'center' as const } : undefined}>
         {/* Profile card */}
         <Card>
-          <View className="mb-4 h-14 w-14 items-center justify-center rounded-full bg-black">
-            <Text className="text-xl font-bold text-white">
+          <View className="mb-4 h-14 w-14 items-center justify-center rounded-full bg-ink">
+            <Text className="text-xl font-bold text-paper">
               {displayName.charAt(0).toUpperCase()}
             </Text>
           </View>
@@ -242,7 +372,7 @@ export default function AccountScreen() {
             </Text>
           )}
           {dbStatus.error && (
-            <Text className="mt-2 text-xs text-red-600">
+            <Text className="mt-2 text-xs text-danger">
               Local DB error: {dbStatus.error}
             </Text>
           )}
@@ -277,6 +407,30 @@ export default function AccountScreen() {
           )}
         </Card>
 
+        {/* Preferences — Apple Settings style */}
+        <Card style={{ marginTop: 16 }}>
+          <Text className="text-sm font-semibold text-ink" style={{ marginBottom: 4 }}>
+            Preferences
+          </Text>
+          <PreferencePickerRow
+            label="Appearance"
+            options={APPEARANCE_OPTIONS}
+            optionLabels={{ system: 'System', light: 'Light', dark: 'Dark' }}
+            value={appearance}
+            onChange={handleAppearanceChange}
+          />
+          <PreferencePickerRow
+            label="Admin Language"
+            options={ADMIN_LANGUAGE_OPTIONS}
+            optionLabels={{ en: 'English', es: 'Español' }}
+            value={adminLanguage}
+            onChange={handleAdminLanguageChange}
+          />
+          <Text className="mt-1 text-xs text-ink-muted">
+            Admin language is stored for upcoming translations.
+          </Text>
+        </Card>
+
         {/* Actions */}
         <View className="mt-4 gap-2">
           <ActionButton onPress={refreshSchema} disabled={isSchemaLoading}>
@@ -296,13 +450,13 @@ export default function AccountScreen() {
                   ? 'Syncing...'
                   : 'Delete Local Data & Re-sync'}
             </Text>
-            <Text style={{ fontSize: 12, color: '#888', marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: '#8E8E93', marginTop: 2 }}>
               Removes cached data and pulls fresh from server
             </Text>
           </ActionButton>
 
           <ActionButton onPress={handleLogout}>
-            <Text className="text-base font-semibold text-red-600">Sign Out</Text>
+            <Text className="text-base font-semibold text-danger">Sign Out</Text>
           </ActionButton>
         </View>
       </View>

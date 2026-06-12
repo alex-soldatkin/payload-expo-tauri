@@ -22,6 +22,7 @@ import { defaultTheme as t } from '../theme'
 import { getFieldDescription, getFieldLabel } from '../utils/schemaHelpers'
 import { FieldShell, fieldShellStyles, nativeComponents } from './shared'
 import { NativeHost } from './NativeHost'
+import { useListColors } from '../hooks/useListColors'
 
 // ---------------------------------------------------------------------------
 // Checkbox
@@ -60,19 +61,22 @@ const CheckboxFieldFallback: React.FC<FieldComponentProps<ClientCheckboxField>> 
   onChange,
   disabled,
   error,
-}) => (
-  <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} error={error}>
-    <View style={styles.checkboxInline}>
-      <Switch
-        value={Boolean(value)}
-        onValueChange={(v) => onChange(v)}
-        disabled={disabled || field.admin?.readOnly}
-        trackColor={{ true: t.colors.primary, false: '#ccc' }}
-        thumbColor={Platform.OS === 'android' ? '#fff' : undefined}
-      />
-    </View>
-  </FieldShell>
-)
+}) => {
+  const { colors: c } = useListColors()
+  return (
+    <FieldShell label={getFieldLabel(field)} description={getFieldDescription(field)} error={error}>
+      <View style={styles.checkboxInline}>
+        <Switch
+          value={Boolean(value)}
+          onValueChange={(v) => onChange(v)}
+          disabled={disabled || field.admin?.readOnly}
+          trackColor={{ true: c.primary, false: c.border }}
+          thumbColor={Platform.OS === 'android' ? c.surface : undefined}
+        />
+      </View>
+    </FieldShell>
+  )
+}
 
 export const CheckboxField: React.FC<FieldComponentProps<ClientCheckboxField>> = (props) =>
   nativeComponents.Toggle
@@ -166,26 +170,29 @@ const WheelColumn: React.FC<{
   data: Array<{ label: string; value: number }>
   selected: number
   onSelect: (v: number) => void
-}> = ({ data, selected, onSelect }) => (
-  <FlatList
-    data={data}
-    keyExtractor={(item) => String(item.value)}
-    style={styles.wheelColumn}
-    showsVerticalScrollIndicator={false}
-    initialScrollIndex={Math.max(0, data.findIndex((d) => d.value === selected))}
-    getItemLayout={(_, index) => ({ length: 40, offset: 40 * index, index })}
-    renderItem={({ item }) => (
-      <Pressable
-        style={[styles.wheelItem, item.value === selected && styles.wheelItemSelected]}
-        onPress={() => onSelect(item.value)}
-      >
-        <Text style={[styles.wheelText, item.value === selected && styles.wheelTextSelected]}>
-          {item.label}
-        </Text>
-      </Pressable>
-    )}
-  />
-)
+}> = ({ data, selected, onSelect }) => {
+  const { colors: c } = useListColors()
+  return (
+    <FlatList
+      data={data}
+      keyExtractor={(item) => String(item.value)}
+      style={styles.wheelColumn}
+      showsVerticalScrollIndicator={false}
+      initialScrollIndex={Math.max(0, data.findIndex((d) => d.value === selected))}
+      getItemLayout={(_, index) => ({ length: 40, offset: 40 * index, index })}
+      renderItem={({ item }) => (
+        <Pressable
+          style={[styles.wheelItem, item.value === selected && { backgroundColor: c.pressed, borderRadius: 8 }]}
+          onPress={() => onSelect(item.value)}
+        >
+          <Text style={[styles.wheelText, { color: c.textMuted }, item.value === selected && { fontWeight: '700', color: c.text }]}>
+            {item.label}
+          </Text>
+        </Pressable>
+      )}
+    />
+  )
+}
 
 const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
   field,
@@ -194,6 +201,7 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
   disabled,
   error,
 }) => {
+  const { colors: c } = useListColors()
   const [open, setOpen] = useState(false)
   const current = value ? new Date(value as string) : new Date()
   const validDate = isNaN(current.getTime()) ? new Date() : current
@@ -236,11 +244,11 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
       error={error}
     >
       <Pressable
-        style={[styles.dateButton, error && styles.dateButtonError]}
+        style={[styles.dateButton, { backgroundColor: c.card, borderColor: c.border }, error && { borderColor: c.error }]}
         onPress={() => !disabled && handleOpen()}
         disabled={disabled || field.admin?.readOnly}
       >
-        <Text style={[styles.dateText, !displayValue && styles.datePlaceholder]}>
+        <Text style={[styles.dateText, { color: c.text }, !displayValue && { color: c.textPlaceholder }]}>
           {displayValue ?? 'Select date...'}
         </Text>
       </Pressable>
@@ -249,18 +257,18 @@ const DateFieldFallback: React.FC<FieldComponentProps<ClientDateField>> = ({
         <Pressable style={styles.backdrop} onPress={() => setOpen(false)}>
           <View style={{ flex: 1 }} />
         </Pressable>
-        <View style={styles.pickerSheet}>
-          <View style={styles.pickerHeader}>
+        <View style={[styles.pickerSheet, { backgroundColor: c.card }]}>
+          <View style={[styles.pickerHeader, { borderBottomColor: c.separator }]}>
             <Pressable onPress={() => setOpen(false)}>
-              <Text style={styles.pickerCancel}>Cancel</Text>
+              <Text style={[styles.pickerCancel, { color: c.textMuted }]}>Cancel</Text>
             </Pressable>
-            <Text style={styles.pickerTitle}>
+            <Text style={[styles.pickerTitle, { color: c.text }]}>
               {showDate && `${MONTHS_SHORT[month]} ${day}, ${year}`}
               {showTime && showDate && ' '}
               {showTime && `${hour % 12 || 12}:${minute.toString().padStart(2, '0')} ${hour >= 12 ? 'PM' : 'AM'}`}
             </Text>
             <Pressable onPress={handleConfirm}>
-              <Text style={styles.pickerDone}>Done</Text>
+              <Text style={[styles.pickerDone, { color: c.primary }]}>Done</Text>
             </Pressable>
           </View>
           <View style={styles.wheelRow}>

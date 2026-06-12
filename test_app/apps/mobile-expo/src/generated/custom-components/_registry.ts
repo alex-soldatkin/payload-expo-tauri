@@ -3,23 +3,37 @@
 import type { CustomComponentRegistry } from '@payload-universal/admin-native'
 
 import NavComponent0 from './admin/Nav.native'
-import FieldComponent1 from './fields/posts_slug_Field.native'
-import afterInput_0Component2 from './fields/posts_excerpt_afterInput_0.native'
-import FieldComponent3 from './fields/posts_metaTitle_Field.native'
-import afterInput_0Component4 from './fields/posts_readTime_afterInput_0.native'
-import afterInput_0Component5 from './fields/posts_status_afterInput_0.native'
+import FieldComponent3 from './fields/posts_slug_Field.native'
+import afterInput_0Component4 from './fields/posts_excerpt_afterInput_0.native'
+import FieldComponent5 from './fields/posts_metaTitle_Field.native'
+import afterInput_0Component6 from './fields/posts_readTime_afterInput_0.native'
+import afterInput_0Component7 from './fields/posts_status_afterInput_0.native'
+import FieldComponent8 from './fields/products_priceSummary_Field.native'
+import RowLabelComponent9 from './fields/events_sessions_RowLabel.native'
+import RowLabelComponent10 from './fields/footer_links_RowLabel.native'
+import listAction_0Component1 from './actions/posts_listAction_0.native'
+import editAction_0Component2 from './actions/posts_editAction_0.native'
 
 export const customComponentRegistry: CustomComponentRegistry = {
   fields: {
-    "posts.slug": { Field: FieldComponent1 },
-    "posts.metaTitle": { Field: FieldComponent3 },
-    "posts.excerpt": { afterInput: [afterInput_0Component2] },
-    "posts.readTime": { afterInput: [afterInput_0Component4] },
-    "posts.status": { afterInput: [afterInput_0Component5] }
+    "posts.slug": { Field: FieldComponent3 },
+    "posts.excerpt": { afterInput: [afterInput_0Component4] },
+    "posts.metaTitle": { Field: FieldComponent5 },
+    "posts.readTime": { afterInput: [afterInput_0Component6] },
+    "posts.status": { afterInput: [afterInput_0Component7] },
+    "products.priceSummary": { Field: FieldComponent8 },
+    "events.sessions": { RowLabel: RowLabelComponent9 },
+    "footer.links": { RowLabel: RowLabelComponent10 }
   },
   views: {},
   admin: {
     "Nav": NavComponent0
+  },
+  listActions: {
+    "posts": [{ component: listAction_0Component1, label: "Publish Selected" }]
+  },
+  editActions: {
+    "posts": [{ component: editAction_0Component2, label: "Share Post" }]
   },
 }
 

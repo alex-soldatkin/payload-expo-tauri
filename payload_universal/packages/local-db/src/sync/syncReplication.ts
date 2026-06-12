@@ -32,6 +32,12 @@ type Checkpoint = { updatedAt: string; id: string }
 export type SyncReplicationState = {
   destroy: () => void
   readonly connected: boolean
+  /**
+   * Push all locally-modified documents now. The WS sync is pull-only
+   * (push is handled by the polling replication), so this is not provided
+   * by startSyncReplication — callers must guard before invoking.
+   */
+  pushNow?: () => Promise<void>
 }
 
 const buildHeaders = (token: string | null): Record<string, string> => ({

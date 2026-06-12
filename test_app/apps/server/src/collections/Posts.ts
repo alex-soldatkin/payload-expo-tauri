@@ -2,11 +2,30 @@ import type { CollectionConfig } from 'payload'
 
 export const Posts: CollectionConfig = {
   slug: 'posts',
+  enableQueryPresets: true,
   admin: {
     useAsTitle: 'title',
     group: 'Content',
     // @ts-expect-error — payload-universal icon extension
     icon: 'file-text',
+    listActions: [
+      { key: 'bulkPublish', label: 'Publish Selected', icon: 'arrow.up.doc' },
+      { key: 'bulkArchive', label: 'Archive Selected', icon: 'archivebox', destructive: true },
+    ],
+    editActions: [
+      { key: 'sharePost', label: 'Share Post', icon: 'square.and.arrow.up' },
+      { key: 'duplicatePost', label: 'Duplicate', icon: 'doc.on.doc' },
+    ],
+    components: {
+      listMenuItems: [
+        { path: './components/BulkPublishAction' },
+      ],
+      edit: {
+        editMenuItems: [
+          { path: './components/SharePostAction' },
+        ],
+      },
+    },
   },
   versions: {
     drafts: true,
@@ -265,6 +284,7 @@ export const Posts: CollectionConfig = {
       defaultValue: 'draft',
       options: [
         { label: 'Draft', value: 'draft' },
+        { label: 'In Review', value: 'review' },
         { label: 'Published', value: 'published' },
         { label: 'Archived', value: 'archived' },
       ],

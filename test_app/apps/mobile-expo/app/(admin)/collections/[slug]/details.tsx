@@ -1,117 +1,134 @@
 /**
- * Details sheet — renders sidebar fields (admin.position: 'sidebar') in a
- * native iOS formSheet with grab handle and multiple detents.
+ * Details sheet — editable sidebar fields (admin.position: 'sidebar')
+ * in a native iOS formSheet with grab handle and multiple detents.
  *
- * Presented as a sheet over the document edit/create screen.
- * Uses DocumentForm in read-only mode to get the full context stack
- * (FieldRendererContext, ErrorMapContext, FormDataContext).
+ * Renders a full DocumentForm with only the sidebar fields, connected
+ * to the local RxDB database for instant saves. Changes sync to the
+ * server in the background via the replication layer.
  */
-import React, { useMemo } from 'react'
-import { ScrollView, StyleSheet, Text, View } from 'react-native'
-import { useLocalSearchParams } from 'expo-router'
+import React, { useCallback, useMemo, useRef, useState } from 'react'
+import { ActivityIndicator, Alert, StyleSheet, View } from 'react-native'
+import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
+
+import { useUnsavedChangesGuard } from '@/src/hooks/useUnsavedChangesGuard'
 
 import {
+  DocumentForm,
+  type DocumentFormHandle,
   extractRootFields,
-  splitFieldsBySidebar,
-  FormSection,
   useAdminSchema,
-  getFieldLabel,
 } from '@payload-universal/admin-native'
-import { useLocalDB, useLocalDocument } from '@payload-universal/local-db'
+import {
+  useLocalDB,
+  useLocalDocument,
+  useValidatedMutations,
+} from '@payload-universal/local-db'
+
+// Stable fallback when the doc has no data yet. An inline `?? {}` creates a
+// NEW object identity on EVERY render — DocumentForm consumes initialData via
+// react-hook-form, and unstable identities there fed the 'Maximum update
+// depth exceeded' loop when this sheet opened (2026-06-11). Module scope keeps
+// the reference stable across renders AND remounts.
+const EMPTY_DOC: Record<string, unknown> = {}
 
 export default function DetailsSheet() {
   const { slug, id } = useLocalSearchParams<{ slug: string; id?: string }>()
+  const router = useRouter()
   const schema = useAdminSchema()
   const localDB = useLocalDB()
+  const formRef = useRef<DocumentFormHandle>(null)
 
+  // Warn before dismissing the sheet (swipe-down / tap outside) with unsaved
+  // edits; default dismissal preserved when clean.
+  const [formDirty, setFormDirty] = useState(false)
+  useUnsavedChangesGuard(formDirty)
+
+  // Schema
   const schemaMap = schema?.collections?.[slug]
   const rootFields = useMemo(
     () => (schemaMap ? extractRootFields(schemaMap, slug) : []),
     [schemaMap, slug],
   )
-  const { sidebarFields } = useMemo(
-    () => splitFieldsBySidebar(rootFields),
-    [rootFields],
+
+  // Reactive document data from local RxDB
+  const { doc, loading } = useLocalDocument(localDB, slug, id ?? '')
+
+  // Validated mutations for saving
+  const { update: validatedUpdate, errors: validationErrors, clearFieldError } =
+    useValidatedMutations(localDB, slug, rootFields)
+
+  // Save handler — writes to local DB, sync pushes to server
+  const handleSubmit = useCallback(
+    async (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => {
+      if (!id) return
+      const writeData = options?.status ? { ...data, _status: options.status } : data
+      const result = await validatedUpdate(id, writeData, (doc as Record<string, unknown>) ?? undefined)
+      // `=== false` (not `!`): non-strict tsconfig does not narrow the
+      // boolean-literal discriminant of this union on truthiness checks.
+      if (result.success === false) {
+        const count = Object.keys(result.errors).length
+        throw new Error(`${count} field${count !== 1 ? 's' : ''} failed validation`)
+      }
+    },
+    [id, doc, validatedUpdate],
   )
 
-  // Load document data for display
-  const { data: doc } = useLocalDocument(localDB, slug, id ?? '')
+  if (!schemaMap) {
+    return <View style={styles.container} />
+  }
 
-  if (!sidebarFields.length) {
+  // Mount the form only once the local doc has resolved — like [id].tsx.
+  // Mounting with `{}` would seed react-hook-form's defaultValues with an
+  // empty doc (RHF captures defaultValues at mount only), so the sidebar
+  // fields would render empty even after the doc arrives.
+  if (loading) {
     return (
-      <View style={styles.empty}>
-        <Text style={styles.emptyText}>No details available</Text>
+      <View style={[styles.container, styles.loading]}>
+        <Stack.Screen
+          options={{
+            title: 'Details',
+            headerShown: true,
+            headerRight: () => null,
+            headerLeft: () => null,
+          }}
+        />
+        <ActivityIndicator />
       </View>
     )
   }
 
-  // Simple read-only display of sidebar field values
-  // (doesn't need the full FieldRendererContext/DocumentForm stack)
   return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <FormSection>
-        {sidebarFields.map((field) => {
-          const name = (field as any).name ?? ''
-          const value = doc?.[name]
-          const label = getFieldLabel(field)
+    <View style={styles.container}>
+      <Stack.Screen
+        options={{
+          title: 'Details',
+          headerShown: true,
+          headerRight: () => null,
+          headerLeft: () => null,
+        }}
+      />
 
-          return (
-            <View key={name} style={styles.row}>
-              <Text style={styles.label}>{label}</Text>
-              <Text style={styles.value} numberOfLines={2}>
-                {formatValue(value)}
-              </Text>
-            </View>
-          )
-        })}
-      </FormSection>
-    </ScrollView>
+      <DocumentForm
+        ref={formRef}
+        schemaMap={schemaMap}
+        slug={slug}
+        initialData={(doc as Record<string, unknown>) ?? EMPTY_DOC}
+        onSubmit={handleSubmit}
+        errors={validationErrors}
+        onFieldEdit={clearFieldError}
+        submitLabel="Save"
+        sidebarOnly
+        // Convention: forms mounted in unsized sheet containers (formSheet)
+        // must NOT use the native SwiftUI Form — a zero-height Form swallows
+        // all touches.
+        nativeForm={false}
+        onDirtyChange={setFormDirty}
+      />
+    </View>
   )
-}
-
-function formatValue(val: unknown): string {
-  if (val === null || val === undefined) return '—'
-  if (typeof val === 'boolean') return val ? 'Yes' : 'No'
-  if (typeof val === 'number') return String(val)
-  if (typeof val === 'string') {
-    // Format dates
-    if (/^\d{4}-\d{2}-\d{2}T/.test(val)) {
-      try { return new Date(val).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) } catch { /* fall through */ }
-    }
-    return val
-  }
-  if (typeof val === 'object') {
-    const obj = val as Record<string, unknown>
-    return String(obj.title ?? obj.name ?? obj.email ?? obj.id ?? JSON.stringify(val))
-  }
-  return String(val)
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  content: { padding: 16, paddingBottom: 40 },
-  empty: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 },
-  emptyText: { fontSize: 15, color: '#888' },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    minHeight: 44,
-  },
-  label: {
-    fontSize: 15,
-    color: '#1f1f1f',
-    flex: 1,
-  },
-  value: {
-    fontSize: 15,
-    color: '#666',
-    textAlign: 'right',
-    flex: 1,
-    marginLeft: 8,
-  },
+  loading: { alignItems: 'center', justifyContent: 'center' },
 })

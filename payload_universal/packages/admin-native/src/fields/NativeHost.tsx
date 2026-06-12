@@ -9,6 +9,7 @@
  * which Metro resolves to the correct platform file at build time.
  */
 import React, { createContext, useContext } from 'react'
+import { useColorScheme } from 'react-native'
 import type { ViewStyle, StyleProp } from 'react-native'
 
 import { nativeComponents, useIsInsideNativeForm } from './shared'
@@ -41,6 +42,7 @@ export const NativeHost: React.FC<NativeHostProps> = ({
   const Host = nativeComponents.Host
   const depth = useContext(NativeHostDepthContext)
   const insideNativeForm = useIsInsideNativeForm()
+  const colorScheme = useColorScheme()
 
   // Inside a SwiftUI Form (already inside a Host) or nested Host: skip wrapper.
   // @expo/ui components render directly inside the Form's Host context.
@@ -49,7 +51,9 @@ export const NativeHost: React.FC<NativeHostProps> = ({
   }
 
   const hostProps: any = {
-    colorScheme: 'light',
+    // Follow the system appearance (never hardcode 'light' — dark mode is
+    // first-class). When the scheme is unknown, omit so SwiftUI inherits.
+    ...(colorScheme ? { colorScheme } : {}),
     ignoreSafeArea: 'keyboard',
     style,
   }

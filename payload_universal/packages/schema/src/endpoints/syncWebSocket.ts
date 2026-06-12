@@ -44,7 +44,7 @@ export type SyncCatchupRequest = {
 }
 
 type AuthenticatedClient = {
-  ws: WebSocket
+  ws: WebSocketLike
   userId: string
   alive: boolean
 }

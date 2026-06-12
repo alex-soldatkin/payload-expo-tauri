@@ -1,9 +1,9 @@
+import { afterEach, expect, jest, test } from '@jest/globals'
 import { render, fireEvent, waitFor } from '@testing-library/react-native'
 import App from '../App'
 
 afterEach(() => {
-  // @ts-expect-error - test cleanup
-  global.fetch = undefined
+  global.fetch = undefined as unknown as typeof fetch
 })
 
 const sampleSchema = {
@@ -19,12 +19,11 @@ const sampleSchema = {
 }
 
 test('loads and renders schema summary', async () => {
-  // @ts-expect-error - test override
-  global.fetch = jest.fn().mockResolvedValue({
+  global.fetch = jest.fn<typeof fetch>().mockResolvedValue({
     ok: true,
     status: 200,
     json: async () => sampleSchema,
-  })
+  } as Response)
 
   const { getByText, getByPlaceholderText } = render(<App />)
 

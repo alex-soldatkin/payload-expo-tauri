@@ -6,9 +6,22 @@
  * Falls back to a plain-text TextInput when react-native-enriched is absent.
  *
  * Flow:
- *   1. Mount: lexicalToHtml(value) → set as defaultValue on EnrichedTextInput
+ *   1. Mount: lexicalToHtml(value) → wrapEditorHtml(...) → defaultValue on
+ *      EnrichedTextInput. The <html>...</html> wrapper is REQUIRED: both
+ *      native implementations only parse HTML when the string starts with
+ *      <html> and ends with </html> — bare fragments are inserted as plain
+ *      text (raw HTML source shows up in the editor).
  *   2. Live: onChangeState feeds the RichTextToolbar active-state indicators
  *   3. Blur/save: ref.getHTML() → htmlToLexical(html) → onChange(lexicalJson)
+ *   4. External updates (WS sync / form reset): the editor is uncontrolled,
+ *      so late-arriving values are pushed via ref.setValue — only when they
+ *      didn't originate from this editor's own onChange round-trip
+ *      (lastFormValueRef pattern, mirroring inputs/textBridge.ts) and the
+ *      editor isn't focused.
+ *
+ * Value normalization: the form value may arrive as a Lexical JSON object
+ * (normal Payload shape), a JSON-stringified editor state, or a raw HTML /
+ * plain-text string — all are accepted (see normalizeRichTextValue).
  *
  * Markdown shortcuts (Notion-style):
  *   - Typing `# ` / `## ` / `### ` toggles headings
@@ -43,6 +56,7 @@ import { FieldShell } from './shared'
 import { RichTextToolbar, type StyleState } from './RichTextToolbar'
 import { MentionPicker } from './MentionPicker'
 import { TableEditor, createEmptyTable, type TableNode } from './TableEditor'
+import { useListColors } from '../hooks/useListColors'
 
 // Optional: GlassView for the editor container (iOS 26+)
 let EditorGlassView: React.ComponentType<any> | null = null
@@ -169,10 +183,13 @@ let lexicalToHtml: (value: unknown) => string = () => ''
 let htmlToLexical: (html: string) => unknown = () => ({
   root: { type: 'root', children: [], direction: 'ltr', format: '', indent: 0, version: 1 },
 })
+/** Wrap editor HTML in the <html>...</html> envelope react-native-enriched requires. */
+let wrapEditorHtml: (html: string) => string = (html) => (html ? `<html>\n${html}\n</html>` : '')
 
 try {
   const mod = require('../utils/lexicalToHtml')
   lexicalToHtml = mod.lexicalToHtml ?? mod.default ?? lexicalToHtml
+  wrapEditorHtml = mod.wrapEditorHtml ?? wrapEditorHtml
 } catch { /* converter not available yet */ }
 
 try {
@@ -198,6 +215,148 @@ function useDebouncedCallback<T extends (...args: any[]) => void>(cb: T, delay: 
 }
 
 // ---------------------------------------------------------------------------
+// Value normalization + content preparation
+// ---------------------------------------------------------------------------
+
+// EnrichedTextInput can't render <table>. We extract tables from the Lexical
+// tree and render them as separate TableEditor components.
+type ContentBlock =
+  | { type: 'text'; nodes: any[] }
+  | { type: 'table'; index: number; node: TableNode }
+
+interface PreparedContent {
+  blocks: ContentBlock[]
+  tables: TableNode[]
+  /** Editor HTML for the non-table content (NOT yet <html>-wrapped). */
+  html: string
+}
+
+const escapeInlineText = (text: string): string =>
+  text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+
+/** Serialized form of the value, used to detect external changes. */
+const serializeValue = (v: unknown): string => {
+  try {
+    return JSON.stringify(v ?? null) ?? 'null'
+  } catch {
+    return 'null'
+  }
+}
+
+/**
+ * Normalize the richText form value into one of three shapes:
+ * - Lexical JSON object ({ root: ... }) — normal Payload shape
+ * - JSON string of the above — some sync/storage layers stringify
+ * - raw HTML string ('<'-prefixed) — already editor-shaped, used directly
+ * - any other string — treated as plain text (escaped into a paragraph)
+ */
+function normalizeRichTextValue(
+  raw: unknown,
+):
+  | { kind: 'lexical'; state: any }
+  | { kind: 'html'; html: string }
+  | { kind: 'empty' } {
+  if (raw == null) return { kind: 'empty' }
+
+  if (typeof raw === 'object') {
+    return 'root' in (raw as Record<string, unknown>)
+      ? { kind: 'lexical', state: raw }
+      : { kind: 'empty' }
+  }
+
+  if (typeof raw === 'string') {
+    const trimmed = raw.trim()
+    if (trimmed.length === 0) return { kind: 'empty' }
+    if (trimmed.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(trimmed)
+        if (parsed && typeof parsed === 'object' && 'root' in parsed) {
+          return { kind: 'lexical', state: parsed }
+        }
+      } catch { /* fall through to string handling */ }
+    }
+    if (trimmed.startsWith('<')) return { kind: 'html', html: trimmed }
+    return {
+      kind: 'html',
+      html: `<p>${escapeInlineText(trimmed).replace(/\n/g, '<br>')}</p>`,
+    }
+  }
+
+  return { kind: 'empty' }
+}
+
+/** Split a Lexical state into text blocks + extracted table blocks. */
+function splitBlocks(state: unknown): { blocks: ContentBlock[]; tables: TableNode[] } {
+  if (!state || typeof state !== 'object' || !('root' in (state as any))) {
+    return { blocks: [{ type: 'text', nodes: [] }], tables: [] }
+  }
+  const root = (state as any).root
+  const children: any[] = root?.children ?? []
+  const blocks: ContentBlock[] = []
+  const tables: TableNode[] = []
+  let textBuf: any[] = []
+
+  for (const child of children) {
+    if (child.type === 'table') {
+      if (textBuf.length > 0) {
+        blocks.push({ type: 'text', nodes: [...textBuf] })
+        textBuf = []
+      }
+      blocks.push({ type: 'table', index: tables.length, node: child })
+      tables.push(child)
+    } else {
+      textBuf.push(child)
+    }
+  }
+  if (textBuf.length > 0 || blocks.length === 0) {
+    blocks.push({ type: 'text', nodes: textBuf })
+  }
+
+  return { blocks, tables }
+}
+
+/** Derive blocks, tables and (unwrapped) editor HTML from any value shape. */
+function prepareContent(raw: unknown): PreparedContent {
+  const norm = normalizeRichTextValue(raw)
+
+  if (norm.kind === 'empty') {
+    return { blocks: [{ type: 'text', nodes: [] }], tables: [], html: '' }
+  }
+
+  if (norm.kind === 'html') {
+    let state: unknown = null
+    try {
+      state = htmlToLexical(norm.html)
+    } catch { state = null }
+    const { blocks, tables } = splitBlocks(state)
+    // No tables → safe to feed the raw HTML to the editor directly.
+    if (tables.length === 0) return { blocks, tables, html: norm.html }
+    // Tables can't render inline — fall through and regenerate text-only HTML.
+    return prepareFromLexicalState(state)
+  }
+
+  return prepareFromLexicalState(norm.state)
+}
+
+function prepareFromLexicalState(state: unknown): PreparedContent {
+  const { blocks, tables } = splitBlocks(state)
+  const textNodes = blocks
+    .filter((b): b is { type: 'text'; nodes: any[] } => b.type === 'text')
+    .flatMap((b) => b.nodes)
+
+  let html = ''
+  if (textNodes.length > 0) {
+    const fakeState = {
+      root: { type: 'root', children: textNodes, direction: 'ltr', format: '', indent: 0, version: 1 },
+    }
+    try {
+      html = lexicalToHtml(fakeState)
+    } catch { html = '' }
+  }
+  return { blocks, tables, html }
+}
+
+// ---------------------------------------------------------------------------
 // EnrichedTextInput-powered RichText field
 // ---------------------------------------------------------------------------
 
@@ -209,6 +368,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
   error,
 }) => {
   const editorRef = useRef<EditorRef | null>(null)
+  const { dark: isDarkScheme, colors: rtColors } = useListColors()
   const [focused, setFocused] = useState(false)
   const [styleState, setStyleState] = useState<StyleState | null>(null)
 
@@ -230,56 +390,56 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
   // Optional local-db for upload queue
   const localDB = _useLocalDB ? _useLocalDB() : null
 
-  // ---------- Split Lexical JSON into text blocks + table blocks ----------
-  // EnrichedTextInput can't render <table>. We extract tables from the Lexical
-  // tree and render them as separate TableEditor components.
-  type ContentBlock =
-    | { type: 'text'; nodes: any[] }
-    | { type: 'table'; index: number; node: TableNode }
+  // ---------- Normalize value → text blocks, table blocks, editor HTML ----------
+  const initialContent = useMemo(() => prepareContent(value), []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  const { contentBlocks, initialTables } = useMemo(() => {
-    if (!value || typeof value !== 'object' || !('root' in (value as any))) {
-      return { contentBlocks: [{ type: 'text' as const, nodes: [] }], initialTables: [] as TableNode[] }
-    }
-    const root = (value as any).root
-    const children: any[] = root?.children ?? []
-    const blocks: ContentBlock[] = []
-    const tables: TableNode[] = []
-    let textBuf: any[] = []
-
-    for (const child of children) {
-      if (child.type === 'table') {
-        if (textBuf.length > 0) {
-          blocks.push({ type: 'text', nodes: [...textBuf] })
-          textBuf = []
-        }
-        blocks.push({ type: 'table', index: tables.length, node: child })
-        tables.push(child)
-      } else {
-        textBuf.push(child)
-      }
-    }
-    if (textBuf.length > 0 || blocks.length === 0) {
-      blocks.push({ type: 'text', nodes: textBuf })
-    }
-
-    return { contentBlocks: blocks, initialTables: tables }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Mutable so external value arrivals can refresh the table-merge layout.
+  const contentBlocksRef = useRef<ContentBlock[]>(initialContent.blocks)
 
   // Table state — mutable array of TableNode
-  const [tables, setTables] = useState<TableNode[]>(initialTables)
+  const [tables, setTables] = useState<TableNode[]>(initialContent.tables)
 
-  // Convert text-only nodes to HTML for EnrichedTextInput
-  const defaultHtml = useMemo(() => {
-    // Build a Lexical state with only the non-table nodes
-    const textNodes = contentBlocks
-      .filter((b): b is { type: 'text'; nodes: any[] } => b.type === 'text')
-      .flatMap((b) => b.nodes)
+  // HTML (unwrapped) for the editor at mount
+  const defaultHtml = initialContent.html
 
-    if (textNodes.length === 0) return ''
-    const fakeState = { root: { type: 'root', children: textNodes, direction: 'ltr', format: '', indent: 0, version: 1 } }
-    try { return lexicalToHtml(fakeState) } catch { return '' }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Serialized form value as last produced BY this editor (or accepted from
+  // outside) — mirrors the lastFormValueRef pattern in inputs/textBridge.ts.
+  const lastFormValueRef = useRef(serializeValue(value))
+  const focusedRef = useRef(false)
+
+  // ---------- External value arrival (uncontrolled editor) ----------
+  // EnrichedTextInput only reads `defaultValue` at mount. When a synced doc
+  // updates the form value AFTER mount, push it in via ref.setValue — but
+  // never for our own onChange round-trips, and never while the user types.
+  React.useEffect(() => {
+    const incoming = serializeValue(value)
+    if (incoming === lastFormValueRef.current) return
+
+    // Compare at the editor-HTML level too: a re-shaped echo of the same
+    // content (key reordering, server normalization) must not reset the editor.
+    let prev: PreparedContent | null = null
+    try {
+      prev = prepareContent(JSON.parse(lastFormValueRef.current))
+    } catch { prev = null }
+    lastFormValueRef.current = incoming
+
+    const next = prepareContent(value)
+    if (
+      prev &&
+      next.html === prev.html &&
+      serializeValue(next.tables) === serializeValue(prev.tables)
+    ) {
+      return
+    }
+
+    // Don't clobber active typing — the editor's content wins on next save.
+    if (focusedRef.current) return
+
+    contentBlocksRef.current = next.blocks
+    setTables(next.tables)
+    prevTextRef.current = ''
+    editorRef.current?.setValue(wrapEditorHtml(next.html))
+  }, [value])
 
   // ---------- Merge text + tables back into one Lexical state ----------
   const mergeAndSave = useCallback(async () => {
@@ -294,7 +454,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
       const merged: any[] = []
       let textIdx = 0
 
-      for (const block of contentBlocks) {
+      for (const block of contentBlocksRef.current) {
         if (block.type === 'table') {
           // Insert all accumulated text nodes before this table
           // (we approximate: text blocks map to the original order)
@@ -318,11 +478,12 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
         merged.push(textNodes[textIdx++])
       }
 
-      onChange({
-        root: { ...lexical.root, children: merged },
-      })
+      const nextValue = { root: { ...lexical.root, children: merged } }
+      // Record what we push so the external-sync effect ignores the round-trip.
+      lastFormValueRef.current = serializeValue(nextValue)
+      onChange(nextValue)
     } catch { /* ignore */ }
-  }, [onChange, tables, contentBlocks])
+  }, [onChange, tables])
 
   // ---------- Debounced onChange sync ----------
   const debouncedSync = useDebouncedCallback(async () => {
@@ -505,8 +666,8 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
             const cols = Math.max(1, Math.min(10, parseInt(match[2], 10)))
             const newTable = createEmptyTable(rows, cols)
             setTables((prev) => [...prev, newTable])
-            // Add a table block at the end of contentBlocks
-            contentBlocks.push({ type: 'table', index: tables.length, node: newTable })
+            // Add a table block at the end of the content blocks
+            contentBlocksRef.current.push({ type: 'table', index: tables.length, node: newTable })
             debouncedSync()
           },
         },
@@ -514,7 +675,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
       'plain-text',
       '3x3',
     )
-  }, [tables, contentBlocks, debouncedSync])
+  }, [tables, debouncedSync])
 
   const handleTableChange = useCallback((index: number, newData: TableNode) => {
     setTables((prev) => {
@@ -528,11 +689,15 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
   // ---------- Event handlers ----------
 
   const handleBlur = useCallback(async () => {
+    focusedRef.current = false
     setFocused(false)
     await mergeAndSave()
   }, [mergeAndSave])
 
-  const handleFocus = useCallback(() => setFocused(true), [])
+  const handleFocus = useCallback(() => {
+    focusedRef.current = true
+    setFocused(true)
+  }, [])
 
   // Dismiss keyboard when tapping outside — subscribe to keyboard hide event
   // so EnrichedTextInput (native Fabric) properly syncs its focused state
@@ -540,6 +705,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       if (editorRef.current) {
         editorRef.current.blur()
+        focusedRef.current = false
         setFocused(false)
       }
     })
@@ -668,25 +834,28 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
 
   const isDisabled = disabled || field.admin?.readOnly
 
-  // HtmlStyle customization matching app theme
+  // HtmlStyle customization matching app theme — follows the system scheme
   const htmlStyle = useMemo(
     () => ({
       h1: { fontSize: 28, bold: true },
       h2: { fontSize: 22, bold: true },
       h3: { fontSize: 18, bold: true },
-      blockquote: { borderColor: t.colors.border, borderWidth: 3, gapWidth: 12 },
+      blockquote: { borderColor: rtColors.border, borderWidth: 3, gapWidth: 12 },
       codeblock: { backgroundColor: '#1e1e2e', color: '#cdd6f4', borderRadius: 8 },
-      code: { backgroundColor: '#f0f0f0', color: '#e11d48' },
-      a: { color: t.colors.primary },
+      code: {
+        backgroundColor: isDarkScheme ? 'rgba(255,255,255,0.12)' : '#f0f0f0',
+        color: isDarkScheme ? '#f38ba8' : '#e11d48',
+      },
+      a: { color: isDarkScheme ? '#6db2ff' : t.colors.primary },
       mention: {
         '@': {
-          color: t.colors.primary,
-          backgroundColor: `${t.colors.primary}20`,
+          color: isDarkScheme ? '#6db2ff' : t.colors.primary,
+          backgroundColor: isDarkScheme ? 'rgba(10,132,255,0.20)' : `${t.colors.primary}20`,
           textDecorationLine: 'none' as const,
         },
       },
     }),
-    [],
+    [isDarkScheme, rtColors],
   )
 
   return (
@@ -723,9 +892,9 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
         const editorElement = (
           <EnrichedTextInput
             ref={editorRef}
-            defaultValue={defaultHtml}
+            defaultValue={wrapEditorHtml(defaultHtml)}
             placeholder="Start writing..."
-            placeholderTextColor={t.colors.textPlaceholder}
+            placeholderTextColor={rtColors.textPlaceholder}
             editable={!isDisabled}
             scrollEnabled
             onFocus={handleFocus}
@@ -740,7 +909,7 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
             onChangeMention={handleChangeMention}
             onEndMention={handleEndMention}
             htmlStyle={htmlStyle}
-            style={styles.editor}
+            style={[styles.editor, { color: rtColors.text }]}
             contextMenuItems={[
               // Inline formatting — appear in text selection context menu
               { text: 'Bold', onPress: () => editorRef.current?.toggleBold(), visible: true },
@@ -786,8 +955,9 @@ const RichTextFieldEnriched: React.FC<FieldComponentProps<ClientRichTextField>> 
           <View
             style={[
               styles.editorContainer,
-              isDisabled && styles.editorDisabled,
-              error && styles.editorError,
+              { backgroundColor: rtColors.card, borderColor: rtColors.border },
+              isDisabled && [styles.editorDisabled, { backgroundColor: rtColors.pressed }],
+              error && { borderColor: rtColors.error },
             ]}
           >
             {editorElement}
@@ -837,7 +1007,30 @@ class RichTextErrorBoundary extends React.Component<
 
 const richTextToPlain = (value: unknown): string => {
   if (value == null) return ''
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') {
+    const trimmed = value.trim()
+    // JSON-stringified Lexical state → recurse into the parsed object
+    if (trimmed.startsWith('{')) {
+      try {
+        return richTextToPlain(JSON.parse(trimmed))
+      } catch { /* fall through */ }
+    }
+    // HTML string → strip tags for plain-text editing
+    if (trimmed.startsWith('<')) {
+      return trimmed
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(?:p|h[1-6]|li|blockquote|div|tr)>/gi, '\n')
+        .replace(/<[^>]*>/g, '')
+        .replace(/&lt;/g, '<')
+        .replace(/&gt;/g, '>')
+        .replace(/&quot;/g, '"')
+        .replace(/&#39;/g, "'")
+        .replace(/&amp;/g, '&')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim()
+    }
+    return value
+  }
   if (typeof value === 'object' && 'root' in (value as Record<string, unknown>)) {
     const extract = (node: unknown): string => {
       if (node == null) return ''
@@ -869,6 +1062,7 @@ const RichTextFieldFallback: React.FC<FieldComponentProps<ClientRichTextField>> 
   disabled,
   error,
 }) => {
+  const { colors: fbColors } = useListColors()
   const plainText = richTextToPlain(value)
   return (
     <FieldShell
@@ -878,14 +1072,15 @@ const RichTextFieldFallback: React.FC<FieldComponentProps<ClientRichTextField>> 
       error={error}
       layout="stacked"
     >
-      <View style={styles.badge}>
-        <Text style={styles.badgeText}>Rich Text (plain-text editing mode)</Text>
+      <View style={[styles.badge, { backgroundColor: fbColors.pressed }]}>
+        <Text style={[styles.badgeText, { color: fbColors.textMuted }]}>Rich Text (plain-text editing mode)</Text>
       </View>
       <TextInput
         style={[
           styles.fallbackInput,
-          disabled && styles.editorDisabled,
-          error && styles.editorError,
+          { backgroundColor: fbColors.card, borderColor: fbColors.border, color: fbColors.text },
+          disabled && [styles.editorDisabled, { backgroundColor: fbColors.pressed }],
+          error && { borderColor: fbColors.error },
         ]}
         value={plainText}
         onChangeText={(text) => {
@@ -900,7 +1095,7 @@ const RichTextFieldFallback: React.FC<FieldComponentProps<ClientRichTextField>> 
           })
         }}
         placeholder="Start writing..."
-        placeholderTextColor={t.colors.textPlaceholder}
+        placeholderTextColor={fbColors.textPlaceholder}
         editable={!disabled && !field.admin?.readOnly}
         multiline
         numberOfLines={8}

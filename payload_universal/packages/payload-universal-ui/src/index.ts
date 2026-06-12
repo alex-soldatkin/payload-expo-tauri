@@ -26,6 +26,7 @@ export {
   useFormSubmitted,
   useFormProcessing,
   useFormModified,
+  useRowLabel,
 } from '@payloadcms/ui'
 
 // Input components
@@ -65,3 +66,28 @@ export {
 
 // Translation helper
 export { getTranslation } from '@payloadcms/translations'
+
+// NativeActionButton — web counterpart of the native shim (see
+// layout/NativeActionButton.native.tsx). On the web it renders the Payload
+// admin Button with the variant mapped onto buttonStyle.
+import * as React from 'react'
+import { Button as PayloadButton } from '@payloadcms/ui'
+
+export const NativeActionButton: React.FC<{
+  onPress?: () => void
+  disabled?: boolean
+  children?: React.ReactNode
+  variant?: 'default' | 'primary' | 'destructive'
+  style?: unknown
+  testID?: string
+}> = ({ onPress, disabled, children, variant }) =>
+  React.createElement(
+    PayloadButton as unknown as React.ComponentType<Record<string, unknown>>,
+    {
+      onClick: onPress,
+      disabled,
+      buttonStyle:
+        variant === 'primary' ? 'primary' : variant === 'destructive' ? 'error' : 'secondary',
+    },
+    children,
+  )

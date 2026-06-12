@@ -10,7 +10,7 @@
  *            useField, Card, document.getElementById (bail-out trigger)
  */
 import React, { useEffect, useRef } from 'react'
-import { useField, Card, FieldLabel } from '@payloadcms/ui'
+import { useField, FieldLabel } from '@payloadcms/ui'
 
 export const ReadTimeChart: React.FC<{ path: string }> = ({ path }) => {
   const { value: readTime } = useField<number>({ path })
@@ -51,7 +51,7 @@ export const ReadTimeChart: React.FC<{ path: string }> = ({ path }) => {
   }, [readTime])
 
   return (
-    <Card>
+    <div className="card" style={{ flexDirection: 'column' }}>
       <FieldLabel label="Read Time Visualization" />
       <div style={{ marginTop: 8 }}>
         <canvas
@@ -65,7 +65,7 @@ export const ReadTimeChart: React.FC<{ path: string }> = ({ path }) => {
           This component uses canvas and will render in a WebView on mobile.
         </p>
       </div>
-    </Card>
+    </div>
   )
 }
 

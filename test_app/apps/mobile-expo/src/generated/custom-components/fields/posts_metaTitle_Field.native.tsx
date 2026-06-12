@@ -12,15 +12,14 @@ import {
     useField,
     useForm,
     useConfig,
-    Card,
     Banner,
     Button,
     Pill,
     Link,
     FieldLabel,
-    FieldError,
+    FieldError, NativeActionButton
 } from '@payload-universal/ui'
-import { View, Pressable, Text, TextInput as RNTextInput } from "react-native";
+import { View, Text, TextInput as RNTextInput } from "react-native";
 
 const MAX_TITLE_LENGTH = 60
 const MAX_DESC_LENGTH = 160
@@ -70,14 +69,13 @@ export const SEOPreview: React.FC<{ path: string }> = ({ path }) => {
                     value={metaTitle ?? ''}
                     onChangeText={(text) => setMetaTitle(text)}
                     placeholder="Enter meta title for search engines..."
-                    style={{ flex: 1, padding: 8, borderRadius: 4 }}
+                    style={{ flex: 1, padding: 8, borderWidth: 1, borderColor: '#ddd', borderRadius: 4 }}
                 />
-                <Pressable
+                <NativeActionButton
                     onPress={handleAutoFill}
-                    style={{ paddingVertical: 6, paddingHorizontal: 12, background: '#f0f0f0', borderRadius: 4 }}
                 >
                     Auto-fill
-                </Pressable>
+                </NativeActionButton>
             </View>
 
             {/* Character counter */}
@@ -100,7 +98,7 @@ export const SEOPreview: React.FC<{ path: string }> = ({ path }) => {
                         <Text style={{ margin: 0, marginBottom: 4, fontSize: 14 }}>SEO Issues ({issues.length})</Text>
                         <View style={{ margin: 0, paddingLeft: 16 }}>
                             {issues.map((issue, i) => (
-                                <View key={i} style={{ fontSize: 12, marginBottom: 2 }}>{issue}</View>
+                                <View key={i} style={{ marginBottom: 2 }}><Text style={{ fontSize: 12 }}>{issue}</Text></View>
                             ))}
                         </View>
                     </View>
@@ -117,19 +115,19 @@ export const SEOPreview: React.FC<{ path: string }> = ({ path }) => {
                 </View>
 
                 {showPreview && (
-                    <Card>
-                        <View style={{ fontFamily: 'Arial, sans-serif' }}>
-                            <Text style={{ color: '#1a0dab', fontSize: 18, margin: 0, marginBottom: 4, textDecoration: 'none' }}>
+                    <View className="card" style={{ flexDirection: 'column' }}>
+                        <View>
+                            <Text style={{ color: '#1a0dab', fontSize: 18, margin: 0, marginBottom: 4, textDecorationLine: 'none' }}>
                                 {pageTitle || 'Page Title'}
                             </Text>
                             <Text style={{ color: '#006621', fontSize: 13, margin: 0, marginBottom: 4 }}>
                                 {pageUrl}
                             </Text>
-                            <Text style={{ color: '#545454', fontSize: 13, margin: 0, lineHeight: 1.4 }}>
+                            <Text style={{ color: '#545454', fontSize: 13, margin: 0, lineHeight: 18 }}>
                                 {pageDesc || 'No description set. Add a meta description for better search results.'}
                             </Text>
                         </View>
-                    </Card>
+                    </View>
                 )}
             </View>
         </View>

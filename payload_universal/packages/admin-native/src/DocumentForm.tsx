@@ -16,7 +16,8 @@
  * Exposes a ref with { submit() } so the parent can trigger save from a header button.
  */
 import React, { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react'
-import { Animated, Modal, PanResponder, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { Animated, Modal, PanResponder, Platform, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native'
+import { PanelRight } from 'lucide-react-native'
 
 // Optional: GlassView for liquid glass containers on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -31,6 +32,7 @@ try {
 
 import type { ClientField, FormErrors, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
+import { deepEqual } from './utils/diff'
 import { extractRootFields, getByPath, getFieldLabel, groupFieldsByWidth, setByPath, splitFieldsBySidebar } from './utils/schemaHelpers'
 import { FormSection } from './FormSection'
 import { ErrorMapContext, FieldRendererContext, FIELD_WIDTH_BREAKPOINT } from './fields/structural'
@@ -46,6 +48,8 @@ import {
 } from './hooks/usePayloadForm'
 import { NativeFormContext, nativeComponents } from './fields/shared'
 import { NativeHost } from './fields/NativeHost'
+import { evaluateFieldVisibility, useCollectionConditions } from './contexts/ConditionContext'
+import { useListColors } from './hooks/useListColors'
 
 // ---------------------------------------------------------------------------
 // Form field segmentation — split top-level fields into runs of compatible
@@ -113,6 +117,20 @@ const segmentFieldsForForm = (fields: ClientField[]): FieldSegment[] => {
   return segments
 }
 
+/**
+ * Whether ALL of the given fields (and their descendants) can live inside a
+ * single native SwiftUI Form. False as soon as any field needs a carve-out
+ * (richText/join own their scroll/layout and crash inside Form cells).
+ *
+ * The native Form path only activates when this returns true: ONE
+ * full-screen NativeHost > Form wrapping all Sections. Standalone Sections
+ * (outside a Form/List) crash, and multiple Forms inside one ScrollView are
+ * not supported — when carve-outs would be needed we keep the JS
+ * FormSection path, which intentionally mimics grouped lists.
+ */
+export const canUseNativeFormForFields = (fields: ClientField[]): boolean =>
+  fields.every((field) => !containsIncompatibleField(field))
+
 // Error boundary: catches native Form rendering crashes and auto-falls back
 class FormCrashBoundary extends React.Component<
   { children: React.ReactNode; onCrash: (error: Error) => void },
@@ -122,6 +140,80 @@ class FormCrashBoundary extends React.Component<
   static getDerivedStateFromError() { return { crashed: true } }
   componentDidCatch(error: Error) { this.props.onCrash(error) }
   render() { return this.state.crashed ? null : this.props.children }
+}
+
+// ---------------------------------------------------------------------------
+// NativeFormBody — single full-screen SwiftUI Form (iOS only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Renders ALL field segments inside ONE NativeHost > Form. Only mounted when
+ * `canUseNativeFormForFields` passed (every segment is 'compatible') — never
+ * standalone Sections, never multiple Forms in one ScrollView.
+ *
+ * Wrapped in FormCrashBoundary: a JS render crash flips the parent back to
+ * the stable JS FormSection path. Native-side crashes cannot be caught here
+ * — on-device verification is required before shipping this path enabled.
+ */
+const NativeFormBody: React.FC<{
+  segments: FieldSegment[]
+  renderField: (field: ClientField, basePath: string) => React.ReactNode
+  onOpenDetails?: () => void
+  showDetailsRow: boolean
+  onCrash: (error: Error) => void
+  contentInsetTop: number
+  header: React.ReactNode
+}> = ({ segments, renderField, onOpenDetails, showDetailsRow, onCrash, contentInsetTop, header }) => {
+  const NativeForm = nativeComponents.Form
+  const NativeSection = nativeComponents.Section
+  const NativeButton = nativeComponents.Button
+
+  if (!NativeForm || !NativeSection) return null
+
+  // Modifiers are factory calls from the registry — null-checked, never
+  // object literals.
+  const formModifiers = nativeComponents.scrollDismissesKeyboard
+    ? [nativeComponents.scrollDismissesKeyboard('interactively')]
+    : undefined
+
+  return (
+    <NativeFormContext.Provider value={true}>
+      <FormCrashBoundary onCrash={onCrash}>
+        <View
+          style={[
+            styles.nativeFormContainer,
+            contentInsetTop > 0 && { paddingTop: contentInsetTop + t.spacing.sm },
+          ]}
+        >
+          {header ? <View style={styles.nativeFormHeader}>{header}</View> : null}
+          {/* matchContents intentionally omitted (false): the Form is a
+              full-screen scrolling container sized by the flex:1 parent. */}
+          <NativeHost matchContents={false} style={styles.nativeFormHost}>
+            <NativeForm modifiers={formModifiers}>
+              {segments.map((seg, i) => {
+                // Guarded upstream by canUseNativeFormForFields — skip
+                // defensively if a carve-out ever slips through.
+                if (seg.type !== 'compatible') return null
+                return (
+                  <NativeSection key={`section-${i}`}>
+                    {seg.fields.map((f, fi) => {
+                      const path = f.name ?? `field-${fi}`
+                      return <React.Fragment key={path}>{renderField(f, path)}</React.Fragment>
+                    })}
+                  </NativeSection>
+                )
+              })}
+              {showDetailsRow && onOpenDetails && NativeButton ? (
+                <NativeSection>
+                  <NativeButton label="Details" onPress={onOpenDetails} />
+                </NativeSection>
+              ) : null}
+            </NativeForm>
+          </NativeHost>
+        </View>
+      </FormCrashBoundary>
+    </NativeFormContext.Provider>
+  )
 }
 
 // Re-export for backwards compatibility
@@ -169,6 +261,31 @@ type Props = {
   scrollEventThrottle?: number
   /** Called when the user taps "Details" to open the sidebar sheet. */
   onOpenDetails?: () => void
+  /** When true, renders ONLY sidebar fields (for the details sheet). */
+  sidebarOnly?: boolean
+  /** Called when a field is edited (clears validation errors incrementally). */
+  onFieldEdit?: (fieldPath: string) => void
+  /**
+   * Called whenever the form's dirty state flips (unsaved edits exist /
+   * cleared). Drives save-button enabled state in the host screen's toolbar.
+   * Fires false again after a successful submit (baseline resets to the
+   * saved values).
+   */
+  onDirtyChange?: (dirty: boolean) => void
+  /**
+   * OPT-IN: render with a native SwiftUI Form when ALL fields are compatible
+   * (no richText/join anywhere in the tree). Defaults to FALSE — pass
+   * `nativeForm={true}` explicitly to enable the native path.
+   *
+   * 2026-06-11 on-device crash: with the previous opt-out default, every
+   * collection WITHOUT a richText/join carve-out (Events, the SiteSettings/
+   * Footer globals, …) took the native Form path and HARD-CRASHED natively
+   * on open (no JS stack — FormCrashBoundary only catches JS render errors,
+   * not native ones). Collections WITH carve-outs (Posts, Users, Pages)
+   * rendered fine because they always take the JS FormSection path. Do not
+   * re-enable by default until the native side is debugged on-device.
+   */
+  nativeForm?: boolean
 }
 
 /**
@@ -197,6 +314,65 @@ const parseValidationErrors = (err: unknown): { fieldErrors: FormErrors; summary
 }
 
 // ===========================================================================
+// Sidebar edge tab — Apple Notes/Freeform-style affordance on the content's
+// right edge that opens the Details (sidebar fields) sheet. Rendered only on
+// wide layouts (>= EDGE_TAB_MIN_WIDTH); phones keep the header toolbar
+// button, where a persistent edge tab would crowd the content.
+// ===========================================================================
+
+const EDGE_TAB_MIN_WIDTH = 768
+
+const SidebarEdgeTab: React.FC<{ onPress: () => void; colors: Record<string, string> }> = ({ onPress, colors }) => {
+  const inner = (
+    <Pressable
+      onPress={onPress}
+      hitSlop={10}
+      accessibilityRole="button"
+      accessibilityLabel="Open details"
+      style={edgeTabStyles.press}
+    >
+      <PanelRight size={18} color={colors.primary} />
+    </Pressable>
+  )
+  if (liquidGlassAvailable && GlassView) {
+    return (
+      <View style={edgeTabStyles.container} pointerEvents="box-none">
+        <GlassView style={edgeTabStyles.glass} isInteractive glassEffectStyle="regular">
+          {inner}
+        </GlassView>
+      </View>
+    )
+  }
+  return (
+    <View style={edgeTabStyles.container} pointerEvents="box-none">
+      <View style={[edgeTabStyles.glass, { backgroundColor: colors.surface, borderColor: colors.border, borderWidth: StyleSheet.hairlineWidth }]}>
+        {inner}
+      </View>
+    </View>
+  )
+}
+
+const edgeTabStyles = StyleSheet.create({
+  container: {
+    position: 'absolute',
+    right: 0,
+    top: '42%',
+    zIndex: 30,
+  },
+  glass: {
+    borderTopLeftRadius: 14,
+    borderBottomLeftRadius: 14,
+    overflow: 'hidden',
+  },
+  press: {
+    paddingVertical: 18,
+    paddingHorizontal: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+})
+
+// ===========================================================================
 // RHF-powered DocumentForm (Phase 2 + 3)
 // ===========================================================================
 
@@ -214,14 +390,26 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
   onScroll,
   scrollEventThrottle = 16,
   onOpenDetails,
+  sidebarOnly = false,
+  nativeForm,
+  onDirtyChange,
 }, ref) => {
   const scrollViewRef = useRef<ScrollView>(null)
   const [scrollToError, setScrollToError] = useState(0)
   const [saveError, setSaveError] = useState<string | null>(null)
+  // Set when the native SwiftUI Form crashes during JS render — flips this
+  // form to the stable JS FormSection path for the rest of its lifetime.
+  const [nativeFormCrashed, setNativeFormCrashed] = useState(false)
   const toast = useToast()
+
+  // Client-side admin.condition registry for this collection (null when the
+  // app registered none — evaluation is skipped entirely in that case).
+  const conditions = useCollectionConditions(slug)
 
   const { width: windowWidth } = useWindowDimensions()
   const compact = windowWidth < FIELD_WIDTH_BREAKPOINT
+  // Dark-mode aware tokens for the status pills / banners
+  const { colors: pc } = useListColors()
 
   const { mainFields, sidebarFields } = useMemo(
     () => splitFieldsBySidebar(rootFields),
@@ -265,10 +453,21 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
 
   const errorCount = Object.keys(mergedErrors).filter((k) => mergedErrors[k]).length
 
+  // Live form data for condition evaluation. Kept null when no conditions
+  // are registered so renderField's deps stay referentially stable and
+  // per-field re-render isolation is preserved.
+  const conditionData = conditions ? formData : null
+
   // Phase 2: Controller-based renderField — each field gets its own Controller
   // so only the edited field re-renders, not the entire form tree.
   const renderField = useCallback(
     (field: ClientField, basePath: string): React.ReactNode => {
+      // admin.condition — hide fields whose registered client condition
+      // returns false. Fields with only a hasCondition marker (no registered
+      // condition) stay visible: fail open.
+      if (conditions && conditionData && !evaluateFieldVisibility(conditions, basePath, conditionData)) {
+        return null
+      }
       return (
         <RHFFieldBridge
           key={basePath}
@@ -281,7 +480,7 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
         />
       )
     },
-    [control, disabled, isSubmitting, mergedErrors, clearServerError],
+    [control, disabled, isSubmitting, mergedErrors, clearServerError, conditions, conditionData],
   )
 
   // Submit handler with server error handling
@@ -290,6 +489,10 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     setServerErrors({})
     try {
       await submit(statusOverride)
+      // Re-baseline RHF on the just-saved values so isDirty returns false
+      // (and onDirtyChange fires) until the next edit. keepValues avoids
+      // touching the rendered field state.
+      methods.reset(methods.getValues(), { keepValues: true })
       const label = statusOverride === 'draft' ? 'Draft saved' : statusOverride === 'published' ? 'Published' : 'Saved successfully'
       const icon = statusOverride === 'published' ? 'publish' as const : 'save' as const
       toast.showToast(label, { type: 'success', icon })
@@ -320,6 +523,11 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     hasSidebarFields: sidebarFields.length > 0,
     toggleSidebar: () => onOpenDetails?.(),
   }), [handleSubmit, getFormData, isDirty, sidebarFields.length, onOpenDetails])
+
+  // Surface dirty-state flips to the host screen (toolbar save button).
+  useEffect(() => {
+    onDirtyChange?.(isDirty)
+  }, [isDirty, onDirtyChange])
 
   useEffect(() => {
     if (scrollToError === 0) return
@@ -367,47 +575,60 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     [formData, slug],
   )
 
-  const NativeForm = nativeComponents.Form
-  const NativeSection = nativeComponents.Section
-  // Disabled: Section without Form still crashes — likely requireNativeView
-  // for SectionView fails or Section can't host RN children properly.
-  // The ScrollView + GlassView path is stable and polished. Re-enable
-  // once @expo/ui Section is confirmed to work as a standalone container
-  // outside of a Form/List context.
-  const useNativeForm = false
-  void NativeForm; void NativeSection // suppress unused warnings
-
   // Status + error banner (rendered above the form fields)
   const formHeader = (
     <>
       {draftStatus && (
         <View style={styles.statusRow}>
-          <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
-            <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
+          <View style={[styles.statusPill, { backgroundColor: draftStatus === 'draft' ? pc.warningBackground : pc.successBackground }]}>
+            <Text style={[styles.statusPillText, { color: draftStatus === 'draft' ? pc.warning : pc.success }]}>
               {draftStatus === 'draft' ? 'Draft' : 'Published'}
             </Text>
           </View>
         </View>
       )}
       {errorCount > 0 && (
-        <View style={styles.validationBanner}>
-          <Text style={styles.validationIcon}>!</Text>
-          <Text style={styles.validationText}>
+        <View style={[styles.validationBanner, { backgroundColor: pc.errorBackground }]}>
+          <Text style={[styles.validationIcon, { backgroundColor: pc.error, color: pc.errorBackground }]}>!</Text>
+          <Text style={[styles.validationText, { color: pc.error }]}>
             {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
           </Text>
         </View>
       )}
       {saveError && !errorCount && (
-        <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
+        <View style={[styles.errorBanner, { backgroundColor: pc.errorBackground }]}><Text style={[styles.errorText, { color: pc.error }]}>{saveError}</Text></View>
       )}
     </>
   )
 
   // ── Segmented FormSection rendering ──
-  // Fields are split into compatible runs (grouped in iOS Settings-style
-  // FormSection containers with rounded corners + hairline separators)
-  // and carve-outs (richText, join — rendered standalone with padding).
-  const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
+  // When sidebarOnly, render sidebar fields as the main content.
+  const fieldsToRender = sidebarOnly ? sidebarFields : mainFields
+  const mainSegments = useMemo(() => segmentFieldsForForm(fieldsToRender), [fieldsToRender])
+
+  // ── Native SwiftUI Form path ──
+  // Single full-screen Host > Form wrapping ALL Sections — only when every
+  // field is compatible (no richText/join carve-outs needed anywhere).
+  // Standalone Sections outside a Form crash, so partial usage is never
+  // attempted: any carve-out keeps the whole form on the JS path below.
+  //
+  // OPT-IN ONLY (nativeForm === true): the previous `nativeForm ?? true`
+  // default hard-crashed natively on-device (2026-06-11) for exactly the
+  // collections without carve-outs (Events docs, SiteSettings/Footer
+  // globals). The crash is native-side (no JS stack; FormCrashBoundary
+  // cannot catch it) — likely raw RN views (relationship rows, array/upload
+  // editors, chip lists) mounted as direct children of SwiftUI Form/Section
+  // cells fighting the List's self-sizing. Re-enabling requires native-side
+  // debugging; until then every collection ships on the JS FormSection path.
+  const useNativeForm =
+    nativeForm === true &&
+    Platform.OS === 'ios' &&
+    !!nativeComponents.Host &&
+    !!nativeComponents.Form &&
+    !!nativeComponents.Section &&
+    !nativeFormCrashed &&
+    canUseNativeFormForFields(fieldsToRender)
+
   const fallbackFormContent = (
     <Animated.ScrollView
       ref={scrollViewRef as any}
@@ -445,8 +666,8 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
       {sidebarFields.length > 0 && onOpenDetails && (
         <FormSection>
           <Pressable onPress={onOpenDetails} style={styles.detailsRow}>
-            <Text style={styles.detailsRowLabel}>Details</Text>
-            <Text style={styles.detailsRowChevron}>›</Text>
+            <Text style={[styles.detailsRowLabel, { color: pc.primary }]}>Details</Text>
+            <Text style={[styles.detailsRowChevron, { color: pc.tertiary }]}>›</Text>
           </Pressable>
         </FormSection>
       )}
@@ -458,7 +679,27 @@ const DocumentFormRHF = forwardRef<DocumentFormHandle, Props & { rootFields: Cli
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {fallbackFormContent}
+        {useNativeForm ? (
+          <NativeFormBody
+            segments={mainSegments}
+            renderField={renderField}
+            onOpenDetails={onOpenDetails}
+            showDetailsRow={!sidebarOnly && sidebarFields.length > 0}
+            onCrash={(error) => {
+              console.warn('[DocumentForm] Native SwiftUI Form crashed — falling back to JS form sections:', error?.message)
+              setNativeFormCrashed(true)
+            }}
+            contentInsetTop={contentInsetTop}
+            header={formHeader}
+          />
+        ) : (
+          fallbackFormContent
+        )}
+        {/* Wide layouts: Notes-style edge tab opens the Details sheet from
+            the panel edge itself; the header toolbar button covers phones. */}
+        {!sidebarOnly && sidebarFields.length > 0 && onOpenDetails && windowWidth >= EDGE_TAB_MIN_WIDTH && (
+          <SidebarEdgeTab onPress={onOpenDetails} colors={pc as unknown as Record<string, string>} />
+        )}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -504,6 +745,7 @@ const InspectorPanel: React.FC<{
   sidebarFields: ClientField[]
 }> = ({ visible, onClose, renderFields, sidebarFields }) => {
   const { width: screenWidth } = useWindowDimensions()
+  const { dark, colors: pc } = useListColors()
   const insets = useSafeAreaInsets ? useSafeAreaInsets() : { top: 0, bottom: 0 }
   const topInset = Math.max(insets.top + 56, 70)
   const bottomInset = Math.max(insets.bottom + 50, 60)
@@ -587,12 +829,13 @@ const InspectorPanel: React.FC<{
       })
     : BlurView
       ? <BlurView style={StyleSheet.absoluteFill} intensity={80} tint="systemThickMaterial" />
-      : <View style={[StyleSheet.absoluteFill, { backgroundColor: 'rgba(255, 255, 255, 0.97)' }]} />
+      : <View style={[StyleSheet.absoluteFill, { backgroundColor: dark ? 'rgba(30, 30, 30, 0.97)' : 'rgba(255, 255, 255, 0.97)' }]} />
 
   return (
     <Animated.View
       style={[
         inspectorStyles.panel,
+        { borderColor: pc.hairline },
         { width: panelWidth, top: topInset, bottom: bottomInset, transform: [{ translateX: panX }] },
       ]}
       pointerEvents={visible ? 'auto' : 'none'}
@@ -602,14 +845,14 @@ const InspectorPanel: React.FC<{
 
       {/* Drag handle */}
       <View style={inspectorStyles.dragHandle}>
-        <View style={inspectorStyles.dragPill} />
+        <View style={[inspectorStyles.dragPill, { backgroundColor: pc.tertiary }]} />
       </View>
 
       {/* Header */}
       <View style={inspectorStyles.header}>
-        <Text style={inspectorStyles.headerTitle}>Details</Text>
+        <Text style={[inspectorStyles.headerTitle, { color: pc.text }]}>Details</Text>
         <Pressable onPress={onClose} hitSlop={12}>
-          <Text style={inspectorStyles.closeButton}>Done</Text>
+          <Text style={[inspectorStyles.closeButton, { color: pc.primary }]}>Done</Text>
         </Pressable>
       </View>
 
@@ -743,18 +986,28 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
   onScroll,
   scrollEventThrottle = 16,
   onOpenDetails,
+  nativeForm,
+  onDirtyChange,
 }, ref) => {
   const [formData, setFormData] = useState<Record<string, unknown>>(initialData)
+  // Legacy dirty tracking: flagged on first edit, cleared on successful save.
+  const dirtyRef = useRef(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [serverErrors, setServerErrors] = useState<FormErrors>({})
   const [clientErrors, setClientErrors] = useState<FormErrors>({})
   const [scrollToError, setScrollToError] = useState(0)
+  const [nativeFormCrashed, setNativeFormCrashed] = useState(false)
   const scrollViewRef = useRef<ScrollView>(null)
   const toast = useToast()
 
+  // Client-side admin.condition registry for this collection (null when none).
+  const conditions = useCollectionConditions(slug)
+
   const { width: windowWidthLegacy } = useWindowDimensions()
   const compactLegacy = windowWidthLegacy < FIELD_WIDTH_BREAKPOINT
+  // Dark-mode aware tokens for the status pills / banners
+  const { colors: pc } = useListColors()
 
   const { mainFields, sidebarFields } = useMemo(
     () => splitFieldsBySidebar(rootFields),
@@ -772,6 +1025,11 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
   const renderField = useCallback(
     (field: ClientField, basePath: string): React.ReactNode => {
+      // admin.condition — hide when a registered client condition returns
+      // false; fields with only a hasCondition marker stay visible (fail open).
+      if (conditions && !evaluateFieldVisibility(conditions, basePath, formData)) {
+        return null
+      }
       const value = getByPath(formData, basePath)
       const error = mergedErrors[basePath]
       return (
@@ -781,6 +1039,10 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
           value={value}
           onChange={(v) => {
             setFormData((prev) => setByPath(prev, basePath, v))
+            if (!dirtyRef.current) {
+              dirtyRef.current = true
+              onDirtyChange?.(true)
+            }
             // Clear errors for this field when user edits
             if (serverErrors[basePath]) {
               setServerErrors((prev) => { const next = { ...prev }; delete next[basePath]; return next })
@@ -795,7 +1057,7 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
         />
       )
     },
-    [formData, mergedErrors, serverErrors, clientErrors, disabled, saving],
+    [formData, mergedErrors, serverErrors, clientErrors, disabled, saving, conditions],
   )
 
   const handleSubmit = async (statusOverride?: 'draft' | 'published') => {
@@ -818,6 +1080,10 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     try {
       const opts = statusOverride ? { status: statusOverride } : undefined
       await onSubmit(formData, opts)
+      if (dirtyRef.current) {
+        dirtyRef.current = false
+        onDirtyChange?.(false)
+      }
       const label = statusOverride === 'draft' ? 'Draft saved' : statusOverride === 'published' ? 'Published' : 'Saved successfully'
       const icon = statusOverride === 'published' ? 'publish' as const : 'save' as const
       toast.showToast(label, { type: 'success', icon })
@@ -895,42 +1161,46 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     [formData, slug],
   )
 
-  const NativeForm = nativeComponents.Form
-  const NativeSection = nativeComponents.Section
-  // Disabled: Section without Form still crashes — likely requireNativeView
-  // for SectionView fails or Section can't host RN children properly.
-  // The ScrollView + GlassView path is stable and polished. Re-enable
-  // once @expo/ui Section is confirmed to work as a standalone container
-  // outside of a Form/List context.
-  const useNativeForm = false
-  void NativeForm; void NativeSection // suppress unused warnings
-
   const formHeader = (
     <>
       {draftStatus && (
         <View style={styles.statusRow}>
-          <View style={[styles.statusPill, draftStatus === 'draft' ? styles.statusDraft : styles.statusPublished]}>
-            <Text style={[styles.statusPillText, draftStatus === 'draft' ? styles.statusDraftText : styles.statusPublishedText]}>
+          <View style={[styles.statusPill, { backgroundColor: draftStatus === 'draft' ? pc.warningBackground : pc.successBackground }]}>
+            <Text style={[styles.statusPillText, { color: draftStatus === 'draft' ? pc.warning : pc.success }]}>
               {draftStatus === 'draft' ? 'Draft' : 'Published'}
             </Text>
           </View>
         </View>
       )}
       {errorCount > 0 && (
-        <View style={styles.validationBanner}>
-          <Text style={styles.validationIcon}>!</Text>
-          <Text style={styles.validationText}>
+        <View style={[styles.validationBanner, { backgroundColor: pc.errorBackground }]}>
+          <Text style={[styles.validationIcon, { backgroundColor: pc.error, color: pc.errorBackground }]}>!</Text>
+          <Text style={[styles.validationText, { color: pc.error }]}>
             {errorCount} field{errorCount !== 1 ? 's' : ''} {errorCount !== 1 ? 'have' : 'has'} errors. Please correct them below.
           </Text>
         </View>
       )}
       {saveError && !errorCount && (
-        <View style={styles.errorBanner}><Text style={styles.errorText}>{saveError}</Text></View>
+        <View style={[styles.errorBanner, { backgroundColor: pc.errorBackground }]}><Text style={[styles.errorText, { color: pc.error }]}>{saveError}</Text></View>
       )}
     </>
   )
 
   const mainSegments = useMemo(() => segmentFieldsForForm(mainFields), [mainFields])
+
+  // Native SwiftUI Form path — same gating as the RHF form: ONE full-screen
+  // Host > Form when every field is compatible; JS FormSections otherwise.
+  // OPT-IN ONLY (nativeForm === true) — see the comment on the RHF variant:
+  // the opt-out default hard-crashed natively on-device (2026-06-11,
+  // Events/globals). JS path is the shipped default for ALL collections.
+  const useNativeForm =
+    nativeForm === true &&
+    Platform.OS === 'ios' &&
+    !!nativeComponents.Host &&
+    !!nativeComponents.Form &&
+    !!nativeComponents.Section &&
+    !nativeFormCrashed &&
+    canUseNativeFormForFields(mainFields)
 
   const fallbackFormContent = (
     <Animated.ScrollView
@@ -964,8 +1234,8 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
       {sidebarFields.length > 0 && onOpenDetails && (
         <FormSection>
           <Pressable onPress={onOpenDetails} style={styles.detailsRow}>
-            <Text style={styles.detailsRowLabel}>Details</Text>
-            <Text style={styles.detailsRowChevron}>›</Text>
+            <Text style={[styles.detailsRowLabel, { color: pc.primary }]}>Details</Text>
+            <Text style={[styles.detailsRowChevron, { color: pc.tertiary }]}>›</Text>
           </Pressable>
         </FormSection>
       )}
@@ -977,7 +1247,25 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
     <ErrorMapContext.Provider value={mergedErrors}>
     <FieldRendererContext.Provider value={renderField}>
       <View style={{ flex: 1 }}>
-        {fallbackFormContent}
+        {useNativeForm ? (
+          <NativeFormBody
+            segments={mainSegments}
+            renderField={renderField}
+            onOpenDetails={onOpenDetails}
+            showDetailsRow={sidebarFields.length > 0}
+            onCrash={(error) => {
+              console.warn('[DocumentForm] Native SwiftUI Form crashed — falling back to JS form sections:', error?.message)
+              setNativeFormCrashed(true)
+            }}
+            contentInsetTop={contentInsetTop}
+            header={formHeader}
+          />
+        ) : (
+          fallbackFormContent
+        )}
+        {sidebarFields.length > 0 && onOpenDetails && windowWidthLegacy >= EDGE_TAB_MIN_WIDTH && (
+          <SidebarEdgeTab onPress={onOpenDetails} colors={pc as unknown as Record<string, string>} />
+        )}
       </View>
     </FieldRendererContext.Provider>
     </ErrorMapContext.Provider>
@@ -991,18 +1279,46 @@ const DocumentFormLegacy = forwardRef<DocumentFormHandle, Props & { rootFields: 
 
 type FormDataContextValue = { formData: Record<string, unknown>; slug: string }
 
+/**
+ * Latch `initialData` to a referentially-stable object.
+ *
+ * Screens commonly pass `initialData={doc ?? {}}` (or a fresh RxDB
+ * `toJSON()` clone) — a NEW object identity on every parent render even
+ * when the contents are identical. `useForm` only captures `defaultValues`
+ * at mount, but react-hook-form keeps the live props on `control._options`
+ * every render, so an unstable identity leaks into every dirty-check /
+ * reset consumer and can re-trigger state from anything keyed on it
+ * (Maximum update depth exceeded, details sheet 2026-06-11). The latch
+ * returns the SAME reference for new-but-deep-equal objects, so identity
+ * churn upstream becomes a no-op; genuinely different data still flows
+ * through (a single identity change, then stable again).
+ */
+const useStableInitialData = (
+  initialData: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined => {
+  const ref = useRef(initialData)
+  if (ref.current !== initialData && !deepEqual(ref.current, initialData)) {
+    ref.current = initialData
+  }
+  return ref.current
+}
+
 export const DocumentForm = forwardRef<DocumentFormHandle, Props>(({
   schemaMap,
   slug,
+  initialData,
   ...rest
 }, ref) => {
   const rootFields = useMemo(() => extractRootFields(schemaMap, slug), [schemaMap, slug])
+  // Robustness against unstable parent identities (`doc ?? {}` per render):
+  // a new-but-equal object can never re-trigger downstream state.
+  const stableInitialData = useStableInitialData(initialData)
 
   if (isRHFAvailable) {
-    return <DocumentFormRHF ref={ref} rootFields={rootFields} slug={slug} schemaMap={schemaMap} {...rest} />
+    return <DocumentFormRHF ref={ref} rootFields={rootFields} slug={slug} schemaMap={schemaMap} initialData={stableInitialData} {...rest} />
   }
 
-  return <DocumentFormLegacy ref={ref} rootFields={rootFields} slug={slug} schemaMap={schemaMap} {...rest} />
+  return <DocumentFormLegacy ref={ref} rootFields={rootFields} slug={slug} schemaMap={schemaMap} initialData={stableInitialData} {...rest} />
 })
 
 // ===========================================================================
@@ -1014,6 +1330,11 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: t.spacing.lg, paddingTop: t.spacing.sm, paddingBottom: 60 },
   widthRow: { flexDirection: 'row' as const, gap: t.spacing.md },
   carveoutContainer: { paddingHorizontal: t.spacing.lg, paddingVertical: t.spacing.sm },
+
+  // Native SwiftUI Form path — full-screen Host; the Form scrolls natively.
+  nativeFormContainer: { flex: 1 },
+  nativeFormHost: { flex: 1 },
+  nativeFormHeader: { paddingHorizontal: t.spacing.lg },
 
 
   // Validation banner — subtle, no heavy border

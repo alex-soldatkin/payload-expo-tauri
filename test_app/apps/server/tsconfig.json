@@ -28,6 +28,32 @@
       ],
       "@payload-config": [
         "./src/payload.config.ts"
+      ],
+      // Dual-instance fix: the server resolves `payload` via the workspace
+      // symlink (realpath: payload-main/packages/payload), while the
+      // @payload-universal/* packages resolve their `file:` dependency to a
+      // second copy under test_app/node_modules/.pnpm. Pin every import of
+      // `payload` in this program to the single payload-main copy so the
+      // types are identical. Targets are the real runtime package/files
+      // (tsc picks up the adjacent .d.ts), so the mapping stays
+      // runtime-correct even if the bundler honors these paths as aliases.
+      "payload": [
+        "../../../payload-main/packages/payload"
+      ],
+      "payload/shared": [
+        "../../../payload-main/packages/payload/dist/exports/shared.js"
+      ],
+      "payload/node": [
+        "../../../payload-main/packages/payload/dist/exports/node.js"
+      ],
+      "payload/internal": [
+        "../../../payload-main/packages/payload/dist/exports/internal.js"
+      ],
+      "payload/migrations": [
+        "../../../payload-main/packages/payload/dist/exports/migrations.js"
+      ],
+      "payload/i18n/*": [
+        "../../../payload-main/packages/payload/dist/exports/i18n/*"
       ]
     },
     "target": "ES2022"

@@ -70,11 +70,16 @@ export interface Config {
     users: User;
     media: Media;
     posts: Post;
+    pages: Page;
+    products: Product;
+    events: Event;
+    'view-presets': ViewPreset;
     _sync_tombstones: _SyncTombstone;
     'payload-kv': PayloadKv;
     'payload-locked-documents': PayloadLockedDocument;
     'payload-preferences': PayloadPreference;
     'payload-migrations': PayloadMigration;
+    'payload-query-presets': PayloadQueryPreset;
   };
   collectionsJoins: {
     users: {
@@ -85,19 +90,30 @@ export interface Config {
     users: UsersSelect<false> | UsersSelect<true>;
     media: MediaSelect<false> | MediaSelect<true>;
     posts: PostsSelect<false> | PostsSelect<true>;
+    pages: PagesSelect<false> | PagesSelect<true>;
+    products: ProductsSelect<false> | ProductsSelect<true>;
+    events: EventsSelect<false> | EventsSelect<true>;
+    'view-presets': ViewPresetsSelect<false> | ViewPresetsSelect<true>;
     _sync_tombstones: _SyncTombstonesSelect<false> | _SyncTombstonesSelect<true>;
     'payload-kv': PayloadKvSelect<false> | PayloadKvSelect<true>;
     'payload-locked-documents': PayloadLockedDocumentsSelect<false> | PayloadLockedDocumentsSelect<true>;
     'payload-preferences': PayloadPreferencesSelect<false> | PayloadPreferencesSelect<true>;
     'payload-migrations': PayloadMigrationsSelect<false> | PayloadMigrationsSelect<true>;
+    'payload-query-presets': PayloadQueryPresetsSelect<false> | PayloadQueryPresetsSelect<true>;
   };
   db: {
     defaultIDType: string;
   };
-  fallbackLocale: null;
-  globals: {};
-  globalsSelect: {};
-  locale: null;
+  fallbackLocale: ('false' | 'none' | 'null') | false | null | ('en' | 'es') | ('en' | 'es')[];
+  globals: {
+    'site-settings': SiteSetting;
+    footer: Footer;
+  };
+  globalsSelect: {
+    'site-settings': SiteSettingsSelect<false> | SiteSettingsSelect<true>;
+    footer: FooterSelect<false> | FooterSelect<true>;
+  };
+  locale: 'en' | 'es';
   user: User;
   jobs: {
     tasks: unknown;
@@ -128,6 +144,12 @@ export interface UserAuthOperations {
  */
 export interface User {
   id: string;
+  name?: string | null;
+  /**
+   * Stored in the JWT for client-side access checks
+   */
+  role?: ('admin' | 'editor' | 'viewer') | null;
+  avatar?: (string | null) | Media;
   posts?: {
     docs?: (string | Post)[];
     hasNextPage?: boolean;
@@ -135,6 +157,9 @@ export interface User {
   };
   updatedAt: string;
   createdAt: string;
+  enableAPIKey?: boolean | null;
+  apiKey?: string | null;
+  apiKeyIndex?: string | null;
   email: string;
   resetPasswordToken?: string | null;
   resetPasswordExpiration?: string | null;
@@ -154,6 +179,51 @@ export interface User {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "media".
+ */
+export interface Media {
+  id: string;
+  alt: string;
+  updatedAt: string;
+  createdAt: string;
+  url?: string | null;
+  thumbnailURL?: string | null;
+  filename?: string | null;
+  mimeType?: string | null;
+  filesize?: number | null;
+  width?: number | null;
+  height?: number | null;
+  focalX?: number | null;
+  focalY?: number | null;
+  sizes?: {
+    thumbnail?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    card?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+    hero?: {
+      url?: string | null;
+      width?: number | null;
+      height?: number | null;
+      mimeType?: string | null;
+      filesize?: number | null;
+      filename?: string | null;
+    };
+  };
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "posts".
  */
 export interface Post {
@@ -163,6 +233,24 @@ export interface Post {
    * URL-friendly identifier for this post
    */
   slug?: string | null;
+  /**
+   * A brief rich-text summary shown on the post card and in previews.
+   */
+  summary?: {
+    root: {
+      type: string;
+      children: {
+        type: any;
+        version: number;
+        [k: string]: unknown;
+      }[];
+      direction: ('ltr' | 'rtl') | null;
+      format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+      indent: number;
+      version: number;
+    };
+    [k: string]: unknown;
+  } | null;
   contentFormat?: ('article' | 'tutorial' | 'review') | null;
   language?: ('en' | 'es' | 'fr') | null;
   /**
@@ -230,7 +318,7 @@ export interface Post {
    * Further classification
    */
   subcategory?: string | null;
-  status?: ('draft' | 'published' | 'archived') | null;
+  status?: ('draft' | 'review' | 'published' | 'archived') | null;
   publishedDate?: string | null;
   author?: (string | null) | User;
   /**
@@ -251,22 +339,366 @@ export interface Post {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
- * via the `definition` "media".
+ * via the `definition` "pages".
  */
-export interface Media {
+export interface Page {
   id: string;
-  alt: string;
+  title: string;
+  /**
+   * URL-friendly identifier for this page
+   */
+  slug?: string | null;
+  /**
+   * Compose the page from reusable section blocks
+   */
+  layout?:
+    | (
+        | {
+            /**
+             * Main headline rendered over the background image
+             */
+            heading: string;
+            subheading?: string | null;
+            /**
+             * Full-bleed background — use a wide image
+             */
+            backgroundImage?: (string | null) | Media;
+            /**
+             * Darkening overlay strength (0–1)
+             */
+            overlayOpacity?: number | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'hero';
+          }
+        | {
+            /**
+             * Rich-text body for this section
+             */
+            body?: {
+              root: {
+                type: string;
+                children: {
+                  type: any;
+                  version: number;
+                  [k: string]: unknown;
+                }[];
+                direction: ('ltr' | 'rtl') | null;
+                format: 'left' | 'start' | 'center' | 'right' | 'end' | 'justify' | '';
+                indent: number;
+                version: number;
+              };
+              [k: string]: unknown;
+            } | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'content';
+          }
+        | {
+            /**
+             * Button text
+             */
+            label: string;
+            style?: ('primary' | 'secondary' | 'ghost') | null;
+            linkType?: ('internal' | 'external') | null;
+            /**
+             * Destination page
+             */
+            internalPage?: (string | null) | Page;
+            externalUrl?: string | null;
+            openInNewTab?: boolean | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'cta';
+          }
+        | {
+            language?: ('typescript' | 'javascript' | 'json' | 'css' | 'html' | 'bash') | null;
+            /**
+             * Code rendered with syntax highlighting
+             */
+            snippet: string;
+            showLineNumbers?: boolean | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'codeSnippet';
+          }
+        | {
+            /**
+             * Optional heading shown above the gallery
+             */
+            title?: string | null;
+            galleryLayout?: ('grid' | 'carousel' | 'masonry') | null;
+            items?:
+              | {
+                  image: string | Media;
+                  caption?: string | null;
+                  id?: string | null;
+                }[]
+              | null;
+            id?: string | null;
+            blockName?: string | null;
+            blockType: 'mediaGallery';
+          }
+      )[]
+    | null;
+  /**
+   * SEO metadata stored under the named "meta" key
+   */
+  meta?: {
+    /**
+     * Search engine description
+     */
+    description?: string | null;
+    /**
+     * SEO keywords
+     */
+    keywords?: string[] | null;
+    image?: (string | null) | Media;
+  };
+  settings?: {
+    showInNav?: boolean | null;
+    /**
+     * Lower numbers appear first
+     */
+    navOrder?: number | null;
+  };
   updatedAt: string;
   createdAt: string;
-  url?: string | null;
-  thumbnailURL?: string | null;
-  filename?: string | null;
-  mimeType?: string | null;
-  filesize?: number | null;
-  width?: number | null;
-  height?: number | null;
-  focalX?: number | null;
-  focalY?: number | null;
+  _status?: ('draft' | 'published') | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "products".
+ */
+export interface Product {
+  id: string;
+  name: string;
+  /**
+   * Stock keeping unit
+   */
+  sku?: string | null;
+  stockLevel?: number | null;
+  restockThreshold?: number | null;
+  availability?: ('in-stock' | 'backorder' | 'discontinued') | null;
+  /**
+   * Where this product sits in its lifecycle
+   */
+  lifecycleStage?: ('concept' | 'development' | 'launched' | 'mature' | 'retired') | null;
+  /**
+   * All monetary values in USD
+   */
+  pricing: {
+    price: number;
+    salePrice?: number | null;
+    /**
+     * Percent applied at checkout
+     */
+    taxRate?: number | null;
+    onSale?: boolean | null;
+  };
+  /**
+   * Drag to reorder — order is preserved
+   */
+  features?: ('waterproof' | 'wireless' | 'rechargeable' | 'eco-friendly' | 'limited-edition')[] | null;
+  /**
+   * EU sizes this product ships in
+   */
+  availableSizes?: number[] | null;
+  /**
+   * Synonyms used by site search
+   */
+  searchKeywords?: string[] | null;
+  /**
+   * TypeScript snippet for embedding this product
+   */
+  integrationSnippet?: string | null;
+  specs?: {
+    weightGrams?: number;
+    dimensions?: {
+      widthMm?: number;
+      heightMm?: number;
+      depthMm?: number;
+      [k: string]: unknown;
+    };
+    materials?: string[];
+    [k: string]: unknown;
+  };
+  /**
+   * Longitude / latitude of the fulfilling warehouse
+   *
+   * @minItems 2
+   * @maxItems 2
+   */
+  warehouseLocation?: [number, number] | null;
+  /**
+   * Posts or pages featuring this product
+   */
+  relatedContent?:
+    | (
+        | {
+            relationTo: 'posts';
+            value: string | Post;
+          }
+        | {
+            relationTo: 'pages';
+            value: string | Page;
+          }
+      )[]
+    | null;
+  /**
+   * Only published posts can be selected
+   */
+  featuredPost?: (string | null) | Post;
+  releaseDate?: string | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "events".
+ */
+export interface Event {
+  id: string;
+  name: string;
+  /**
+   * Clearable — leave empty for uncategorized events
+   */
+  eventType?: ('conference' | 'meetup' | 'webinar' | 'workshop') | null;
+  /**
+   * Shown on the public event page
+   */
+  contactEmail?: string | null;
+  startsAt: string;
+  startsAt_tz: SupportedTimezones;
+  endsAt?: string | null;
+  endsAt_tz?: SupportedTimezones;
+  /**
+   * Last day to register
+   */
+  registrationDeadline?: string | null;
+  /**
+   * Time attendees can arrive
+   */
+  doorsOpen?: string | null;
+  /**
+   * Which monthly program this event belongs to
+   */
+  programMonth?: string | null;
+  requiresRegistration?: boolean | null;
+  registrationUrl?: string | null;
+  /**
+   * Maximum number of attendees
+   */
+  capacity?: number | null;
+  /**
+   * Agenda items — row labels come from a custom component
+   */
+  sessions?:
+    | {
+        title: string;
+        speaker?: string | null;
+        startTime?: string | null;
+        id?: string | null;
+      }[]
+    | null;
+  organizer?: (string | null) | User;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "view-presets".
+ */
+export interface ViewPreset {
+  id: string;
+  title: string;
+  /**
+   * Slug of the collection this view applies to (e.g. "posts")
+   */
+  relatedCollection: string;
+  viewType?: ('table' | 'kanban' | 'calendar') | null;
+  /**
+   * Select field whose options drive the kanban columns
+   */
+  statusField?: string | null;
+  /**
+   * Array of option values in display order
+   */
+  columnOrder?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Map of option value to hex color
+   */
+  columnColors?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Array of field names shown on cards
+   */
+  cardFields?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Array of { id, label, startField, endField?, color } date sources shown on the calendar
+   */
+  calendarSources?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Calendar mode the view opens in
+   */
+  calendarDefaultMode?: ('month' | 'week' | 'day') | null;
+  /**
+   * Optional Payload where-query applied to the whole board
+   */
+  where?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Set automatically to the user who created the preset
+   */
+  owner?: (string | null) | User;
+  /**
+   * Who can see this view
+   */
+  accessMode: 'onlyMe' | 'specificUsers' | 'everyone';
+  /**
+   * Users this view is shared with (owner is always included)
+   */
+  sharedWith?: (string | User)[] | null;
+  updatedAt: string;
+  createdAt: string;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -317,6 +749,22 @@ export interface PayloadLockedDocument {
         value: string | Post;
       } | null)
     | ({
+        relationTo: 'pages';
+        value: string | Page;
+      } | null)
+    | ({
+        relationTo: 'products';
+        value: string | Product;
+      } | null)
+    | ({
+        relationTo: 'events';
+        value: string | Event;
+      } | null)
+    | ({
+        relationTo: 'view-presets';
+        value: string | ViewPreset;
+      } | null)
+    | ({
         relationTo: '_sync_tombstones';
         value: string | _SyncTombstone;
       } | null);
@@ -364,12 +812,67 @@ export interface PayloadMigration {
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-query-presets".
+ */
+export interface PayloadQueryPreset {
+  id: string;
+  title: string;
+  isShared?: boolean | null;
+  access?: {
+    read?: {
+      constraint?: ('everyone' | 'onlyMe' | 'specificUsers') | null;
+      users?: (string | User)[] | null;
+    };
+    update?: {
+      constraint?: ('everyone' | 'onlyMe' | 'specificUsers') | null;
+      users?: (string | User)[] | null;
+    };
+    delete?: {
+      constraint?: ('everyone' | 'onlyMe' | 'specificUsers') | null;
+      users?: (string | User)[] | null;
+    };
+  };
+  where?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  columns?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  groupBy?: string | null;
+  relatedCollection: 'posts' | 'pages' | 'products' | 'events';
+  /**
+   * This is a temporary field used to determine if updating the preset would remove the user's access to it. When `true`, this record will be deleted after running the preset's `validate` function.
+   */
+  isTemp?: boolean | null;
+  updatedAt: string;
+  createdAt: string;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
  * via the `definition` "users_select".
  */
 export interface UsersSelect<T extends boolean = true> {
+  name?: T;
+  role?: T;
+  avatar?: T;
   posts?: T;
   updatedAt?: T;
   createdAt?: T;
+  enableAPIKey?: T;
+  apiKey?: T;
+  apiKeyIndex?: T;
   email?: T;
   resetPasswordToken?: T;
   resetPasswordExpiration?: T;
@@ -402,6 +905,40 @@ export interface MediaSelect<T extends boolean = true> {
   height?: T;
   focalX?: T;
   focalY?: T;
+  sizes?:
+    | T
+    | {
+        thumbnail?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        card?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+        hero?:
+          | T
+          | {
+              url?: T;
+              width?: T;
+              height?: T;
+              mimeType?: T;
+              filesize?: T;
+              filename?: T;
+            };
+      };
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -410,6 +947,7 @@ export interface MediaSelect<T extends boolean = true> {
 export interface PostsSelect<T extends boolean = true> {
   title?: T;
   slug?: T;
+  summary?: T;
   contentFormat?: T;
   language?: T;
   excerpt?: T;
@@ -452,6 +990,169 @@ export interface PostsSelect<T extends boolean = true> {
   updatedAt?: T;
   createdAt?: T;
   _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "pages_select".
+ */
+export interface PagesSelect<T extends boolean = true> {
+  title?: T;
+  slug?: T;
+  layout?:
+    | T
+    | {
+        hero?:
+          | T
+          | {
+              heading?: T;
+              subheading?: T;
+              backgroundImage?: T;
+              overlayOpacity?: T;
+              id?: T;
+              blockName?: T;
+            };
+        content?:
+          | T
+          | {
+              body?: T;
+              id?: T;
+              blockName?: T;
+            };
+        cta?:
+          | T
+          | {
+              label?: T;
+              style?: T;
+              linkType?: T;
+              internalPage?: T;
+              externalUrl?: T;
+              openInNewTab?: T;
+              id?: T;
+              blockName?: T;
+            };
+        codeSnippet?:
+          | T
+          | {
+              language?: T;
+              snippet?: T;
+              showLineNumbers?: T;
+              id?: T;
+              blockName?: T;
+            };
+        mediaGallery?:
+          | T
+          | {
+              title?: T;
+              galleryLayout?: T;
+              items?:
+                | T
+                | {
+                    image?: T;
+                    caption?: T;
+                    id?: T;
+                  };
+              id?: T;
+              blockName?: T;
+            };
+      };
+  meta?:
+    | T
+    | {
+        description?: T;
+        keywords?: T;
+        image?: T;
+      };
+  settings?:
+    | T
+    | {
+        showInNav?: T;
+        navOrder?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  _status?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "products_select".
+ */
+export interface ProductsSelect<T extends boolean = true> {
+  name?: T;
+  sku?: T;
+  stockLevel?: T;
+  restockThreshold?: T;
+  availability?: T;
+  lifecycleStage?: T;
+  pricing?:
+    | T
+    | {
+        price?: T;
+        salePrice?: T;
+        taxRate?: T;
+        onSale?: T;
+      };
+  features?: T;
+  availableSizes?: T;
+  searchKeywords?: T;
+  integrationSnippet?: T;
+  specs?: T;
+  warehouseLocation?: T;
+  relatedContent?: T;
+  featuredPost?: T;
+  releaseDate?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "events_select".
+ */
+export interface EventsSelect<T extends boolean = true> {
+  name?: T;
+  eventType?: T;
+  contactEmail?: T;
+  startsAt?: T;
+  startsAt_tz?: T;
+  endsAt?: T;
+  endsAt_tz?: T;
+  registrationDeadline?: T;
+  doorsOpen?: T;
+  programMonth?: T;
+  requiresRegistration?: T;
+  registrationUrl?: T;
+  capacity?: T;
+  sessions?:
+    | T
+    | {
+        title?: T;
+        speaker?: T;
+        startTime?: T;
+        id?: T;
+      };
+  organizer?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "view-presets_select".
+ */
+export interface ViewPresetsSelect<T extends boolean = true> {
+  title?: T;
+  relatedCollection?: T;
+  viewType?: T;
+  statusField?: T;
+  columnOrder?: T;
+  columnColors?: T;
+  cardFields?: T;
+  calendarSources?: T;
+  calendarDefaultMode?: T;
+  where?: T;
+  owner?: T;
+  accessMode?: T;
+  sharedWith?: T;
+  updatedAt?: T;
+  createdAt?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema
@@ -503,6 +1204,139 @@ export interface PayloadMigrationsSelect<T extends boolean = true> {
   batch?: T;
   updatedAt?: T;
   createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "payload-query-presets_select".
+ */
+export interface PayloadQueryPresetsSelect<T extends boolean = true> {
+  title?: T;
+  isShared?: T;
+  access?:
+    | T
+    | {
+        read?:
+          | T
+          | {
+              constraint?: T;
+              users?: T;
+            };
+        update?:
+          | T
+          | {
+              constraint?: T;
+              users?: T;
+            };
+        delete?:
+          | T
+          | {
+              constraint?: T;
+              users?: T;
+            };
+      };
+  where?: T;
+  columns?: T;
+  groupBy?: T;
+  relatedCollection?: T;
+  isTemp?: T;
+  updatedAt?: T;
+  createdAt?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings".
+ */
+export interface SiteSetting {
+  id: string;
+  /**
+   * Shown in the browser tab and app header
+   */
+  siteName: string;
+  tagline?: string | null;
+  /**
+   * Take the public site offline
+   */
+  maintenanceMode?: boolean | null;
+  maintenanceMessage?: string | null;
+  /**
+   * Displayed in the navigation bar
+   */
+  logo?: (string | null) | Media;
+  /**
+   * Hex color used for primary actions
+   */
+  accentColor?: string | null;
+  /**
+   * Full profile URLs, including https://
+   */
+  social?: {
+    twitter?: string | null;
+    instagram?: string | null;
+    github?: string | null;
+  };
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer".
+ */
+export interface Footer {
+  id: string;
+  copyrightText?: string | null;
+  /**
+   * Rendered left-to-right in the site footer
+   */
+  links?:
+    | {
+        label: string;
+        url: string;
+        newTab?: boolean | null;
+        id?: string | null;
+      }[]
+    | null;
+  updatedAt?: string | null;
+  createdAt?: string | null;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "site-settings_select".
+ */
+export interface SiteSettingsSelect<T extends boolean = true> {
+  siteName?: T;
+  tagline?: T;
+  maintenanceMode?: T;
+  maintenanceMessage?: T;
+  logo?: T;
+  accentColor?: T;
+  social?:
+    | T
+    | {
+        twitter?: T;
+        instagram?: T;
+        github?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
+}
+/**
+ * This interface was referenced by `Config`'s JSON-Schema
+ * via the `definition` "footer_select".
+ */
+export interface FooterSelect<T extends boolean = true> {
+  copyrightText?: T;
+  links?:
+    | T
+    | {
+        label?: T;
+        url?: T;
+        newTab?: T;
+        id?: T;
+      };
+  updatedAt?: T;
+  createdAt?: T;
+  globalType?: T;
 }
 /**
  * This interface was referenced by `Config`'s JSON-Schema

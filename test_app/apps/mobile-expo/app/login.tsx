@@ -2,9 +2,13 @@
  * Login screen – authenticates against the Payload /api/users/login endpoint.
  * Stores the JWT token via SecureStore (handled by the provider's onTokenChange).
  *
+ * Spec A: surfaces structured login errors inline.
+ * Spec B: detects an uninitialised server (GET /api/users/init) and switches to
+ *         a "Create first admin user" flow using POST /api/users/first-register.
+ *
  * On tablet, the form is constrained to a comfortable width and centered.
  */
-import React, { useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
   KeyboardAvoidingView,
@@ -12,10 +16,11 @@ import {
   Pressable,
   Text,
   TextInput,
+  useColorScheme,
   View,
 } from 'react-native'
 import * as SecureStore from 'expo-secure-store'
-import { useAuth } from '@payload-universal/admin-native'
+import { useAuth, useListColors } from '@payload-universal/admin-native'
 import { useResponsive } from '@/hooks/useResponsive'
 
 // Optional: GlassView for liquid glass login button on iOS 26+
@@ -31,15 +36,65 @@ try {
 
 const BASE_URL_KEY = 'payload_base_url'
 const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
+const INIT_DEBOUNCE_MS = 600
+
+type ScreenMode = 'login' | 'create-first-user'
 
 export default function LoginScreen() {
-  const { login, isLoading } = useAuth()
+  const { login, firstRegister, isLoading } = useAuth()
   const { isTablet } = useResponsive()
+  const isDark = useColorScheme() === 'dark'
+  // Placeholder/keyboard colors can't come from Tailwind classes — use the
+  // shared palette so they match the bg-surface inputs in both schemes.
+  const { colors: c } = useListColors()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [serverURL, setServerURL] = useState(DEFAULT_BASE_URL)
   const [showServer, setShowServer] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [mode, setMode] = useState<ScreenMode>('login')
+  const initDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Check whether the server is initialised and switch mode accordingly.
+  const checkInit = useCallback(async (url: string) => {
+    try {
+      const res = await fetch(`${url}/api/users/init`)
+      if (!res.ok) return // treat failure as initialized
+      const data = await res.json() as { initialized?: boolean }
+      if (data.initialized === false) {
+        setMode('create-first-user')
+      } else {
+        setMode('login')
+      }
+    } catch {
+      // Network failure — treat as initialized; show normal login
+    }
+  }, [])
+
+  // On mount: check init against the default URL
+  useEffect(() => {
+    void checkInit(serverURL)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Debounce re-check when serverURL changes (skip on initial render)
+  const isFirstServerURLRender = useRef(true)
+  useEffect(() => {
+    if (isFirstServerURLRender.current) {
+      isFirstServerURLRender.current = false
+      return
+    }
+    if (initDebounceRef.current) clearTimeout(initDebounceRef.current)
+    initDebounceRef.current = setTimeout(() => {
+      void checkInit(serverURL)
+    }, INIT_DEBOUNCE_MS)
+    return () => {
+      if (initDebounceRef.current) clearTimeout(initDebounceRef.current)
+    }
+  }, [serverURL, checkInit])
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -47,14 +102,46 @@ export default function LoginScreen() {
       return
     }
     setError(null)
+    setIsSubmitting(true)
     try {
       // Persist the server URL for next launch
       await SecureStore.setItemAsync(BASE_URL_KEY, serverURL).catch(() => {})
       await login(email, password)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
+    } finally {
+      setIsSubmitting(false)
     }
   }
+
+  const handleCreateFirstUser = async () => {
+    setError(null)
+    setConfirmError(null)
+    if (!email || !password) {
+      setError('Email and password are required')
+      return
+    }
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters')
+      return
+    }
+    if (password !== confirmPassword) {
+      setConfirmError('Passwords do not match')
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      await SecureStore.setItemAsync(BASE_URL_KEY, serverURL).catch(() => {})
+      await firstRegister(email, password, confirmPassword)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Registration failed')
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
+  const inFlight = isLoading || isSubmitting
+  const isCreateMode = mode === 'create-first-user'
 
   return (
     <KeyboardAvoidingView
@@ -67,9 +154,13 @@ export default function LoginScreen() {
       >
         {/* Header */}
         <View className="mb-10">
-          <Text className="text-3xl font-bold text-ink">Payload Admin</Text>
+          <Text className="text-3xl font-bold text-ink">
+            {isCreateMode ? 'Create Admin User' : 'Payload Admin'}
+          </Text>
           <Text className="mt-2 text-base text-ink-muted">
-            Sign in to manage your content
+            {isCreateMode
+              ? 'Set up the first admin account'
+              : 'Sign in to manage your content'}
           </Text>
         </View>
 
@@ -81,10 +172,15 @@ export default function LoginScreen() {
         </Pressable>
         {showServer && (
           <TextInput
-            className="mb-4 rounded-xl border border-neutral-200 bg-surface px-4 py-3 text-sm text-ink"
+            className="mb-4 rounded-xl border border-line bg-surface px-4 py-3 text-sm text-ink"
             value={serverURL}
-            onChangeText={setServerURL}
+            onChangeText={(v) => {
+              setServerURL(v)
+              setError(null)
+            }}
             placeholder="https://your-server.com"
+            placeholderTextColor={c.textPlaceholder}
+            keyboardAppearance={isDark ? 'dark' : 'light'}
             autoCapitalize="none"
             autoCorrect={false}
             keyboardType="url"
@@ -94,43 +190,80 @@ export default function LoginScreen() {
         {/* Email */}
         <Text className="mb-1 text-xs font-semibold text-ink-muted">Email</Text>
         <TextInput
-          className="mb-4 rounded-xl border border-neutral-200 bg-surface px-4 py-3 text-base text-ink"
+          className="mb-4 rounded-xl border border-line bg-surface px-4 py-3 text-base text-ink"
           value={email}
-          onChangeText={setEmail}
+          onChangeText={(v) => {
+            setEmail(v)
+            setError(null)
+          }}
           placeholder="admin@example.com"
+          placeholderTextColor={c.textPlaceholder}
+          keyboardAppearance={isDark ? 'dark' : 'light'}
           autoCapitalize="none"
           autoComplete="email"
           keyboardType="email-address"
           textContentType="emailAddress"
-          editable={!isLoading}
+          editable={!inFlight}
         />
 
         {/* Password */}
         <Text className="mb-1 text-xs font-semibold text-ink-muted">Password</Text>
         <TextInput
-          className="mb-6 rounded-xl border border-neutral-200 bg-surface px-4 py-3 text-base text-ink"
+          className={`rounded-xl border border-line bg-surface px-4 py-3 text-base text-ink ${isCreateMode ? 'mb-4' : 'mb-6'}`}
           value={password}
-          onChangeText={setPassword}
+          onChangeText={(v) => {
+            setPassword(v)
+            setError(null)
+          }}
           placeholder="Password"
+          placeholderTextColor={c.textPlaceholder}
+          keyboardAppearance={isDark ? 'dark' : 'light'}
           secureTextEntry
           textContentType="password"
-          editable={!isLoading}
-          onSubmitEditing={handleLogin}
+          editable={!inFlight}
+          onSubmitEditing={isCreateMode ? undefined : handleLogin}
         />
+
+        {/* Confirm Password — create-first-user mode only */}
+        {isCreateMode && (
+          <>
+            <Text className="mb-1 text-xs font-semibold text-ink-muted">Confirm Password</Text>
+            <TextInput
+              className="mb-6 rounded-xl border border-line bg-surface px-4 py-3 text-base text-ink"
+              value={confirmPassword}
+              onChangeText={(v) => {
+                setConfirmPassword(v)
+                setConfirmError(null)
+              }}
+              placeholder="Confirm password"
+              placeholderTextColor={c.textPlaceholder}
+              keyboardAppearance={isDark ? 'dark' : 'light'}
+              secureTextEntry
+              textContentType="newPassword"
+              editable={!inFlight}
+              onSubmitEditing={handleCreateFirstUser}
+            />
+            {confirmError && (
+              <View className="mb-4 rounded-xl bg-danger-bg px-4 py-3">
+                <Text className="text-sm text-danger">{confirmError}</Text>
+              </View>
+            )}
+          </>
+        )}
 
         {/* Error */}
         {error && (
-          <View className="mb-4 rounded-xl bg-red-50 px-4 py-3">
-            <Text className="text-sm text-red-700">{error}</Text>
+          <View className="mb-4 rounded-xl bg-danger-bg px-4 py-3">
+            <Text className="text-sm text-danger">{error}</Text>
           </View>
         )}
 
         {/* Submit */}
         {liquidGlassAvailable && GlassView ? (
           <Pressable
-            onPress={handleLogin}
-            disabled={isLoading}
-            style={isLoading ? { opacity: 0.5 } : undefined}
+            onPress={isCreateMode ? handleCreateFirstUser : handleLogin}
+            disabled={inFlight}
+            style={inFlight ? { opacity: 0.5 } : undefined}
           >
             <GlassView
               style={{ borderRadius: 12, paddingVertical: 16, paddingHorizontal: 16, alignItems: 'center' }}
@@ -138,29 +271,44 @@ export default function LoginScreen() {
               glassEffectStyle="regular"
               tintColor="rgba(0,0,0,0.8)"
             >
-              {isLoading ? (
+              {inFlight ? (
                 <ActivityIndicator color="#fff" />
               ) : (
                 <Text className="text-center text-base font-semibold text-white">
-                  Sign In
+                  {isCreateMode ? 'Create User' : 'Sign In'}
                 </Text>
               )}
             </GlassView>
           </Pressable>
         ) : (
           <Pressable
-            className="rounded-xl bg-black px-4 py-4"
-            style={isLoading ? { opacity: 0.5 } : undefined}
-            onPress={handleLogin}
-            disabled={isLoading}
+            className="rounded-xl bg-ink px-4 py-4"
+            style={inFlight ? { opacity: 0.5 } : undefined}
+            onPress={isCreateMode ? handleCreateFirstUser : handleLogin}
+            disabled={inFlight}
           >
-            {isLoading ? (
-              <ActivityIndicator color="#fff" />
+            {inFlight ? (
+              <ActivityIndicator color={isDark ? '#141414' : '#fff'} />
             ) : (
-              <Text className="text-center text-base font-semibold text-white">
-                Sign In
+              <Text className="text-center text-base font-semibold text-paper">
+                {isCreateMode ? 'Create User' : 'Sign In'}
               </Text>
             )}
+          </Pressable>
+        )}
+
+        {/* Back to sign in — allows leaving create-first-user mode manually */}
+        {isCreateMode && (
+          <Pressable
+            className="mt-4 items-center"
+            onPress={() => {
+              setMode('login')
+              setError(null)
+              setConfirmError(null)
+              setConfirmPassword('')
+            }}
+          >
+            <Text className="text-sm text-ink-muted">Back to sign in</Text>
           </Pressable>
         )}
       </View>

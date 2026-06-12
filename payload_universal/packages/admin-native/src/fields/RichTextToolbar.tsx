@@ -1,14 +1,22 @@
 /**
- * RichTextToolbar — native SwiftUI ControlGroup toolbar with glass buttons.
+ * RichTextToolbar — native SwiftUI glass toolbar with a JS pill fallback.
  *
- * Uses @expo/ui ControlGroup + Button with buttonStyle('glass') on iOS.
- * Multiple ControlGroups in a horizontal ScrollView, each grouping
- * related formatting actions. Buttons reflect live style state from
- * EnrichedTextInput via `onChangeState`.
+ * iOS native tier (canary @expo/ui has NO ControlGroup — never use it):
+ *   GlassEffectContainer wrapping HStack groups of Buttons inside a single
+ *   NativeHost, all inside a horizontal RN ScrollView for overflow.
+ *   - inactive:  buttonStyle('glass')          (bordered pre-iOS 26)
+ *   - active:    buttonStyle('glassProminent') + tint (borderedProminent pre-26)
+ *   - blocking:  disabled(true)
+ *   SwiftUI Divider separates groups. Active/blocking state tracks the same
+ *   `styleState` fed by EnrichedTextInput's `onChangeState` as the JS tier.
+ *   Namespace/glassEffectId are intentionally NOT used: the glass button
+ *   styles already participate in the GlassEffectContainer blend, and
+ *   glassEffect modifiers must not be applied to gesture-owning controls.
  *
- * Falls back to Pressable pill buttons when @expo/ui is unavailable.
+ * Fallback tier (Android + anywhere the registry entries are null):
+ *   Pressable pill buttons.
  *
- * Layout: [B I U S <>] [🔗 📷 @] [H1 H2 H3] [❝ {}] [• 1. ☑] [⊞]
+ * Layout: [B I U S <>] | [🔗 📷 @] | [H1 H2 H3] | [❝ {}] | [• 1. ☑] | [⊞]
  */
 import React from 'react'
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native'
@@ -32,8 +40,19 @@ import {
   Underline,
 } from 'lucide-react-native'
 import { defaultTheme as t } from '../theme'
-import { nativeComponents } from './shared'
+import { nativeComponents, type NativeModifier } from './shared'
 import { NativeHost } from './NativeHost'
+
+// Liquid glass availability (iOS 26+). Guarded require — expo-glass-effect is
+// an optional peer; absence (or older iOS) selects the bordered button tier.
+let liquidGlassAvailable = false
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const glassModule = require('expo-glass-effect')
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
+} catch {
+  /* expo-glass-effect not installed — bordered fallback tier */
+}
 
 // ---------------------------------------------------------------------------
 // Types — matches react-native-enriched OnChangeStateEvent shape
@@ -94,8 +113,24 @@ export type RichTextToolbarProps = {
 }
 
 // ---------------------------------------------------------------------------
-// Native toolbar — uses @expo/ui ControlGroup + Button with glass style
+// Native toolbar — GlassEffectContainer + HStack groups of glass Buttons
 // ---------------------------------------------------------------------------
+
+type NativeItem = {
+  key: string
+  /** SF Symbol name (icon buttons). */
+  systemImage?: string
+  /** Text label (H1/H2/H3 buttons). */
+  text?: string
+  /** Live style state entry driving active/blocking modifiers. */
+  entry?: StyleStateEntry
+  onPress: () => void
+}
+
+/** Distance at which adjacent glass pills begin to blend in the container. */
+const GLASS_BLEND_SPACING = 10
+const GROUP_SPACING = 8
+const BUTTON_SPACING = 2
 
 const NativeToolbar: React.FC<RichTextToolbarProps> = ({
   styleState: s,
@@ -108,18 +143,68 @@ const NativeToolbar: React.FC<RichTextToolbarProps> = ({
 }) => {
   if (!visible) return null
 
+  // All entries below are guaranteed non-null by the `useNativeToolbar`
+  // registry gate — the fallback toolbar renders otherwise.
   const NativeButton = nativeComponents.Button!
-  const NativeControlGroup = nativeComponents.ControlGroup!
-  const glass = nativeComponents.buttonStyle!('glass')
-  const small = nativeComponents.controlSize!('small')
-  const activeTint = nativeComponents.tint!(t.colors.primary)
+  const NativeHStack = nativeComponents.HStack!
+  const NativeGlassContainer = nativeComponents.GlassEffectContainer!
+  const NativeDivider = nativeComponents.Divider!
+  const buttonStyle = nativeComponents.buttonStyle!
+  const controlSize = nativeComponents.controlSize!
+  const tint = nativeComponents.tint!
+  const disabledMod = nativeComponents.disabled!
+  // Optional polish — only applied when the factory exists.
+  const frame = nativeComponents.frame
 
-  /** Build modifiers array: glass + small + optional active tint */
-  const mods = (entry?: StyleStateEntry) => {
-    const m = [glass, small]
+  // Glass tiers: liquid glass (iOS 26+) with graceful bordered fallback.
+  // The Swift side additionally degrades glass styles to .automatic when
+  // unavailable, so this is belt and braces.
+  const inactiveStyle = buttonStyle(liquidGlassAvailable ? 'glass' : 'bordered')
+  const activeStyle = buttonStyle(liquidGlassAvailable ? 'glassProminent' : 'borderedProminent')
+  const small = controlSize('small')
+  const activeTint = tint(t.colors.primary)
+
+  /** Modifiers per button: style by active state, small size, disabled when blocking. */
+  const mods = (entry?: StyleStateEntry): NativeModifier[] => {
+    const m: NativeModifier[] = [entry?.isActive ? activeStyle : inactiveStyle, small]
     if (entry?.isActive) m.push(activeTint)
+    if (entry?.isBlocking) m.push(disabledMod(true))
     return m
   }
+
+  const groups: NativeItem[][] = [
+    [
+      { key: 'bold', systemImage: 'bold', entry: s?.bold, onPress: onToggleBold },
+      { key: 'italic', systemImage: 'italic', entry: s?.italic, onPress: onToggleItalic },
+      { key: 'underline', systemImage: 'underline', entry: s?.underline, onPress: onToggleUnderline },
+      { key: 'strikeThrough', systemImage: 'strikethrough', entry: s?.strikeThrough, onPress: onToggleStrikeThrough },
+      { key: 'inlineCode', systemImage: 'chevron.left.forwardslash.chevron.right', entry: s?.inlineCode, onPress: onToggleInlineCode },
+    ],
+    [
+      { key: 'link', systemImage: 'link', entry: s?.link, onPress: onInsertLink },
+      { key: 'image', systemImage: 'photo.badge.plus', entry: s?.image, onPress: onInsertImage },
+      { key: 'mention', systemImage: 'at', entry: s?.mention, onPress: onInsertMention },
+    ],
+    [
+      { key: 'h1', text: 'H1', entry: s?.h1, onPress: onToggleH1 },
+      { key: 'h2', text: 'H2', entry: s?.h2, onPress: onToggleH2 },
+      { key: 'h3', text: 'H3', entry: s?.h3, onPress: onToggleH3 },
+    ],
+    [
+      { key: 'blockQuote', systemImage: 'text.quote', entry: s?.blockQuote, onPress: onToggleBlockQuote },
+      { key: 'codeBlock', systemImage: 'curlybraces', entry: s?.codeBlock, onPress: onToggleCodeBlock },
+    ],
+    [
+      { key: 'unorderedList', systemImage: 'list.bullet', entry: s?.unorderedList, onPress: onToggleUnorderedList },
+      { key: 'orderedList', systemImage: 'list.number', entry: s?.orderedList, onPress: onToggleOrderedList },
+      { key: 'checkboxList', systemImage: 'checklist', entry: s?.checkboxList, onPress: onToggleCheckboxList },
+    ],
+    [
+      { key: 'table', systemImage: 'tablecells', onPress: onInsertTable },
+    ],
+  ]
+
+  const dividerMods = frame ? [frame({ height: 20 })] : undefined
 
   return (
     <View style={styles.nativeContainer}>
@@ -129,57 +214,35 @@ const NativeToolbar: React.FC<RichTextToolbarProps> = ({
         contentContainerStyle={styles.nativeScroll}
         keyboardShouldPersistTaps="always"
       >
-        {/* Inline formatting */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton systemImage="bold" onPress={onToggleBold} modifiers={mods(s?.bold)} />
-            <NativeButton systemImage="italic" onPress={onToggleItalic} modifiers={mods(s?.italic)} />
-            <NativeButton systemImage="underline" onPress={onToggleUnderline} modifiers={mods(s?.underline)} />
-            <NativeButton systemImage="strikethrough" onPress={onToggleStrikeThrough} modifiers={mods(s?.strikeThrough)} />
-            <NativeButton systemImage="chevron.left.forwardslash.chevron.right" onPress={onToggleInlineCode} modifiers={mods(s?.inlineCode)} />
-          </NativeControlGroup>
-        </NativeHost>
-
-        {/* Insert actions */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton systemImage="link" onPress={onInsertLink} modifiers={mods(s?.link)} />
-            <NativeButton systemImage="photo.badge.plus" onPress={onInsertImage} modifiers={mods(s?.image)} />
-            <NativeButton systemImage="at" onPress={onInsertMention} modifiers={mods(s?.mention)} />
-          </NativeControlGroup>
-        </NativeHost>
-
-        {/* Headings */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton label="H1" onPress={onToggleH1} modifiers={mods(s?.h1)} />
-            <NativeButton label="H2" onPress={onToggleH2} modifiers={mods(s?.h2)} />
-            <NativeButton label="H3" onPress={onToggleH3} modifiers={mods(s?.h3)} />
-          </NativeControlGroup>
-        </NativeHost>
-
-        {/* Block formatting */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton systemImage="text.quote" onPress={onToggleBlockQuote} modifiers={mods(s?.blockQuote)} />
-            <NativeButton systemImage="curlybraces" onPress={onToggleCodeBlock} modifiers={mods(s?.codeBlock)} />
-          </NativeControlGroup>
-        </NativeHost>
-
-        {/* Lists */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton systemImage="list.bullet" onPress={onToggleUnorderedList} modifiers={mods(s?.unorderedList)} />
-            <NativeButton systemImage="list.number" onPress={onToggleOrderedList} modifiers={mods(s?.orderedList)} />
-            <NativeButton systemImage="checklist" onPress={onToggleCheckboxList} modifiers={mods(s?.checkboxList)} />
-          </NativeControlGroup>
-        </NativeHost>
-
-        {/* Table */}
-        <NativeHost matchContents={{ height: true }} style={styles.groupHost}>
-          <NativeControlGroup>
-            <NativeButton systemImage="tablecells" onPress={onInsertTable} modifiers={[glass, small]} />
-          </NativeControlGroup>
+        {/*
+          Single Host matching BOTH axes: inside a horizontal ScrollView the
+          toolbar must report its intrinsic width to RN so the scroller can
+          overflow (the width-filling `{ height: true }` convention does not
+          apply here — there is no bounded parent width to fill).
+        */}
+        <NativeHost matchContents style={styles.nativeHost}>
+          <NativeGlassContainer spacing={GLASS_BLEND_SPACING}>
+            <NativeHStack spacing={GROUP_SPACING} alignment="center">
+              {groups.map((group, gi) => (
+                <React.Fragment key={`group-${gi}`}>
+                  {gi > 0 && <NativeDivider modifiers={dividerMods} />}
+                  <NativeHStack spacing={BUTTON_SPACING} alignment="center">
+                    {group.map((item) => (
+                      <NativeButton
+                        key={item.key}
+                        // Swift Button renders Label(label, systemImage:) only
+                        // when `label` is non-nil — pass '' for icon-only.
+                        label={item.text ?? ''}
+                        systemImage={item.systemImage}
+                        onPress={item.onPress}
+                        modifiers={mods(item.entry)}
+                      />
+                    ))}
+                  </NativeHStack>
+                </React.Fragment>
+              ))}
+            </NativeHStack>
+          </NativeGlassContainer>
         </NativeHost>
       </ScrollView>
     </View>
@@ -269,16 +332,24 @@ const FallbackToolbar: React.FC<RichTextToolbarProps> = ({
 }
 
 // ---------------------------------------------------------------------------
-// Exported component — picks native ControlGroup or fallback
+// Exported component — picks native glass toolbar or JS pill fallback
 // ---------------------------------------------------------------------------
 
-const useNativeToolbar = !!(
-  nativeComponents.ControlGroup &&
-  nativeComponents.Button &&
-  nativeComponents.buttonStyle &&
-  nativeComponents.controlSize &&
-  nativeComponents.tint
-)
+// Every component/modifier used by NativeToolbar must be verified non-null
+// here (registry entries are null on Android and in Expo Go). Android always
+// falls through to the JS pill toolbar.
+const useNativeToolbar =
+  Platform.OS === 'ios' &&
+  !!(
+    nativeComponents.Button &&
+    nativeComponents.HStack &&
+    nativeComponents.GlassEffectContainer &&
+    nativeComponents.Divider &&
+    nativeComponents.buttonStyle &&
+    nativeComponents.controlSize &&
+    nativeComponents.tint &&
+    nativeComponents.disabled
+  )
 
 export const RichTextToolbar: React.FC<RichTextToolbarProps> = (props) =>
   useNativeToolbar ? <NativeToolbar {...props} /> : <FallbackToolbar {...props} />
@@ -288,18 +359,17 @@ export const RichTextToolbar: React.FC<RichTextToolbarProps> = (props) =>
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
-  // Native ControlGroup toolbar
+  // Native glass toolbar
   nativeContainer: {
     marginBottom: t.spacing.xs,
   },
   nativeScroll: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
     paddingHorizontal: 2,
     paddingVertical: 2,
   },
-  groupHost: {
+  nativeHost: {
     flexShrink: 0,
   },
 

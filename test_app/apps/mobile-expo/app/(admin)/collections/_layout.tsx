@@ -10,6 +10,7 @@ import React from 'react'
 import { StyleSheet, View } from 'react-native'
 import { Stack } from 'expo-router'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+import { useListColors } from '@payload-universal/admin-native'
 import {
   ProgressiveBlurHeader,
   HeaderBackgroundFallback,
@@ -26,15 +27,19 @@ function CollectionsStack() {
   const insets = useSafeAreaInsets()
   const headerHeight = insets.top + NAV_BAR_HEIGHT
   const scrollY = useHeaderScrollY()
+  // Palette-driven tint: matches the scheme-aware header background
+  // (ProgressiveBlurHeader / HeaderBackgroundFallback) so toolbar icons are
+  // never white-on-white in either scheme.
+  const { colors: c } = useListColors()
 
   return (
     <View style={styles.container}>
       <Stack
         screenOptions={{
           headerTransparent: true,
-          headerTintColor: '#1f1f1f',
+          headerTintColor: c.text,
           headerTitleStyle: { fontWeight: '700', fontSize: 17 },
-          headerBackTitleVisible: false,
+          headerBackButtonDisplayMode: 'minimal',
           headerShadowVisible: false,
           ...(hasProgressiveBlur
             ? {}
@@ -56,6 +61,17 @@ function CollectionsStack() {
           name="[slug]/details"
           options={{
             title: 'Details',
+            presentation: 'formSheet',
+            sheetAllowedDetents: [0.5, 0.75, 1.0],
+            sheetGrabberVisible: true,
+            sheetCornerRadius: 20,
+            headerShown: false,
+          } as any}
+        />
+        <Stack.Screen
+          name="[slug]/api"
+          options={{
+            title: 'API',
             presentation: 'formSheet',
             sheetAllowedDetents: [0.5, 0.75, 1.0],
             sheetGrabberVisible: true,

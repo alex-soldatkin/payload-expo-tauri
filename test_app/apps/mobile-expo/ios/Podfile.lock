@@ -2171,6 +2171,28 @@ PODS:
     - React-utils (= 0.83.1)
     - ReactNativeDependencies
   - ReactNativeDependencies (0.83.1)
+  - ReactNativeEnriched (0.5.2):
+    - hermes-engine
+    - RCTRequired
+    - RCTTypeSafety
+    - React-Core
+    - React-Core-prebuilt
+    - React-debug
+    - React-Fabric
+    - React-featureflags
+    - React-graphics
+    - React-ImageManager
+    - React-jsi
+    - React-NativeModulesApple
+    - React-RCTFabric
+    - React-renderercss
+    - React-rendererdebug
+    - React-utils
+    - ReactCodegen
+    - ReactCommon/turbomodule/bridging
+    - ReactCommon/turbomodule/core
+    - ReactNativeDependencies
+    - Yoga
   - RNCMaskedView (0.3.2):
     - hermes-engine
     - RCTRequired
@@ -2622,6 +2644,7 @@ DEPENDENCIES:
   - ReactCodegen (from `build/generated/ios/ReactCodegen`)
   - "ReactCommon/turbomodule/core (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native/ReactCommon`)"
   - "ReactNativeDependencies (from `../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec`)"
+  - "ReactNativeEnriched (from `../../../node_modules/.pnpm/react-native-enriched@0.5.2_react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-_90ce8f2c0afe5b4cac506728ffca7d1e/node_modules/react-native-enriched`)"
   - "RNCMaskedView (from `../../../node_modules/.pnpm/@react-native-masked-view+masked-view@0.3.2_react-native@0.83.1_@babel+core@7.27.3_@rea_05b6f67997a110a70fdbc997021f23d9/node_modules/@react-native-masked-view/masked-view`)"
   - "RNCPicker (from `../../../node_modules/.pnpm/@react-native-picker+picker@2.11.4_react-native@0.83.1_@babel+core@7.27.3_@react-native_b498ecad982360026d6ed6b6d5e1dd78/node_modules/@react-native-picker/picker`)"
   - "RNDateTimePicker (from `../../../node_modules/.pnpm/@react-native-community+datetimepicker@8.6.0_expo@55.0.0-canary-20260128-67ce8d5_react-_5acfc5fc9b9f706bd633e5b2ed96853f/node_modules/@react-native-community/datetimepicker`)"
@@ -2863,6 +2886,8 @@ EXTERNAL SOURCES:
     :path: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native/ReactCommon"
   ReactNativeDependencies:
     :podspec: "../../../node_modules/.pnpm/react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-config@0.84.1_@babel+core@7._6d7f2f4c64241331076b30d7b689b210/node_modules/react-native/third-party-podspecs/ReactNativeDependencies.podspec"
+  ReactNativeEnriched:
+    :path: "../../../node_modules/.pnpm/react-native-enriched@0.5.2_react-native@0.83.1_@babel+core@7.27.3_@react-native+metro-_90ce8f2c0afe5b4cac506728ffca7d1e/node_modules/react-native-enriched"
   RNCMaskedView:
     :path: "../../../node_modules/.pnpm/@react-native-masked-view+masked-view@0.3.2_react-native@0.83.1_@babel+core@7.27.3_@rea_05b6f67997a110a70fdbc997021f23d9/node_modules/@react-native-masked-view/masked-view"
   RNCPicker:
@@ -2997,6 +3022,7 @@ SPEC CHECKSUMS:
   ReactCodegen: 837d704f2d5fd176b836f4ee1585edcde6d8b0cd
   ReactCommon: c24a308601d0bce5c9edf2f36afb0dbf7afaf6ef
   ReactNativeDependencies: 8251abe806f806661dc3dfcb49588fcc150100c7
+  ReactNativeEnriched: 7d7f28e114d9b260d1f1986905a2ec130b70df6c
   RNCMaskedView: d2578d41c59b936db122b2798ba37e4722d21035
   RNCPicker: c8a3584b74133464ee926224463fcc54dfdaebca
   RNDateTimePicker: 9c0a849bbe1c256f0854fea255734b715f5ea876

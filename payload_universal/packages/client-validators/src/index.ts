@@ -16,6 +16,8 @@
 
 // Types
 export type {
+  AnyField,
+  FieldOption,
   ClientValidate,
   ClientValidateOptions,
   ClientTranslate,

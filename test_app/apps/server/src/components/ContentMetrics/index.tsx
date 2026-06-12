@@ -87,7 +87,7 @@ export const ContentMetrics: React.FC<{ path: string }> = ({ path }) => {
         </p>
       )}
 
-      <FieldDescription description={`Collection: ${collectionSlug ?? 'unknown'}`} />
+      <FieldDescription description={`Collection: ${collectionSlug ?? 'unknown'}`} path={path} />
     </div>
   )
 }

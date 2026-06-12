@@ -1,35 +1,54 @@
 /**
  * DocumentActionsMenu — native menu for the document edit header.
  *
- * Uses @expo/ui SwiftUI Picker with `pickerStyle('menu')` to render a native
- * iOS dropdown menu triggered by an SF Symbol button (ellipsis).
- * Falls back to a BottomSheet on Android / when @expo/ui is unavailable.
+ * iOS: @expo/ui SwiftUI Menu (tap-to-open pulldown) with real menu items —
+ * SF Symbol icons, destructive roles and Divider-separated groups.
+ * Android: @expo/ui Jetpack Compose ContextMenu (press-to-open dropdown).
+ * Falls back to a BottomSheet when @expo/ui is unavailable (Expo Go).
  *
  * Shows contextual actions based on collection capabilities:
  *  - "Versions" (when the collection has versions enabled)
  *  - "Save as Draft" / "Publish" / "Unpublish" (when drafts are enabled)
+ *  - custom `extraActions` from Payload config (editMenuItems)
  */
-import React, { useCallback, useMemo, useState } from 'react'
-import { Pressable, StyleSheet, Text, View } from 'react-native'
+import React, { useMemo, useState } from 'react'
+import { Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native'
 
 import { BottomSheet } from './BottomSheet'
 import { NativeHost } from './fields/NativeHost'
 import { nativeComponents } from './fields/shared'
 import { defaultTheme as t } from './theme'
 
+const DESTRUCTIVE_RED = '#FF3B30'
+
 // ---------------------------------------------------------------------------
 // Action item type
 // ---------------------------------------------------------------------------
 
+/** Built-in groups, separated by dividers in the native menus. */
+type ActionGroup = 'versions' | 'drafts' | 'extra'
+
 type ActionItem = {
   key: string
   label: string
+  /** SF Symbol name (iOS native menu). */
+  icon?: string
+  destructive?: boolean
+  group: ActionGroup
   onPress: () => void
 }
 
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
+
+/** An extra action item passed from the screen (e.g. custom edit actions). */
+type ExtraAction = {
+  label: string
+  icon?: string
+  destructive?: boolean
+  onPress: () => void
+}
 
 type Props = {
   /** Whether the collection has versions enabled. */
@@ -43,6 +62,8 @@ type Props = {
   onSaveDraft?: () => void
   onPublish?: () => void
   onUnpublish?: () => void
+  /** Additional action items from custom Payload config (editMenuItems). */
+  extraActions?: ExtraAction[]
 }
 
 // ---------------------------------------------------------------------------
@@ -50,84 +71,191 @@ type Props = {
 // ---------------------------------------------------------------------------
 
 const useActions = (props: Props): ActionItem[] => {
-  const { hasVersions, hasDrafts, currentStatus, onViewVersions, onSaveDraft, onPublish, onUnpublish } = props
+  const { hasVersions, hasDrafts, currentStatus, onViewVersions, onSaveDraft, onPublish, onUnpublish, extraActions } = props
 
   return useMemo(() => {
     const actions: ActionItem[] = []
 
     if (hasVersions && onViewVersions) {
-      actions.push({ key: 'versions', label: 'Versions', onPress: onViewVersions })
+      actions.push({
+        key: 'versions',
+        label: 'Versions',
+        icon: 'clock.arrow.circlepath',
+        group: 'versions',
+        onPress: onViewVersions,
+      })
     }
     if (hasDrafts) {
       if (currentStatus === 'published' && onSaveDraft) {
-        actions.push({ key: 'save-draft', label: 'Save as Draft', onPress: onSaveDraft })
+        actions.push({
+          key: 'save-draft',
+          label: 'Save as Draft',
+          icon: 'arrow.down.doc',
+          group: 'drafts',
+          onPress: onSaveDraft,
+        })
       }
       if (currentStatus === 'draft' && onPublish) {
-        actions.push({ key: 'publish', label: 'Publish', onPress: onPublish })
+        actions.push({
+          key: 'publish',
+          label: 'Publish',
+          icon: 'arrow.up.doc',
+          group: 'drafts',
+          onPress: onPublish,
+        })
       }
       if (currentStatus === 'published' && onUnpublish) {
-        actions.push({ key: 'unpublish', label: 'Unpublish', onPress: onUnpublish })
+        actions.push({
+          key: 'unpublish',
+          label: 'Unpublish',
+          icon: 'eye.slash',
+          destructive: true,
+          group: 'drafts',
+          onPress: onUnpublish,
+        })
+      }
+    }
+
+    // Append custom extra actions from Payload config
+    if (extraActions) {
+      for (const extra of extraActions) {
+        actions.push({
+          key: `extra-${extra.label}`,
+          label: extra.label,
+          icon: extra.icon,
+          destructive: extra.destructive,
+          group: 'extra',
+          onPress: extra.onPress,
+        })
       }
     }
 
     return actions
-  }, [hasVersions, hasDrafts, currentStatus, onViewVersions, onSaveDraft, onPublish, onUnpublish])
+  }, [hasVersions, hasDrafts, currentStatus, onViewVersions, onSaveDraft, onPublish, onUnpublish, extraActions])
 }
 
+const GROUP_ORDER: ActionGroup[] = ['versions', 'drafts', 'extra']
+
+/** Split actions into non-empty groups (dividers go between them). */
+const groupActions = (actions: ActionItem[]): ActionItem[][] =>
+  GROUP_ORDER.map((group) => actions.filter((a) => a.group === group)).filter(
+    (group) => group.length > 0,
+  )
+
 // ---------------------------------------------------------------------------
-// Native iOS: SwiftUI Picker with menu style
+// Native iOS: SwiftUI Menu with real menu items
 // ---------------------------------------------------------------------------
 
-const NativeMenuPicker: React.FC<Props> = (props) => {
+const NativeMenu: React.FC<Props> = (props) => {
   const actions = useActions(props)
-  const NativePicker = nativeComponents.Picker!
-  const NativeText = nativeComponents.Text!
-  const tag = nativeComponents.tag!
-  const psModifier = nativeComponents.pickerStyle!
-
-  // Use an empty/sentinel value so no item appears "selected"
-  const [selection, setSelection] = useState<string | null>('__none__')
-
-  const handleSelectionChange = useCallback((value: string | null) => {
-    if (!value || value === '__none__') return
-    const action = actions.find((a) => a.key === value)
-    if (action) {
-      action.onPress()
-    }
-    // Reset selection so the picker acts like an action menu, not a selector
-    setSelection('__none__')
-  }, [actions])
+  const Menu = nativeComponents.Menu!
+  const MenuButton = nativeComponents.Button!
+  const MenuDivider = nativeComponents.Divider
 
   if (actions.length === 0) return null
 
+  const items: React.ReactNode[] = []
+  groupActions(actions).forEach((group, groupIndex) => {
+    if (groupIndex > 0 && MenuDivider) {
+      items.push(<MenuDivider key={`divider-${groupIndex}`} />)
+    }
+    for (const action of group) {
+      items.push(
+        <MenuButton
+          key={action.key}
+          label={action.label}
+          systemImage={action.icon}
+          role={action.destructive ? 'destructive' : undefined}
+          onPress={action.onPress}
+        />,
+      )
+    }
+  })
+
   return (
     <NativeHost matchContents>
-      <NativePicker
-        selection={selection}
-        onSelectionChange={handleSelectionChange}
-        systemImage="ellipsis"
-        label=""
-        modifiers={[psModifier('menu')]}
-      >
-        {/* Hidden sentinel so no visible item is pre-selected */}
-        <NativeText modifiers={[tag('__none__')]}>{' '}</NativeText>
-        {actions.map((action) => (
-          <NativeText key={action.key} modifiers={[tag(action.key)]}>
-            {action.label}
-          </NativeText>
-        ))}
-      </NativePicker>
+      <Menu label="" systemImage="ellipsis.circle">
+        {items}
+      </Menu>
     </NativeHost>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Fallback: BottomSheet for Android / unsupported platforms
+// Native Android: Jetpack Compose ContextMenu (press-to-open dropdown)
+// ---------------------------------------------------------------------------
+
+/**
+ * Material icon names for the built-in actions. The canary jetpack-compose
+ * MaterialIcon set is small ('variant.Name'); SF Symbol names from
+ * extraActions can't be mapped, so extras only get an icon when they already
+ * look like a valid MaterialIcon ('outlined.Delete', ...).
+ */
+const ANDROID_ICONS: Record<string, string> = {
+  versions: 'outlined.List',
+  'save-draft': 'outlined.Done',
+  publish: 'filled.Send',
+  unpublish: 'outlined.Clear',
+}
+
+const MATERIAL_ICON_RE = /^(rounded|twotone|outlined|filled|sharp)\.[A-Za-z]+$/
+
+const androidIconFor = (action: ActionItem): string | undefined => {
+  const builtin = ANDROID_ICONS[action.key]
+  if (builtin) return builtin
+  if (action.icon && MATERIAL_ICON_RE.test(action.icon)) return action.icon
+  return undefined
+}
+
+const AndroidNativeMenu: React.FC<Props> = (props) => {
+  const actions = useActions(props)
+  const colorScheme = useColorScheme()
+  const isDark = colorScheme === 'dark'
+
+  // The canary JC ContextMenu accepts an RN `style` prop (it's an RN-layouted
+  // native view) — not part of the shared registry type, hence the cast.
+  const ContextMenu = nativeComponents.ContextMenu! as React.ComponentType<any>
+  const Trigger = nativeComponents.ContextMenuTrigger!
+  const Items = nativeComponents.ContextMenuItems!
+  const JCButton = nativeComponents.JCButton!
+
+  if (actions.length === 0) return null
+
+  return (
+    <ContextMenu style={styles.androidMenuAnchor}>
+      <Items>
+        {actions.map((action) => (
+          <JCButton
+            key={action.key}
+            variant="borderless"
+            leadingIcon={androidIconFor(action)}
+            elementColors={
+              action.destructive ? { contentColor: DESTRUCTIVE_RED } : undefined
+            }
+            onPress={action.onPress}
+          >
+            {action.label}
+          </JCButton>
+        ))}
+      </Items>
+      <Trigger>
+        <View style={styles.androidTrigger}>
+          <Text style={[styles.ellipsis, isDark && styles.ellipsisDark]}>{'⋯'}</Text>
+        </View>
+      </Trigger>
+    </ContextMenu>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Fallback: BottomSheet for Expo Go / unsupported platforms
 // ---------------------------------------------------------------------------
 
 const FallbackMenu: React.FC<Props> = (props) => {
   const actions = useActions(props)
   const [visible, setVisible] = useState(false)
+  const colorScheme = useColorScheme()
+  const isDark = colorScheme === 'dark'
 
   if (actions.length === 0) return null
 
@@ -136,21 +264,32 @@ const FallbackMenu: React.FC<Props> = (props) => {
   return (
     <>
       <Pressable onPress={() => setVisible(true)} hitSlop={8}>
-        <Text style={styles.ellipsis}>{'...'}</Text>
+        <Text style={[styles.ellipsis, isDark && styles.ellipsisDark]}>{'...'}</Text>
       </Pressable>
 
       <BottomSheet visible={visible} onClose={() => setVisible(false)} height={sheetHeight}>
-        <Text style={styles.title}>Actions</Text>
+        <Text style={[styles.title, isDark && styles.textDark]}>Actions</Text>
         {actions.map((action) => (
           <Pressable
             key={action.key}
-            style={({ pressed }) => [styles.row, pressed && styles.rowPressed]}
+            style={({ pressed }) => [
+              styles.row,
+              pressed && (isDark ? styles.rowPressedDark : styles.rowPressed),
+            ]}
             onPress={() => {
               action.onPress()
               setVisible(false)
             }}
           >
-            <Text style={styles.rowLabel}>{action.label}</Text>
+            <Text
+              style={[
+                styles.rowLabel,
+                isDark && styles.textDark,
+                action.destructive && styles.rowLabelDestructive,
+              ]}
+            >
+              {action.label}
+            </Text>
           </Pressable>
         ))}
       </BottomSheet>
@@ -166,28 +305,55 @@ export const DocumentActionsMenu: React.FC<Props> = (props) => {
   const actions = useActions(props)
   if (actions.length === 0) return null
 
-  if (nativeComponents.Picker && nativeComponents.Text && nativeComponents.tag && nativeComponents.pickerStyle) {
-    return <NativeMenuPicker {...props} />
+  if (Platform.OS === 'ios' && nativeComponents.Menu && nativeComponents.Button) {
+    return <NativeMenu {...props} />
+  }
+  if (
+    Platform.OS === 'android' &&
+    nativeComponents.ContextMenu &&
+    nativeComponents.ContextMenuTrigger &&
+    nativeComponents.ContextMenuItems &&
+    nativeComponents.JCButton
+  ) {
+    return <AndroidNativeMenu {...props} />
   }
   return <FallbackMenu {...props} />
 }
 
 // ---------------------------------------------------------------------------
-// Styles (fallback only)
+// Styles (Android trigger + fallback)
 // ---------------------------------------------------------------------------
 
 const styles = StyleSheet.create({
+  androidMenuAnchor: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  androidTrigger: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   ellipsis: {
     fontSize: 22,
     fontWeight: '700',
     color: t.colors.text,
     letterSpacing: 2,
   },
+  ellipsisDark: {
+    color: 'rgba(255,255,255,0.92)',
+  },
   title: {
     fontSize: t.fontSize.lg,
     fontWeight: '700',
     color: t.colors.text,
     marginBottom: t.spacing.md,
+  },
+  textDark: {
+    color: 'rgba(255,255,255,0.92)',
   },
   row: {
     flexDirection: 'row',
@@ -200,9 +366,15 @@ const styles = StyleSheet.create({
   rowPressed: {
     backgroundColor: '#f5f5f5',
   },
+  rowPressedDark: {
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
   rowLabel: {
     fontSize: t.fontSize.md,
     color: t.colors.text,
     fontWeight: '500',
+  },
+  rowLabelDestructive: {
+    color: DESTRUCTIVE_RED,
   },
 })

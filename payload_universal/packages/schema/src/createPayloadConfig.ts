@@ -2,7 +2,7 @@ import { mongooseAdapter } from '@payloadcms/db-mongodb'
 import { lexicalEditor } from '@payloadcms/richtext-lexical'
 import path from 'node:path'
 import { APIError, buildConfig, canAccessAdmin } from 'payload'
-import type { CollectionConfig, Config } from 'payload'
+import type { CollectionConfig, Config, SanitizedConfig } from 'payload'
 import sharp from 'sharp'
 
 import { buildAdminSchema } from '@payload-universal/admin-schema'
@@ -50,9 +50,9 @@ export const createAdminSchemaEndpoint = (
     try {
       await canAccessAdmin({ req })
 
-      const url = new URL(req.url)
+      const url = req.url ? new URL(req.url) : undefined
       const language =
-        url.searchParams.get('language') || url.searchParams.get('lang') || req.i18n?.language
+        url?.searchParams.get('language') || url?.searchParams.get('lang') || req.i18n?.language
 
       // Use the already-sanitized config from the running Payload instance
       // instead of the raw config. This avoids re-running buildConfig() inside
@@ -180,7 +180,10 @@ export const createRawConfig = (args: PayloadUniversalConfigArgs): Config => {
       }),
     endpoints: [],
     plugins: plugins ?? [],
-    sharp: sharpOverride ?? sharp,
+    // The locally installed sharp's signatures differ slightly from the sharp
+    // version payload's SharpDependency type is built against — identical at
+    // runtime, so bridge the version skew here.
+    sharp: sharpOverride ?? (sharp as unknown as NonNullable<Config['sharp']>),
   }
 
   config.endpoints = [
@@ -194,7 +197,7 @@ export const createRawConfig = (args: PayloadUniversalConfigArgs): Config => {
   return config
 }
 
-export const createPayloadConfig = (args: PayloadUniversalConfigArgs): Config => {
+export const createPayloadConfig = (args: PayloadUniversalConfigArgs): Promise<SanitizedConfig> => {
   return buildConfig(createRawConfig(args))
 }
 

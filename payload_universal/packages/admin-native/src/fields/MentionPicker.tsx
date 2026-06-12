@@ -21,6 +21,7 @@ import { BottomSheet } from '../BottomSheet'
 import { usePayloadNative } from '../PayloadNativeProvider'
 import { CollectionIcon } from '../CollectionIcon'
 import { payloadApi } from '../utils/api'
+import { useListColors } from '../hooks/useListColors'
 
 // Optional: GlassView for liquid glass effect on result cards (iOS 26+)
 let GlassView: React.ComponentType<any> | null = null
@@ -108,6 +109,7 @@ export const MentionPicker: React.FC<Props> = ({
   onDismiss,
 }) => {
   const { baseURL, auth, schema } = usePayloadNative()
+  const { colors: c } = useListColors()
   const localDB = _useLocalDB ? _useLocalDB() : null
 
   // Local search state — initialised from the external searchText prop
@@ -295,8 +297,8 @@ export const MentionPicker: React.FC<Props> = ({
     if (row.type === 'header') {
       return (
         <View style={styles.sectionHeader}>
-          <CollectionIcon icon={row.section.icon} size={16} color={t.colors.textMuted} />
-          <Text style={styles.sectionLabel}>{row.section.label}</Text>
+          <CollectionIcon icon={row.section.icon} size={16} color={c.textMuted} />
+          <Text style={[styles.sectionLabel, { color: c.textMuted }]}>{row.section.label}</Text>
         </View>
       )
     }
@@ -305,9 +307,9 @@ export const MentionPicker: React.FC<Props> = ({
 
     const content = (
       <>
-        <Text style={styles.itemTitle} numberOfLines={1}>{item.title}</Text>
-        <View style={styles.badge}>
-          <Text style={styles.badgeText}>{item.collectionLabel}</Text>
+        <Text style={[styles.itemTitle, { color: c.text }]} numberOfLines={1}>{item.title}</Text>
+        <View style={[styles.badge, { backgroundColor: c.pressed }]}>
+          <Text style={[styles.badgeText, { color: c.textMuted }]}>{item.collectionLabel}</Text>
         </View>
       </>
     )
@@ -323,11 +325,11 @@ export const MentionPicker: React.FC<Props> = ({
     }
 
     return (
-      <Pressable style={styles.itemRow} onPress={() => handleSelect(item)}>
+      <Pressable style={[styles.itemRow, { borderBottomColor: c.separator }]} onPress={() => handleSelect(item)}>
         {content}
       </Pressable>
     )
-  }, [handleSelect])
+  }, [handleSelect, c])
 
   const keyExtractor = useCallback(
     (row: typeof flatData[number], index: number) =>
@@ -337,13 +339,13 @@ export const MentionPicker: React.FC<Props> = ({
 
   return (
     <BottomSheet visible={visible} onClose={onDismiss} height={0.6}>
-      <Text style={styles.sheetTitle}>Mention a document</Text>
+      <Text style={[styles.sheetTitle, { color: c.text }]}>Mention a document</Text>
       <TextInput
-        style={styles.searchInput}
+        style={[styles.searchInput, { borderColor: c.border, color: c.text }]}
         value={search}
         onChangeText={setSearch}
         placeholder="Search across collections..."
-        placeholderTextColor={t.colors.textPlaceholder}
+        placeholderTextColor={c.textPlaceholder}
         autoCapitalize="none"
         autoCorrect={false}
         autoFocus
@@ -356,7 +358,7 @@ export const MentionPicker: React.FC<Props> = ({
         keyboardShouldPersistTaps="handled"
         ListEmptyComponent={
           !loading ? (
-            <Text style={styles.emptyText}>
+            <Text style={[styles.emptyText, { color: c.textMuted }]}>
               {search.trim().length > 0 ? 'No matching documents' : 'Type to search...'}
             </Text>
           ) : null

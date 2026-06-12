@@ -11,7 +11,6 @@ import {
     useForm,
     useAuth,
     useTranslation,
-    Card,
     Pill,
     Banner,
     Button,
@@ -19,7 +18,6 @@ import {
     Gutter,
     FieldLabel,
     FieldDescription,
-    Loading,
 } from '@payload-universal/ui'
 import { View, Text } from "react-native";
 
@@ -40,7 +38,7 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
     const { value: publishedDate } = useField<string>({ path: 'publishedDate' })
     const { value: featured } = useField<boolean>({ path: 'featured' })
     const { getData } = useForm()
-    const { user } = useAuth()
+    const { user } = (useAuth() as { user: any; permissions: Record<string, any> })
     const { t } = useTranslation()
     const [showHistory, setShowHistory] = useState(false)
 
@@ -68,7 +66,7 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
     }, [title])
 
     return (
-        <Card>
+        <View className="card" style={{ flexDirection: 'column' }}>
             <View style={{ marginBottom: 12 }}>
                 <FieldLabel label="Post Status Overview" />
             </View>
@@ -116,7 +114,7 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
 
             {/* Collapsible history section */}
             <View style={{ marginTop: 16 }}>
-                <Collapsible label="Status History" initCollapsed>
+                <Collapsible header="Status History" initCollapsed>
                     <View style={{ padding: 8 }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                             <Pill pillStyle="light-gray">v3</Pill>
@@ -134,8 +132,11 @@ export const StatusDashboard: React.FC<{ path: string }> = ({ path }) => {
                 </Collapsible>
             </View>
 
-            <FieldDescription description="Status dashboard powered by @payloadcms/ui custom components" />
-        </Card>
+            <FieldDescription
+                description="Status dashboard powered by @payloadcms/ui custom components"
+                path={path}
+            />
+        </View>
     )
 }
 

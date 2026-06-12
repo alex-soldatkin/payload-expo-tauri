@@ -17,7 +17,7 @@ export const SlugField: React.FC<any> = ({ path, label, description, required })
         <View className="custom-slug-field" style={{ marginBottom: 16 }}>
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <FieldLabel label={label || 'Custom Slug Component'} />
-                <Button onPress={generateSlug} style={{ paddingVertical: 4, paddingHorizontal: 8, fontSize: 12 }}>
+                <Button onPress={generateSlug} buttonStyle="secondary" size="xsmall">
                     Regenerate
                 </Button>
             </View>
@@ -27,12 +27,12 @@ export const SlugField: React.FC<any> = ({ path, label, description, required })
                     value={value || ''}
                     onChangeText={(text) => setValue(text)}
                     placeholder="yoursite.com/post/auto-generated-slug"
-                    style={{ width: '100%', padding: 8 }}
+                    style={{ width: '100%', padding: 8, borderWidth: 1, borderColor: '#ccc' }}
                 />
             </View>
 
-            <FieldDescription description={description} />
-            {errorMessage && <FieldError error={errorMessage} />}
+            <FieldDescription description={description} path={path} />
+            {errorMessage && <FieldError message={errorMessage} path={path} showError />}
             <Pill>Experimental Field Plugin</Pill>
         </View>
     )

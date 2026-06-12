@@ -8,8 +8,8 @@
  * Uses Payload's `updatedAt` as the replication checkpoint.
  * Conflict strategy: server wins (last-write-wins based on updatedAt).
  */
-import { replicateRxCollection } from 'rxdb/plugins/replication'
-import type { RxCollection, RxReplicationState } from 'rxdb'
+import { replicateRxCollection, type RxReplicationState } from 'rxdb/plugins/replication'
+import type { ReplicationOptions, RxCollection, WithDeleted } from 'rxdb'
 import { Subject, interval as rxInterval } from 'rxjs'
 import { map } from 'rxjs/operators'
 import type { PayloadDoc } from '../utils/schemaFromPayload'
@@ -59,7 +59,7 @@ export const startReplication = (
   const getToken = (): string | null =>
     typeof tokenOrGetter === 'function' ? tokenOrGetter() : tokenOrGetter
 
-  const replicationConfig: any = {
+  const replicationConfig: ReplicationOptions<PayloadDoc, Checkpoint> = {
     collection,
     replicationIdentifier: `payload-${slug}`,
     deletedField: '_deleted',
@@ -145,7 +145,7 @@ export const startReplication = (
               updatedAt: filtered[filtered.length - 1].updatedAt,
               id: filtered[filtered.length - 1].id,
             }
-          : checkpoint
+          : checkpoint ?? null
 
 
 

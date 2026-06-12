@@ -12,6 +12,9 @@ public class ScrollablePreviewModule: Module {
       Prop("previewHeight") { (view: ScrollablePreviewTriggerView, value: CGFloat?) in
         view.previewHeight = value
       }
+      Prop("previewHeightFraction") { (view: ScrollablePreviewTriggerView, value: CGFloat?) in
+        view.previewHeightFraction = value
+      }
       Events("onPrimaryAction", "onPreviewOpen", "onPreviewClose")
     }
 

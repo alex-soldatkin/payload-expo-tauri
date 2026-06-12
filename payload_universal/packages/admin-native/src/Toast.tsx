@@ -6,7 +6,16 @@
  * Each toast type gets a themed icon and accent color.
  */
 import React, { createContext, useCallback, useContext, useRef, useState } from 'react'
-import { Animated, Platform, Pressable, StyleSheet, Text, useColorScheme, View } from 'react-native'
+import {
+  Animated,
+  PanResponder,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  useColorScheme,
+  View,
+} from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 
 // ---------------------------------------------------------------------------
@@ -23,6 +32,17 @@ try {
   if (globalThis.expo?.getViewConfig?.('ExpoBlur', 'ExpoBlurView') != null) {
     BlurView = require('expo-blur').BlurView
   }
+} catch {
+  /* not available */
+}
+
+// Optional: GlassView for liquid glass pills on iOS 26+
+let GlassView: React.ComponentType<any> | null = null
+let liquidGlassAvailable = false
+try {
+  const glassModule = require('expo-glass-effect')
+  GlassView = glassModule.GlassView
+  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
 } catch {
   /* not available */
 }
@@ -154,6 +174,9 @@ export const useToast = (): ToastContextValue => {
 
 let nextToastId = 0
 
+/** Maximum number of toasts visible at once — older ones are evicted. */
+const MAX_VISIBLE_TOASTS = 2
+
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([])
   const insets = useSafeAreaInsets()
@@ -171,7 +194,8 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         icon: options?.icon,
         duration: options?.duration ?? 3500,
       }
-      setToasts((prev) => [...prev, toast])
+      // Stack up to MAX_VISIBLE_TOASTS — evict the oldest beyond that
+      setToasts((prev) => [...prev, toast].slice(-MAX_VISIBLE_TOASTS))
 
       setTimeout(() => {
         setToasts((prev) => prev.filter((t) => t.id !== id))
@@ -211,6 +235,10 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
   const scale = useRef(new Animated.Value(0.85)).current
   const translateY = useRef(new Animated.Value(-12)).current
 
+  const dismissingRef = useRef(false)
+  const onDismissRef = useRef(onDismiss)
+  onDismissRef.current = onDismiss
+
   React.useEffect(() => {
     // Enter — scale + slide + fade
     Animated.parallel([
@@ -237,6 +265,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
 
     // Exit — fade out shortly before removal
     const fadeTimer = setTimeout(() => {
+      if (dismissingRef.current) return
       Animated.parallel([
         Animated.timing(opacity, {
           toValue: 0,
@@ -253,6 +282,49 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
 
     return () => clearTimeout(fadeTimer)
   }, [opacity, scale, translateY, toast.duration])
+
+  // Swipe-up flick out — like dismissing a system notification banner
+  const flickOut = useRef(() => {
+    if (dismissingRef.current) return
+    dismissingRef.current = true
+    Animated.parallel([
+      Animated.timing(translateY, {
+        toValue: -90,
+        duration: 180,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 160,
+        useNativeDriver: true,
+      }),
+    ]).start(() => onDismissRef.current(toast.id))
+  }).current
+
+  // Pan: upward drag follows the finger (downward rubber-bands slightly);
+  // release with enough distance/velocity dismisses, otherwise spring back.
+  const pan = useRef(
+    PanResponder.create({
+      onMoveShouldSetPanResponder: (_, gs) =>
+        Math.abs(gs.dy) > 4 && Math.abs(gs.dy) > Math.abs(gs.dx),
+      onPanResponderMove: (_, gs) => {
+        translateY.setValue(gs.dy < 0 ? gs.dy : gs.dy * 0.12)
+      },
+      onPanResponderRelease: (_, gs) => {
+        if (gs.dy < -24 || gs.vy < -0.6) {
+          flickOut()
+        } else {
+          Animated.spring(translateY, {
+            toValue: 0,
+            damping: 18,
+            stiffness: 240,
+            mass: 0.8,
+            useNativeDriver: true,
+          }).start()
+        }
+      },
+    }),
+  ).current
 
   const accentColor = ACCENT[toast.type]
 
@@ -272,9 +344,12 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
           transform: [{ translateY }, { scale }],
         },
       ]}
+      {...pan.panHandlers}
     >
-      {/* Blur background — adapts tint to colour scheme */}
-      {BlurView ? (
+      {/* Background: liquid glass (iOS 26+) → blur → solid fallback */}
+      {liquidGlassAvailable && GlassView ? (
+        <GlassView style={StyleSheet.absoluteFill} glassEffectStyle="regular" />
+      ) : BlurView ? (
         <BlurView
           style={StyleSheet.absoluteFill}
           intensity={Platform.OS === 'ios' ? 65 : 90}

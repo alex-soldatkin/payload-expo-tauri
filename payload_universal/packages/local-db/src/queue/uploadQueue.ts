@@ -63,7 +63,8 @@ export type EnqueueArgs = {
 export class UploadQueueManager {
   private collection: RxCollection<PendingUploadItem>
   private baseURL: string
-  private token: string | null
+  /** Token or getter function for the latest token (supports re-auth). */
+  private token: string | null | (() => string | null)
   private interval: ReturnType<typeof setInterval> | null = null
   private processing = false
   /** Callback to patch a local RxDB doc when upload succeeds */
@@ -72,13 +73,18 @@ export class UploadQueueManager {
   constructor(
     collection: RxCollection<PendingUploadItem>,
     baseURL: string,
-    token: string | null,
+    token: string | null | (() => string | null),
     patchLocalDoc?: (collection: string, docId: string, fieldPath: string, value: string) => Promise<void>,
   ) {
     this.collection = collection
     this.baseURL = baseURL
     this.token = token
     this.patchLocalDoc = patchLocalDoc
+  }
+
+  /** Always resolve the latest token (supports re-auth after logout/login). */
+  private getToken(): string | null {
+    return typeof this.token === 'function' ? this.token() : this.token
   }
 
   /** Add a file to the upload queue. Returns the queue item ID. */
@@ -142,10 +148,11 @@ export class UploadQueueManager {
           } as unknown as Blob)
           formData.append('alt', item.fileName.replace(/\.[^.]+$/, ''))
 
+          const token = this.getToken()
           const res = await fetch(`${this.baseURL}/api/${item.targetCollection}`, {
             method: 'POST',
             headers: {
-              ...(this.token ? { Authorization: `JWT ${this.token}` } : {}),
+              ...(token ? { Authorization: `JWT ${token}` } : {}),
             },
             body: formData,
           })
