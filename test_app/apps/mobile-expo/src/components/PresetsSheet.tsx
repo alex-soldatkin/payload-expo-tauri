@@ -35,6 +35,7 @@ import {
 } from 'react-native'
 import {
   CalendarDays,
+  ChartGantt,
   Check,
   Circle,
   CircleCheck,
@@ -55,6 +56,7 @@ import { nativeComponents, NativeHost } from '@payload-universal/admin-native/fi
 import { useLocalDB } from '@payload-universal/local-db'
 
 import type { CalendarConfig } from '@/src/hooks/useCalendarConfig'
+import type { GanttConfig } from '@/src/hooks/useGanttConfig'
 import type { KanbanConfig, ListViewMode } from '@/src/hooks/useKanbanConfig'
 import {
   useViewPresets,
@@ -85,6 +87,8 @@ export type PresetsSheetProps = {
   currentConfig: KanbanConfig
   /** Current calendar config (RESOLVED sources) — lifted into new/updated presets. */
   currentCalendarConfig: CalendarConfig
+  /** Current gantt config (RESOLVED sources) — lifted into new/updated presets. */
+  currentGanttConfig: GanttConfig
   /** Current structured filters as a Payload where (search excluded). */
   currentWhere: Record<string, unknown> | null
   /** Apply a preset: the screen writes config + view mode + filters. */
@@ -302,6 +306,7 @@ export function PresetsSheet({
   currentViewType,
   currentConfig,
   currentCalendarConfig,
+  currentGanttConfig,
   currentWhere,
   onApply,
 }: PresetsSheetProps) {
@@ -327,9 +332,10 @@ export function PresetsSheet({
       viewType: currentViewType,
       config: currentConfig,
       calendar: currentCalendarConfig,
+      gantt: currentGanttConfig,
       where: currentWhere,
     }),
-    [currentViewType, currentConfig, currentCalendarConfig, currentWhere],
+    [currentViewType, currentConfig, currentCalendarConfig, currentGanttConfig, currentWhere],
   )
 
   // ── Editor actions ────────────────────────────────────────────────────
@@ -445,6 +451,8 @@ export function PresetsSheet({
           <SquareKanban size={20} color={colors.textMuted} />
         ) : preset.viewType === 'calendar' ? (
           <CalendarDays size={20} color={colors.textMuted} />
+        ) : preset.viewType === 'gantt' ? (
+          <ChartGantt size={20} color={colors.textMuted} />
         ) : (
           <Table2 size={20} color={colors.textMuted} />
         )}
@@ -455,7 +463,9 @@ export function PresetsSheet({
               ? 'Kanban'
               : preset.viewType === 'calendar'
                 ? 'Calendar'
-                : 'Table'}
+                : preset.viewType === 'gantt'
+                  ? 'Gantt'
+                  : 'Table'}
             {preset.where != null ? ' · filtered' : ''}
           </Text>
         </View>
@@ -571,7 +581,7 @@ export function PresetsSheet({
       <View style={styles.sheetHeader}>
         <View style={{ flex: 1 }}>
           <Text style={styles.sheetTitle}>View Presets</Text>
-          <Text style={styles.sheetHint}>Saved table, kanban & calendar views for this collection.</Text>
+          <Text style={styles.sheetHint}>Saved table, kanban, calendar & gantt views for this collection.</Text>
         </View>
       </View>
 

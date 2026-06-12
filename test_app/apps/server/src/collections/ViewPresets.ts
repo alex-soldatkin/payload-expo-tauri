@@ -118,6 +118,7 @@ export const ViewPresets: CollectionConfig = {
         { label: 'Table', value: 'table' },
         { label: 'Kanban', value: 'kanban' },
         { label: 'Calendar', value: 'calendar' },
+        { label: 'Gantt', value: 'gantt' },
       ],
     },
     {
@@ -189,6 +190,36 @@ export const ViewPresets: CollectionConfig = {
       admin: {
         description: 'Calendar mode the view opens in',
         condition: (data) => data?.viewType === 'calendar',
+      },
+    },
+    {
+      // JSON array of date(-range) sources plotted as gantt bars — the SAME
+      // entry shape as calendarSources (the shared ScheduleSource contract in
+      // @payload-universal/admin-native/src/scheduling):
+      //   { id: string; label: string; startField: string; endField?: string;
+      //     color: string; hidden?: boolean }
+      // startField/endField are dot-paths to date fields on the related
+      // collection; omitting endField makes it a single-day (point) bar;
+      // hidden seeds the source-visibility toggles.
+      name: 'ganttSources',
+      type: 'json',
+      admin: {
+        description:
+          'Array of { id, label, startField, endField?, color, hidden? } date sources shown on the gantt',
+        condition: (data) => data?.viewType === 'gantt',
+      },
+    },
+    {
+      // JSON gantt display options:
+      //   { pxPerDay?: number; rowSort?: string }
+      // pxPerDay: day-column width in px (default: the client's
+      //   DEFAULT_GANTT_PX_PER_DAY); rowSort: field name (dot-path) the rows
+      //   are ordered by.
+      name: 'ganttOptions',
+      type: 'json',
+      admin: {
+        description: 'Gantt options: { pxPerDay?: number, rowSort?: string }',
+        condition: (data) => data?.viewType === 'gantt',
       },
     },
     {

@@ -25,12 +25,12 @@ import {
   buildEventsByDateKey,
   formatWeekRangeLabel,
   getFirstDayOfWeek,
-  MAX_MONTH_CELL_DOTS,
   parseDateKey,
   todayDateKey,
   weekStartKey,
-} from './types'
-import type { CalendarEvent } from './types'
+} from '../scheduling'
+import type { CalendarEvent } from '../scheduling'
+import { MAX_MONTH_CELL_DOTS } from './types'
 
 // Optional: GlassView for the liquid glass strip card on iOS 26+
 let GlassView: React.ComponentType<any> | null = null

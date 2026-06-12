@@ -25,7 +25,7 @@ const VIEW_MODE_KEY_PREFIX = 'list_view_mode:'
 // Types
 // ---------------------------------------------------------------------------
 
-export type ListViewMode = 'table' | 'kanban' | 'calendar'
+export type ListViewMode = 'table' | 'kanban' | 'calendar' | 'gantt'
 
 export type KanbanConfig = {
   /** Select/radio field driving the columns. null = first eligible field. */
@@ -151,7 +151,8 @@ export function useKanbanConfig(slug: string): UseKanbanConfigResult {
 }
 
 // ---------------------------------------------------------------------------
-// useListViewMode — persisted table/kanban/calendar selection per collection
+// useListViewMode — persisted table/kanban/calendar/gantt selection per
+// collection
 // ---------------------------------------------------------------------------
 
 export function useListViewMode(
@@ -165,7 +166,9 @@ export function useListViewMode(
     AsyncStorage.getItem(VIEW_MODE_KEY_PREFIX + slug)
       .then((val) => {
         if (cancelled) return
-        if (val === 'kanban' || val === 'table' || val === 'calendar') setModeState(val)
+        if (val === 'kanban' || val === 'table' || val === 'calendar' || val === 'gantt') {
+          setModeState(val)
+        }
       })
       .catch(() => {})
     return () => {

@@ -17,6 +17,11 @@
  *    variants (no docs / no search results / filtered out), JS fallback
  *  - Liquid-glass row cards on iOS 26+ with themed fallbacks; dark mode
  *  - Pull-to-refresh and infinite scroll
+ *  - Tablet table mode (`tableMode`) — web-admin-parity rows: frozen title
+ *    column (+ status pill with drafts), horizontally scrollable type-aware
+ *    fixed-width field columns and a sticky tap-to-sort header band that
+ *    drives the shared horizontal scroll (see DocumentListTable.tsx for the
+ *    structure decision)
  */
 import React, { useCallback, useEffect, useRef, useState, useMemo } from 'react'
 import {
@@ -34,6 +39,12 @@ import {
 // react-native-gesture-handler Swipeable/ReanimatedSwipeable crash on iOS 26
 // in this row tree (see SwipeToDeleteRow.tsx header for the tier rationale).
 import { closeOpenSwipeRow, SwipeToDeleteRow } from './SwipeToDeleteRow'
+// Tablet table mode — frozen title column + shared-translate column track
+import {
+  buildTableColumns,
+  DocumentListTableHeader,
+  DocumentListTableRow,
+} from './DocumentListTable'
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
 import { defaultTheme as t } from './theme'
@@ -60,6 +71,8 @@ let ArrowUpDownIcon: React.ComponentType<{ size: number; color: string }> | null
 let InboxIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let SearchXIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let FilterXIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let ToggleLeftIcon: React.ComponentType<{ size: number; color: string }> | null = null
+let ToggleRightIcon: React.ComponentType<{ size: number; color: string }> | null = null
 try {
   const lucide = require('lucide-react-native')
   GripVerticalIcon = lucide.GripVertical
@@ -71,6 +84,8 @@ try {
   InboxIcon = lucide.Inbox
   SearchXIcon = lucide.SearchX
   FilterXIcon = lucide.FilterX
+  ToggleLeftIcon = lucide.ToggleLeft
+  ToggleRightIcon = lucide.ToggleRight
 } catch {
   /* lucide-react-native not available */
 }
@@ -301,6 +316,35 @@ type Props = {
    * lets a Presets surface lift the table-mode filters into a saved preset.
    */
   onFiltersChange?: (filters: ActiveFilter[]) => void
+  /**
+   * Tablet table mode — replaces the card rows with web-admin-parity table
+   * rows: a frozen ~160pt title column (useAsTitle value + status pill when
+   * the collection has drafts) plus horizontally scrollable, type-aware
+   * fixed-width columns for every summary field, under a sticky tap-to-sort
+   * header band. Column order = the summary-fields picker order. The header
+   * band is the horizontal pan surface (rows keep their gestures: tap,
+   * long-press peek, swipe-to-delete, selection — see DocumentListTable.tsx).
+   * Default false = phone card mode (unchanged).
+   */
+  tableMode?: boolean
+  /**
+   * Table mode: pin (freeze) the title column (default true). False → the
+   * title cell becomes the first cell INSIDE the horizontally scrolling
+   * track — the whole row pans, nothing is frozen.
+   */
+  pinFirstColumn?: boolean
+  /**
+   * Table mode: pin the tap-to-sort header band at the top (default true).
+   * False → the band (still the horizontal scroll driver) scrolls away
+   * vertically with the content.
+   */
+  stickyHeader?: boolean
+  /**
+   * Called when the user flips the pin toggles in the list settings sheet
+   * (table mode only). The screen persists the pair and feeds it back via
+   * `stickyHeader` / `pinFirstColumn`. Omitting it hides the toggles.
+   */
+  onTablePinsChange?: (pins: { header: boolean; firstColumn: boolean }) => void
 }
 
 
@@ -332,6 +376,10 @@ export const DocumentList: React.FC<Props> = ({
   queryPresetsCollection,
   appliedFilters,
   onFiltersChange,
+  tableMode = false,
+  pinFirstColumn = true,
+  stickyHeader = true,
+  onTablePinsChange,
 }) => {
   const { baseURL, auth, schema } = usePayloadNative()
   const { dark, colors } = useListColors()
@@ -415,6 +463,50 @@ export const DocumentList: React.FC<Props> = ({
     }
     return { fieldLabelMap: labels, fieldTypeMap: types }
   }, [filterableFields])
+
+  // ── Tablet table mode — column model + shared horizontal scroll ──────
+  // The title field / drafts flag come from props with a menu-model fallback,
+  // so screens only need to pass `tableMode` to opt in.
+  const menuCollection = useMemo(
+    () => schema?.menuModel?.collections.find((c) => c.slug === collection),
+    [schema, collection],
+  )
+  const tableTitleField = titleField ?? menuCollection?.useAsTitle
+  const tableHasDrafts = Boolean(menuCollection?.drafts)
+
+  const sortableFieldNames = useMemo(
+    () => new Set(sortableFields.map((f) => f.name).filter((n): n is string => Boolean(n))),
+    [sortableFields],
+  )
+
+  const tableColumns = useMemo(
+    () =>
+      tableMode
+        ? buildTableColumns({
+            summaryFields,
+            titleField: tableTitleField,
+            hasDrafts: tableHasDrafts,
+            fieldLabelMap,
+            fieldTypeMap,
+            sortableFieldNames,
+          })
+        : [],
+    [tableMode, summaryFields, tableTitleField, tableHasDrafts, fieldLabelMap, fieldTypeMap, sortableFieldNames],
+  )
+  const tableTrackWidth = useMemo(
+    () => tableColumns.reduce((sum, c) => sum + c.width, 0),
+    [tableColumns],
+  )
+
+  // ONE shared horizontal scroll position: the sticky header band's
+  // ScrollView writes scrollX (native-driver Animated.event); every row's
+  // column track consumes its negation as translateX. The header component
+  // resets the offset whenever the column set changes.
+  const tableScrollX = useRef(new Animated.Value(0)).current
+  const tableTranslateX = useMemo(
+    () => Animated.multiply<number>(tableScrollX, -1),
+    [tableScrollX],
+  )
 
   // ── Pagination — schema defaultLimit + persisted per-page selection ──
   const paginationCfg = useMemo(() => {
@@ -501,6 +593,20 @@ export const DocumentList: React.FC<Props> = ({
       }
     },
     [onSortChange, sortControlled, collection],
+  )
+
+  // Table-mode header tap-to-sort: toggle direction on the active column,
+  // otherwise select it with a sensible default (desc for dates, asc else) —
+  // mirrors the web admin column header behaviour.
+  const handleHeaderSortPress = useCallback(
+    (field: string, type: string) => {
+      const next: DocumentListSort =
+        effectiveSort.field === field
+          ? { field, direction: effectiveSort.direction === 'asc' ? 'desc' : 'asc' }
+          : { field, direction: type === 'date' ? 'desc' : 'asc' }
+      handleSortChange(next)
+    },
+    [effectiveSort, handleSortChange],
   )
 
   const sortString = sortToQueryString(effectiveSort)
@@ -621,9 +727,9 @@ export const DocumentList: React.FC<Props> = ({
     if (val === null || val === undefined) return '—'
     if (typeof val === 'boolean') return val ? 'Yes' : 'No'
     if (typeof val === 'object') {
-      // Relationship (populated object) — show title/name/email
+      // Relationship / upload (populated object) — show title/name/filename/email
       const obj = val as Record<string, unknown>
-      return String(obj.title ?? obj.name ?? obj.email ?? obj.id ?? JSON.stringify(val))
+      return String(obj.title ?? obj.name ?? obj.filename ?? obj.email ?? obj.id ?? JSON.stringify(val))
     }
     const s = String(val)
     // Date-like strings — format nicely
@@ -633,6 +739,54 @@ export const DocumentList: React.FC<Props> = ({
 
   const renderItem = ({ item, index }: { item: unknown; index: number }) => {
     const doc = item as Record<string, unknown>
+
+    // ── Tablet table mode — frozen title + shared-translate column track.
+    // The row stays ONE viewport-width unit so screen-level wrapping
+    // (swipe-to-delete, long-press peek, selection checkbox) keeps working
+    // verbatim around `rowContent`.
+    if (tableMode) {
+      const tableRow = (
+        <DocumentListTableRow
+          doc={doc}
+          title={getDocumentTitle(doc, tableTitleField)}
+          columns={tableColumns}
+          trackWidth={tableTrackWidth}
+          showStatus={tableHasDrafts}
+          translateX={tableTranslateX}
+          formatValue={formatFieldValue}
+          colors={colors}
+          pinFirstColumn={pinFirstColumn}
+        />
+      )
+      if (renderRow) {
+        return renderRow({ item: doc, rowContent: tableRow, onPress: () => onPress(doc), index })
+      }
+      // Default path: full-bleed swipe action (no card insets in table mode)
+      const wrappedRow =
+        onDelete != null ? (
+          <SwipeToDeleteRow
+            onDelete={() => onDelete(doc)}
+            confirmTitle="Delete"
+            confirmMessage="Are you sure?"
+          >
+            {tableRow}
+          </SwipeToDeleteRow>
+        ) : (
+          tableRow
+        )
+      return (
+        <Pressable
+          onPress={() => {
+            if (closeOpenSwipeRow()) return
+            onPress(doc)
+          }}
+          style={({ pressed }) => (pressed ? styles.rowPressed : undefined)}
+        >
+          {wrappedRow}
+        </Pressable>
+      )
+    }
+
     const title = getDocumentTitle(doc, titleField)
     const date = doc.updatedAt ? formatDate(doc.updatedAt as string) : undefined
 
@@ -746,7 +900,42 @@ export const DocumentList: React.FC<Props> = ({
 
   // --- Header rendered above the list (element, not component — avoids
   // remounting the native sort picker on every render) ---
-  const listHeader = (
+  // Table mode: the WHOLE header sticks (stickyHeaderIndices=[0]) — the
+  // column band hosts the horizontal scroll driver and must stay reachable;
+  // active filter chips pin with it (web admin parity: the filter bar stays
+  // above the table). The in-list SortControl row is dropped — column
+  // headers are tap-to-sort, and the range meta already lives in the footer.
+  const listHeader = tableMode ? (
+    <View>
+      {hasActiveFilters && (
+        <View style={styles.tableChipsWrap}>
+          <FilterChips
+            filters={filters}
+            searchText={searchText}
+            onRemove={removeFilter}
+            onClearAll={clearAllFilters}
+            onAddFilter={() => openFilterEditor(null)}
+            onEdit={(f) => openFilterEditor(f)}
+          />
+        </View>
+      )}
+      <DocumentListTableHeader
+        columns={tableColumns}
+        titleLabel={
+          tableTitleField ? fieldLabelMap.get(tableTitleField) ?? tableTitleField : 'ID'
+        }
+        titleSortField={
+          tableTitleField && sortableFieldNames.has(tableTitleField) ? tableTitleField : undefined
+        }
+        titleSortType={tableTitleField ? fieldTypeMap.get(tableTitleField) : undefined}
+        sort={effectiveSort}
+        onSortPress={handleHeaderSortPress}
+        scrollX={tableScrollX}
+        colors={colors}
+        pinFirstColumn={pinFirstColumn}
+      />
+    </View>
+  ) : (
     <View>
       {/* Sort control + pagination meta */}
       <View style={styles.controlsRow}>
@@ -778,8 +967,8 @@ export const DocumentList: React.FC<Props> = ({
   )
 
   const extraData = useMemo(
-    () => ({ summaryFields, dark }),
-    [summaryFields, dark],
+    () => ({ summaryFields, dark, tableMode, pinFirstColumn }),
+    [summaryFields, dark, tableMode, pinFirstColumn],
   )
 
   if (effectiveLoading && effectiveDocs.length === 0) {
@@ -812,6 +1001,11 @@ export const DocumentList: React.FC<Props> = ({
         renderItem={renderItem}
         extraData={extraData}
         ListHeaderComponent={listHeader}
+        // Table mode pins the column header band (and any filter chips) at
+        // the adjusted top — index 0 is the ListHeaderComponent, the only
+        // sticky index that survives virtualization. stickyHeader=false
+        // drops the pin so the band scrolls away with the content.
+        stickyHeaderIndices={tableMode && stickyHeader ? [0] : undefined}
         onEndReached={handleEndReached}
         onEndReachedThreshold={0.4}
         contentInsetAdjustmentBehavior="automatic"
@@ -820,7 +1014,7 @@ export const DocumentList: React.FC<Props> = ({
         refreshControl={
           <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
         }
-        contentContainerStyle={styles.listContent}
+        contentContainerStyle={tableMode ? styles.tableListContent : styles.listContent}
         ListEmptyComponent={
           <EmptyState
             variant={emptyVariant}
@@ -879,6 +1073,14 @@ export const DocumentList: React.FC<Props> = ({
           pageSize={pageSize}
           pageSizeOptions={pageSizeOptions}
           onPageSizeChange={handlePageSizeChange}
+          // Table pin toggles — only meaningful (and only shown) in table
+          // mode, when the screen wires up persistence.
+          tablePins={
+            tableMode && onTablePinsChange
+              ? { header: stickyHeader, firstColumn: pinFirstColumn }
+              : undefined
+          }
+          onTablePinsChange={onTablePinsChange}
         />
       )}
     </View>
@@ -1089,6 +1291,8 @@ function EmptyState({
 
 const SORTABLE_ITEM_HEIGHT = 54
 
+type TablePins = { header: boolean; firstColumn: boolean }
+
 type SummaryFieldsPickerProps = {
   visible: boolean
   onClose: () => void
@@ -1099,6 +1303,10 @@ type SummaryFieldsPickerProps = {
   pageSize: number
   pageSizeOptions: number[]
   onPageSizeChange: (pageSize: number) => void
+  /** Table-mode pin state — section hidden when undefined (card mode). */
+  tablePins?: TablePins
+  /** Applies immediately (like the per-page selector — not draft-buffered). */
+  onTablePinsChange?: (pins: TablePins) => void
 }
 
 function SummaryFieldsPicker({
@@ -1111,6 +1319,8 @@ function SummaryFieldsPicker({
   pageSize,
   pageSizeOptions,
   onPageSizeChange,
+  tablePins,
+  onTablePinsChange,
 }: SummaryFieldsPickerProps) {
   const { colors } = useListColors()
   const sfStyles = useMemo(() => createSfStyles(colors), [colors])
@@ -1264,7 +1474,7 @@ function SummaryFieldsPicker({
         <View style={{ flex: 1 }}>
           <Text style={sfStyles.sheetTitle}>List Settings</Text>
           <Text style={sfStyles.sheetHint}>
-            Select card fields to show. Drag to reorder.
+            Select fields to show as card details or table columns. Drag to reorder.
           </Text>
         </View>
         <Pressable onPress={handleSave}>
@@ -1294,6 +1504,29 @@ function SummaryFieldsPicker({
           onChange={onPageSizeChange}
           sfStyles={sfStyles}
         />
+
+        {/* Table pin toggles — table mode only; applies immediately. Plain
+            rows OUTSIDE the Sortable tree below (native switches must never
+            sit inside drag trees). */}
+        {tablePins && onTablePinsChange && (
+          <>
+            <Text style={sfStyles.sectionLabel}>TABLE PINNING</Text>
+            <PinToggleRow
+              label="Pin header"
+              value={tablePins.header}
+              onChange={(v) => onTablePinsChange({ ...tablePins, header: v })}
+              colors={colors}
+              sfStyles={sfStyles}
+            />
+            <PinToggleRow
+              label="Pin first column"
+              value={tablePins.firstColumn}
+              onChange={(v) => onTablePinsChange({ ...tablePins, firstColumn: v })}
+              colors={colors}
+              sfStyles={sfStyles}
+            />
+          </>
+        )}
 
         {/* Active fields — Sortable with drag handles */}
         {selectedItems.length > 0 && Sortable && SortableItem ? (
@@ -1386,6 +1619,58 @@ function SummaryFieldsPicker({
 }
 
 // ---------------------------------------------------------------------------
+// Pin toggle row — registry SwiftUI Toggle (switch) with a lucide fallback.
+// Rendered only in plain sections, never inside Sortable trees.
+// ---------------------------------------------------------------------------
+
+function PinToggleRow({
+  label,
+  value,
+  onChange,
+  colors,
+  sfStyles,
+}: {
+  label: string
+  value: boolean
+  onChange: (value: boolean) => void
+  colors: ListColorPalette
+  sfStyles: ReturnType<typeof createSfStyles>
+}) {
+  const NativeToggle = nativeComponents.Toggle
+
+  return (
+    <View style={sfStyles.pinRow}>
+      <Text style={sfStyles.pinLabel}>{label}</Text>
+      {NativeToggle ? (
+        <NativeHost matchContents>
+          <NativeToggle isOn={value} onIsOnChange={onChange} />
+        </NativeHost>
+      ) : (
+        <Pressable
+          hitSlop={8}
+          onPress={() => onChange(!value)}
+          accessibilityRole="switch"
+          accessibilityState={{ checked: value }}
+          accessibilityLabel={label}
+        >
+          {value ? (
+            ToggleRightIcon ? (
+              <ToggleRightIcon size={30} color={colors.primary} />
+            ) : (
+              <Text style={[sfStyles.pinFallbackText, { color: colors.primary }]}>On</Text>
+            )
+          ) : ToggleLeftIcon ? (
+            <ToggleLeftIcon size={30} color={colors.textMuted} />
+          ) : (
+            <Text style={[sfStyles.pinFallbackText, { color: colors.textMuted }]}>Off</Text>
+          )}
+        </Pressable>
+      )}
+    </View>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // Page size selector — native segmented picker with chip-row fallback
 // ---------------------------------------------------------------------------
 
@@ -1460,6 +1745,13 @@ const createStyles = (c: ListColorPalette) =>
 
     // Filter row
     filterRow: { marginVertical: t.spacing.xs },
+
+    // ── Tablet table mode ─────────────────────────────────────────
+    // Header band sits flush under the nav bar; rows are full-bleed.
+    tableListContent: { paddingBottom: 100 },
+    // Chips pinned with the sticky band need an opaque backdrop (content
+    // scrolls underneath) — padding, not margin, so nothing shows through.
+    tableChipsWrap: { backgroundColor: c.background, paddingVertical: t.spacing.xs },
 
     // Sort + meta controls row
     controlsRow: {
@@ -1710,6 +2002,16 @@ const createSfStyles = (c: ListColorPalette) =>
     },
     pageSizeText: { fontSize: t.fontSize.sm, color: c.text, fontWeight: '500' },
     pageSizeTextActive: { color: c.primaryText, fontWeight: '600' },
+    pinRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: t.spacing.sm,
+      paddingVertical: t.spacing.xs + 2,
+      minHeight: 40,
+    },
+    pinLabel: { fontSize: t.fontSize.md, color: c.text, fontWeight: '500' },
+    pinFallbackText: { fontSize: t.fontSize.sm, fontWeight: '600' },
     fieldRow: {
       flexDirection: 'row',
       alignItems: 'center',

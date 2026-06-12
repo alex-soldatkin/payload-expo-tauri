@@ -65,17 +65,18 @@ import { nativeComponents } from '../fields/shared'
 import { CalendarEventRow, DayListFallback } from './DayListFallback'
 import { MonthGridFallback } from './MonthGridFallback'
 import { WeekStrip } from './WeekStrip'
-import { calendarEventDocId, docsToCalendarEvents } from './eventMapping'
 import {
   addDaysToKey,
-  CALENDAR_COMPACT_WIDTH,
-  CALENDAR_REGULAR_WIDTH,
+  calendarEventDocId,
+  docsToCalendarEvents,
   eventOccursOnDate,
   formatLongDate,
   normalizeDateKey,
   todayDateKey,
-} from './types'
-import type { CalendarDoc, CalendarEvent, CalendarMode, CalendarViewProps } from './types'
+} from '../scheduling'
+import type { CalendarDoc, CalendarEvent } from '../scheduling'
+import { CALENDAR_COMPACT_WIDTH, CALENDAR_REGULAR_WIDTH } from './types'
+import type { CalendarMode, CalendarViewProps } from './types'
 
 // Optional: GlassView for the liquid glass "Today" button on iOS 26+
 let GlassView: React.ComponentType<any> | null = null

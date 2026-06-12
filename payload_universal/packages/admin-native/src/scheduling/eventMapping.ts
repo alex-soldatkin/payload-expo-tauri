@@ -1,7 +1,9 @@
 /**
- * Calendar event mapping — pure functions from Payload docs + configured
- * sources to the CalendarEvent shape shared with the native module, plus the
- * default-source heuristics that seed a collection's calendar config.
+ * Schedule event mapping — pure functions from Payload docs + configured
+ * sources to the ScheduleEvent shape shared with the native module, plus the
+ * default-source heuristics that seed a collection's scheduling config
+ * (calendar today, gantt next — both consume the same {id,label,startField,
+ * endField?,color,hidden?} source entries).
  *
  * Tolerant by design: docs with missing/invalid dates are skipped (never
  * thrown), inverted ranges swap with a console.warn, and field values may be
@@ -13,8 +15,8 @@
  */
 import { getByPath, getDocumentTitle } from '../utils/schemaHelpers'
 import { humanizeFieldName } from '../kanban/types'
-import { DEFAULT_CALENDAR_PALETTE } from './types'
-import type { CalendarDoc, CalendarEvent, CalendarSource } from './types'
+import { DEFAULT_SCHEDULE_PALETTE } from './types'
+import type { ScheduleDoc, ScheduleEvent, ScheduleSource } from './types'
 
 // ---------------------------------------------------------------------------
 // docs + sources → events
@@ -87,7 +89,7 @@ const parseDateValue = (value: unknown): Date | null => {
 
 /**
  * Map docs through the configured sources into a merged, chronologically
- * sorted CalendarEvent list.
+ * sorted ScheduleEvent list.
  *
  *  - id: `{docId}::{sourceId}` (recover the doc with id.lastIndexOf('::')).
  *  - title: getDocumentTitle(doc, useAsTitle) fallback chain.
@@ -98,12 +100,12 @@ const parseDateValue = (value: unknown): Date | null => {
  *    event allDay when the end is absent or also day-only, and allDay
  *    start/end snap to the literal date at LOCAL midnight.
  */
-export const docsToCalendarEvents = (
-  docs: CalendarDoc[],
-  sources: CalendarSource[],
+export const docsToScheduleEvents = (
+  docs: ScheduleDoc[],
+  sources: ScheduleSource[],
   useAsTitle?: string,
-): CalendarEvent[] => {
-  const events: CalendarEvent[] = []
+): ScheduleEvent[] => {
+  const events: ScheduleEvent[] = []
   for (const doc of docs) {
     if (doc.id === null || doc.id === undefined || doc.id === '') continue
     const docId = String(doc.id)
@@ -118,7 +120,7 @@ export const docsToCalendarEvents = (
       let end = endRaw === undefined ? null : parseDateValue(endRaw)
       if (end && end.getTime() < start.getTime()) {
         console.warn(
-          `[CalendarView] doc ${docId} source "${source.id}": end (${source.endField}) is before start (${source.startField}) — swapped`,
+          `[Scheduling] doc ${docId} source "${source.id}": end (${source.endField}) is before start (${source.startField}) — swapped`,
         )
         const tmp = start
         start = end
@@ -146,12 +148,16 @@ export const docsToCalendarEvents = (
   events.sort((a, b) => a.start.localeCompare(b.start))
   return events
 }
+/** Compat alias — the calendar's original name for docsToScheduleEvents. */
+export const docsToCalendarEvents = docsToScheduleEvents
 
-/** Recover the doc id from a CalendarEvent id (`{docId}::{sourceId}`). */
-export const calendarEventDocId = (eventId: string): string => {
+/** Recover the doc id from a ScheduleEvent id (`{docId}::{sourceId}`). */
+export const scheduleEventDocId = (eventId: string): string => {
   const idx = eventId.lastIndexOf('::')
   return idx === -1 ? eventId : eventId.slice(0, idx)
 }
+/** Compat alias — the calendar's original name for scheduleEventDocId. */
+export const calendarEventDocId = scheduleEventDocId
 
 // ---------------------------------------------------------------------------
 // Default source heuristics
@@ -161,14 +167,16 @@ export const calendarEventDocId = (eventId: string): string => {
  * Structural subset of ClientField — pickDefaultSources accepts the package's
  * ClientField[] (or anything shaped like it) without a hard type dependency.
  */
-export type CalendarFieldLike = {
+export type ScheduleFieldLike = {
   name?: string
   type: string
   label?: string | Record<string, string>
 }
+/** Compat alias — the calendar's original name for ScheduleFieldLike. */
+export type CalendarFieldLike = ScheduleFieldLike
 
 /**
- * Payload-internal bookkeeping fields that must NEVER become calendar
+ * Payload-internal bookkeeping fields that must NEVER become schedule
  * sources: auth collections (Users) carry `resetPasswordExpiration` /
  * `lockUntil` as plain date fields, so without this exclusion every Users
  * collection offered a meaningless calendar of password-reset expiries.
@@ -196,16 +204,18 @@ export const INTERNAL_DATE_FIELDS: ReadonlySet<string> = new Set([
 
 /**
  * True when the collection has at least one REAL (non-internal) date field —
- * the calendar-eligibility gate. Collections whose only date fields are
+ * the calendar/gantt-eligibility gate. Collections whose only date fields are
  * Payload bookkeeping (e.g. Users: createdAt/updatedAt/resetPasswordExpiration/
- * lockUntil) must not offer a Calendar view at all.
+ * lockUntil) must not offer a scheduling view at all.
  */
-export const collectionHasCalendarDateFields = (fields: CalendarFieldLike[]): boolean =>
+export const collectionHasScheduleDateFields = (fields: ScheduleFieldLike[]): boolean =>
   fields.some(
     (f) => f.type === 'date' && Boolean(f.name) && !INTERNAL_DATE_FIELDS.has(f.name!),
   )
+/** Compat alias — the calendar's original name for collectionHasScheduleDateFields. */
+export const collectionHasCalendarDateFields = collectionHasScheduleDateFields
 
-const resolveFieldLabel = (field: CalendarFieldLike): string => {
+const resolveFieldLabel = (field: ScheduleFieldLike): string => {
   if (typeof field.label === 'string' && field.label) return field.label
   if (field.label && typeof field.label === 'object') {
     const first = field.label.en ?? Object.values(field.label).find((v) => Boolean(v))
@@ -222,7 +232,7 @@ const trimSeparators = (s: string): string => s.replace(/^[\s_-]+|[\s_-]+$/g, ''
  * range marker removed: 'startDate' → 'Date', 'availableFrom' → 'Available'.
  * Too-short remainders ('startsAt' → 'At') fall back to the field's label.
  */
-const pairLabel = (startField: CalendarFieldLike, remainder: string): string => {
+const pairLabel = (startField: ScheduleFieldLike, remainder: string): string => {
   const base = trimSeparators(remainder)
   if (base.length >= 3) return humanizeFieldName(base)
   return resolveFieldLabel(startField)
@@ -236,7 +246,7 @@ const pairLabel = (startField: CalendarFieldLike, remainder: string): string => 
  *  - date fields with a `From`/`_from` name suffix pair with the matching
  *    `To`/`_to`;
  *  - every remaining date field becomes a single (point-event) source;
- *  - colours come from DEFAULT_CALENDAR_PALETTE by resulting source index.
+ *  - colours come from DEFAULT_SCHEDULE_PALETTE by resulting source index.
  *
  * Payload bookkeeping date fields (INTERNAL_DATE_FIELDS — auth expiries,
  * timestamps) are excluded up front: they are storage internals, not content
@@ -245,20 +255,20 @@ const pairLabel = (startField: CalendarFieldLike, remainder: string): string => 
  *
  * Source ids are the start field's name (stable across config edits).
  */
-export const pickDefaultSources = (fields: CalendarFieldLike[]): CalendarSource[] => {
+export const pickDefaultSources = (fields: ScheduleFieldLike[]): ScheduleSource[] => {
   const dateFields = fields.filter(
-    (f): f is CalendarFieldLike & { name: string } =>
+    (f): f is ScheduleFieldLike & { name: string } =>
       f.type === 'date' && Boolean(f.name) && !INTERNAL_DATE_FIELDS.has(f.name!),
   )
-  const byLowerName = new Map<string, CalendarFieldLike & { name: string }>()
+  const byLowerName = new Map<string, ScheduleFieldLike & { name: string }>()
   for (const f of dateFields) {
     if (!byLowerName.has(f.name.toLowerCase())) byLowerName.set(f.name.toLowerCase(), f)
   }
 
   const used = new Set<string>()
-  const pending: Array<{ index: number; source: Omit<CalendarSource, 'color'> }> = []
+  const pending: Array<{ index: number; source: Omit<ScheduleSource, 'color'> }> = []
 
-  const findEnd = (lowerCandidate: string): (CalendarFieldLike & { name: string }) | null => {
+  const findEnd = (lowerCandidate: string): (ScheduleFieldLike & { name: string }) | null => {
     const match = byLowerName.get(lowerCandidate)
     return match && !used.has(match.name) ? match : null
   }
@@ -269,7 +279,7 @@ export const pickDefaultSources = (fields: CalendarFieldLike[]): CalendarSource[
     if (used.has(field.name)) return
     const lower = field.name.toLowerCase()
 
-    let endField: (CalendarFieldLike & { name: string }) | null = null
+    let endField: (ScheduleFieldLike & { name: string }) | null = null
     let remainder = ''
     if (/^starts/.test(lower)) {
       // 'startsAt' → 'endsAt'
@@ -319,6 +329,6 @@ export const pickDefaultSources = (fields: CalendarFieldLike[]): CalendarSource[
   pending.sort((a, b) => a.index - b.index)
   return pending.map(({ source }, i) => ({
     ...source,
-    color: DEFAULT_CALENDAR_PALETTE[i % DEFAULT_CALENDAR_PALETTE.length],
+    color: DEFAULT_SCHEDULE_PALETTE[i % DEFAULT_SCHEDULE_PALETTE.length],
   }))
 }

@@ -23,6 +23,12 @@
  *   server.calendarSources     = calendar.sources (RESOLVED — the screen lifts
  *                                the effective sources, never null)
  *   server.calendarDefaultMode = calendar.defaultMode
+ *
+ * GANTT MAPPING (GanttConfig → ViewPreset):
+ *   server.ganttSources = gantt.sources (RESOLVED — the screen lifts the
+ *                         effective sources, never null)
+ *   server.ganttOptions = { pxPerDay?, rowSort? } — null fields OMITTED;
+ *                         both null → ganttOptions is null
  */
 import { useCallback, useMemo } from 'react'
 import { useAuth, type CalendarMode, type CalendarSource } from '@payload-universal/admin-native'
@@ -33,6 +39,7 @@ import {
   sanitizeCalendarSources,
   type CalendarConfig,
 } from '@/src/hooks/useCalendarConfig'
+import { sanitizeGanttOptions, type GanttConfig } from '@/src/hooks/useGanttConfig'
 import {
   type KanbanConfig,
   type ListViewMode,
@@ -59,6 +66,10 @@ export type ViewPresetDoc = {
   /** Calendar date sources (server json convention) — null when unset/invalid. */
   calendarSources: CalendarSource[] | null
   calendarDefaultMode: CalendarMode
+  /** Gantt date sources (same ScheduleSource convention) — null when unset/invalid. */
+  ganttSources: CalendarSource[] | null
+  /** Gantt display options (server json convention, always shaped client-side). */
+  ganttOptions: { pxPerDay: number | null; rowSort: string | null }
   where: Record<string, unknown> | null
   /** Owner user id (depopulated). Always set server-side on create. */
   owner: string | null
@@ -75,6 +86,8 @@ export type ViewPresetSnapshot = {
   config: KanbanConfig
   /** Calendar config with RESOLVED sources (effective defaults when never customised). */
   calendar: CalendarConfig
+  /** Gantt config with RESOLVED sources (effective defaults when never customised). */
+  gantt: GanttConfig
   /** Structured filters serialized via filtersToWhere (search excluded). */
   where: Record<string, unknown> | null
 }
@@ -151,13 +164,22 @@ const sanitizePreset = (raw: Record<string, unknown>): ViewPresetDoc => ({
   relatedCollection: typeof raw.relatedCollection === 'string' ? raw.relatedCollection : '',
   // Server default is 'kanban'; anything unrecognised falls back to it
   viewType:
-    raw.viewType === 'table' ? 'table' : raw.viewType === 'calendar' ? 'calendar' : 'kanban',
+    raw.viewType === 'table'
+      ? 'table'
+      : raw.viewType === 'calendar'
+        ? 'calendar'
+        : raw.viewType === 'gantt'
+          ? 'gantt'
+          : 'kanban',
   statusField: typeof raw.statusField === 'string' ? raw.statusField : null,
   columnOrder: toStringArray(raw.columnOrder),
   columnColors: toColorRecord(raw.columnColors),
   cardFields: toStringArray(raw.cardFields) ?? [],
   calendarSources: sanitizeCalendarSources(raw.calendarSources),
   calendarDefaultMode: sanitizeCalendarMode(raw.calendarDefaultMode),
+  // Same ScheduleSource entry shape as calendarSources — same sanitizer
+  ganttSources: sanitizeCalendarSources(raw.ganttSources),
+  ganttOptions: sanitizeGanttOptions(raw.ganttOptions),
   where: toWhereObject(raw.where),
   owner: toRelId(raw.owner),
   accessMode:
@@ -194,6 +216,16 @@ const liftSnapshot = (snapshot: ViewPresetSnapshot): Record<string, unknown> => 
   cardFields: snapshot.config.cardFields,
   calendarSources: snapshot.calendar.sources,
   calendarDefaultMode: snapshot.calendar.defaultMode,
+  ganttSources: snapshot.gantt.sources,
+  // null fields are omitted (server-absent means "client default");
+  // both null collapses the whole json to null
+  ganttOptions:
+    snapshot.gantt.pxPerDay != null || snapshot.gantt.rowSort != null
+      ? {
+          ...(snapshot.gantt.pxPerDay != null ? { pxPerDay: snapshot.gantt.pxPerDay } : {}),
+          ...(snapshot.gantt.rowSort != null ? { rowSort: snapshot.gantt.rowSort } : {}),
+        }
+      : null,
   where: snapshot.where,
 })
 
@@ -217,6 +249,18 @@ export const presetToKanbanConfig = (preset: ViewPresetDoc): KanbanConfig => ({
 export const presetToCalendarConfig = (preset: ViewPresetDoc): CalendarConfig => ({
   sources: preset.calendarSources,
   defaultMode: preset.calendarDefaultMode,
+})
+
+/**
+ * ViewPreset → GanttConfig for applyPreset. A preset without (valid)
+ * ganttSources applies as `sources: null` — the screen falls back to
+ * pickDefaultSources; null pxPerDay/rowSort mean component default /
+ * the screen's active sort.
+ */
+export const presetToGanttConfig = (preset: ViewPresetDoc): GanttConfig => ({
+  sources: preset.ganttSources,
+  pxPerDay: preset.ganttOptions.pxPerDay,
+  rowSort: preset.ganttOptions.rowSort,
 })
 
 /** Owner must always be present in sharedWith when mode is specificUsers. */

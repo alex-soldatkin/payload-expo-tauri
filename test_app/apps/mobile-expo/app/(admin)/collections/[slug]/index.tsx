@@ -19,7 +19,7 @@ import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-route
 import type { SFSymbol } from 'sf-symbols-typescript'
 import { useHeaderHeight } from '@react-navigation/elements'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { Bookmark, CalendarDays, CheckSquare, Filter, Plus, Settings, SquareKanban, Table2 } from 'lucide-react-native'
+import { Bookmark, CalendarDays, ChartGantt, CheckSquare, Filter, Plus, QrCode, Settings, SquareKanban, Table2 } from 'lucide-react-native'
 import { DeviceMotion } from 'expo-sensors'
 import {
   applyWhereToDocs,
@@ -33,6 +33,7 @@ import {
   FilterBottomSheet,
   FilterChips,
   filtersToWhere,
+  GanttChart,
   getByPath,
   getCollectionLabel,
   getDocumentTitle,
@@ -42,6 +43,7 @@ import {
   normalizeOption,
   pickDefaultSources,
   PreviewContextProvider,
+  setByPath,
   SwipeToDeleteRow,
   todayDateKey,
   useAdminSchema,
@@ -56,6 +58,7 @@ import {
   whereToFilterGroups,
   type ActiveFilter,
   type CalendarMode,
+  type CalendarSource,
   type ClientField,
   type ClientSelectField,
   type DocumentListSort,
@@ -73,12 +76,17 @@ import * as calendarNativeModule from '@/modules/calendar-view'
 import { useResponsive } from '@/hooks/useResponsive'
 import { BulkEditSheet } from '@/src/components/BulkEditSheet'
 import { CalendarCustomizeSheet } from '@/src/components/CalendarCustomizeSheet'
+import { ScanLookupSheet } from '@/src/components/ScanLookupSheet'
+import { useScanLookup } from '@/src/hooks/useScanLookup'
+import { GanttCustomizeSheet } from '@/src/components/GanttCustomizeSheet'
 import { KanbanCustomizeSheet } from '@/src/components/KanbanCustomizeSheet'
 import { PresetsSheet } from '@/src/components/PresetsSheet'
 import { useCalendarConfig, type CalendarConfig } from '@/src/hooks/useCalendarConfig'
+import { useGanttConfig, type GanttConfig } from '@/src/hooks/useGanttConfig'
 import { useKanbanConfig, useListViewMode, type ListViewMode } from '@/src/hooks/useKanbanConfig'
 import {
   presetToCalendarConfig,
+  presetToGanttConfig,
   presetToKanbanConfig,
   type ViewPresetDoc,
 } from '@/src/hooks/useViewPresets'
@@ -89,6 +97,12 @@ const SUMMARY_FIELDS_KEY_PREFIX = 'card_summary_fields:'
 const SORT_KEY_PREFIX = 'list_sort:'
 const DEFAULT_SORT: DocumentListSort = { field: 'updatedAt', direction: 'desc' }
 const SHAKE_THRESHOLD = 1.5 // acceleration magnitude to trigger undo
+
+// Table-mode pin preferences (sticky header band / frozen title column) —
+// both default ON; toggled in the list settings sheet, persisted per slug.
+const TABLE_PINS_KEY_PREFIX = 'table_pins:'
+type TablePins = { header: boolean; firstColumn: boolean }
+const DEFAULT_TABLE_PINS: TablePins = { header: true, firstColumn: true }
 
 // Aligns the revealed swipe action with the phone card rendered by
 // DocumentList (cardWrap: 16px horizontal gutter + 8px bottom margin;
@@ -105,40 +119,6 @@ const PHONE_SWIPE_ACTION_STYLE = { marginRight: 16, marginBottom: 8, borderRadiu
 const hasStackToolbar =
   typeof (Stack as { Toolbar?: unknown }).Toolbar === 'function' &&
   Boolean((Stack as { Toolbar?: { Button?: unknown } }).Toolbar?.Button)
-
-// ---------------------------------------------------------------------------
-// Table formatting helpers (tablet)
-// ---------------------------------------------------------------------------
-
-function formatCellValue(value: unknown): string {
-  if (value == null) return '—'
-  if (typeof value === 'boolean') return value ? 'Yes' : 'No'
-  const str = String(value)
-  // If it looks like an ISO date, format it nicely
-  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
-    const d = new Date(str)
-    if (!isNaN(d.getTime())) {
-      return d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-    }
-  }
-  return str
-}
-
-function formatDate(value: unknown): string {
-  if (!value) return '—'
-  const d = new Date(String(value))
-  return isNaN(d.getTime())
-    ? '—'
-    : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-}
-
-function humaniseFieldName(field: string): string {
-  return field
-    .replace(/^_/, '')
-    .replace(/([A-Z])/g, ' $1')
-    .replace(/^./, (s) => s.toUpperCase())
-    .trim()
-}
 
 // ---------------------------------------------------------------------------
 // Kanban helpers — mirror DocumentList's internal client-side sort semantics
@@ -516,12 +496,40 @@ export default function CollectionDocumentsScreen() {
     [effectiveSort, handleSortChange],
   )
 
-  // Summary fields for the table columns.
-  // Exclude the title field (already the first column) and _status when
-  // hasDrafts is true (already rendered as a dedicated status pill column).
-  const tableFields = useMemo(
-    () => summaryFields.filter((f) => f !== useAsTitle && !(hasDrafts && f === '_status')),
-    [summaryFields, useAsTitle, hasDrafts],
+  // ── Table pin preferences — sticky header band + frozen title column.
+  // Both default ON; flipped via the list settings sheet's pin toggles
+  // (DocumentList → onTablePinsChange), persisted per collection. ──────────
+  const [tablePins, setTablePins] = useState<TablePins>(DEFAULT_TABLE_PINS)
+
+  useEffect(() => {
+    let cancelled = false
+    AsyncStorage.getItem(TABLE_PINS_KEY_PREFIX + slug)
+      .then((val) => {
+        if (cancelled) return
+        if (!val) {
+          setTablePins(DEFAULT_TABLE_PINS)
+          return
+        }
+        try {
+          const parsed = JSON.parse(val) as Partial<TablePins>
+          setTablePins({
+            header: parsed.header !== false,
+            firstColumn: parsed.firstColumn !== false,
+          })
+        } catch {
+          /* corrupt entry — keep defaults */
+        }
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [slug])
+
+  const handleTablePinsChange = useCallback(
+    (pins: TablePins) => {
+      setTablePins(pins)
+      AsyncStorage.setItem(TABLE_PINS_KEY_PREFIX + slug, JSON.stringify(pins)).catch(() => {})
+    },
+    [slug],
   )
 
   // ── Kanban view — per-collection view mode + board config ──────────────
@@ -589,6 +597,21 @@ export default function CollectionDocumentsScreen() {
     [setCalendarConfig],
   )
 
+  // ── Gantt view — per-collection config; SAME eligibility gate as the
+  // calendar (>=1 real date field — range pairs preferred, single-date
+  // point sources allowed) ────────────────────────────────────────────────
+  const { config: ganttConfig, setConfig: setGanttConfig } = useGanttConfig(slug)
+  const [ganttCustomizeOpen, setGanttCustomizeOpen] = useState(false)
+  const ganttAvailable = calendarAvailable
+  const isGantt = viewMode === 'gantt' && ganttAvailable
+
+  // Effective sources: explicit config, else the same heuristic defaults the
+  // calendar uses (range pairs + point sources, palette colours)
+  const ganttSources = useMemo(
+    () => ganttConfig.sources ?? pickDefaultSources(dateFieldOptions),
+    [ganttConfig.sources, dateFieldOptions],
+  )
+
   const handleViewModeChange = useCallback(
     (mode: ListViewMode) => {
       // Selection mode + swipe-delete are table-only surfaces
@@ -600,14 +623,21 @@ export default function CollectionDocumentsScreen() {
 
   // Android header cycles through the available view modes; iOS uses the
   // native toolbar menu instead.
-  const normalizedViewMode: ListViewMode = isKanban ? 'kanban' : isCalendar ? 'calendar' : 'table'
+  const normalizedViewMode: ListViewMode = isKanban
+    ? 'kanban'
+    : isCalendar
+      ? 'calendar'
+      : isGantt
+        ? 'gantt'
+        : 'table'
   const availableViewModes = useMemo<ListViewMode[]>(
     () => [
       'table',
       ...(kanbanAvailable ? (['kanban'] as ListViewMode[]) : []),
       ...(calendarAvailable ? (['calendar'] as ListViewMode[]) : []),
+      ...(ganttAvailable ? (['gantt'] as ListViewMode[]) : []),
     ],
-    [kanbanAvailable, calendarAvailable],
+    [kanbanAvailable, calendarAvailable, ganttAvailable],
   )
   const nextViewMode: ListViewMode =
     availableViewModes[
@@ -635,9 +665,9 @@ export default function CollectionDocumentsScreen() {
     [rootFields],
   )
 
-  // ── Kanban/calendar search/filters — screen-hosted instance of the same
-  // pipeline DocumentList runs internally in table mode (chips + sheet +
-  // where). Both overlay views share this one instance ──
+  // ── Kanban/calendar/gantt search/filters — screen-hosted instance of the
+  // same pipeline DocumentList runs internally in table mode (chips + sheet +
+  // where). All overlay views share this one instance ──
   const {
     searchText: kanbanSearchText,
     setSearchText: setKanbanSearchText,
@@ -677,10 +707,10 @@ export default function CollectionDocumentsScreen() {
   // Structured filters of the ACTIVE mode as a Payload where (search excluded)
   const presetWhere = useMemo(
     () =>
-      (filtersToWhere(isKanban || isCalendar ? kanbanFilters : tableFilters) as
+      (filtersToWhere(isKanban || isCalendar || isGantt ? kanbanFilters : tableFilters) as
         | Record<string, unknown>
         | undefined) ?? null,
-    [isKanban, isCalendar, kanbanFilters, tableFilters],
+    [isKanban, isCalendar, isGantt, kanbanFilters, tableFilters],
   )
 
   // Calendar state lifted into new/updated presets (RESOLVED sources +
@@ -690,6 +720,13 @@ export default function CollectionDocumentsScreen() {
     [calendarSources, calendarMode],
   )
 
+  // Gantt state lifted into new/updated presets (RESOLVED sources; pxPerDay/
+  // rowSort stay null unless customised — null lifts as "client default")
+  const currentGanttSnapshot = useMemo<GanttConfig>(
+    () => ({ sources: ganttSources, pxPerDay: ganttConfig.pxPerDay, rowSort: ganttConfig.rowSort }),
+    [ganttSources, ganttConfig.pxPerDay, ganttConfig.rowSort],
+  )
+
   const handleApplyPreset = useCallback(
     (preset: ViewPresetDoc) => {
       const targetMode: ListViewMode =
@@ -697,10 +734,13 @@ export default function CollectionDocumentsScreen() {
           ? 'kanban'
           : preset.viewType === 'calendar' && calendarAvailable
             ? 'calendar'
-            : 'table'
+            : preset.viewType === 'gantt' && ganttAvailable
+              ? 'gantt'
+              : 'table'
       handleViewModeChange(targetMode)
       setKanbanConfig(presetToKanbanConfig(preset))
       setCalendarConfig(presetToCalendarConfig(preset))
+      setGanttConfig(presetToGanttConfig(preset))
       // Let the preset's calendarDefaultMode take effect immediately
       setCalendarModeOverride(null)
       // Apply the preset's where to BOTH filter pipelines (kanban/calendar
@@ -718,23 +758,27 @@ export default function CollectionDocumentsScreen() {
         toast.showToast(`Applied "${preset.title}"`, { type: 'success', duration: 2000 })
       }
     },
-    [kanbanAvailable, calendarAvailable, handleViewModeChange, setKanbanConfig, setCalendarConfig, rootFields, setKanbanFilterGroups, toast],
+    [kanbanAvailable, calendarAvailable, ganttAvailable, handleViewModeChange, setKanbanConfig, setCalendarConfig, setGanttConfig, rootFields, setKanbanFilterGroups, toast],
   )
 
   // Same local-first source the table uses, filtered + sorted client-side
-  // (feeds BOTH the kanban board and the calendar)
+  // (feeds the kanban board, the calendar AND the gantt). In gantt mode a
+  // configured ganttOptions.rowSort (dot-path, ascending) overrides the
+  // list sort — that's the server preset convention for row ordering.
   const boardDocs = useMemo(() => {
-    if (!isKanban && !isCalendar) return EMPTY_DOCS
+    if (!isKanban && !isCalendar && !isGantt) return EMPTY_DOCS
     const filtered = applyWhereToDocs(
       localData.docs,
       kanbanWhereQuery as Record<string, unknown> | undefined,
     )
-    const dir = effectiveSort.direction === 'desc' ? -1 : 1
+    const ganttRowSort = isGantt ? ganttConfig.rowSort : null
+    const sortField = ganttRowSort ?? effectiveSort.field
+    const dir = ganttRowSort ? 1 : effectiveSort.direction === 'desc' ? -1 : 1
     return [...filtered].sort(
       (a, b) =>
-        dir * compareSortValues(getByPath(a, effectiveSort.field), getByPath(b, effectiveSort.field)),
+        dir * compareSortValues(getByPath(a, sortField), getByPath(b, sortField)),
     )
-  }, [isKanban, isCalendar, localData.docs, kanbanWhereQuery, effectiveSort])
+  }, [isKanban, isCalendar, isGantt, ganttConfig.rowSort, localData.docs, kanbanWhereQuery, effectiveSort])
 
   // ── Card moves — optimistic local-first patch via validated mutations ──
   const { update: validatedUpdate } = useValidatedMutations(localDB, slug, rootFields)
@@ -761,6 +805,57 @@ export default function CollectionDocumentsScreen() {
       }
     },
     [kanbanStatusField, validatedUpdate, toast],
+  )
+
+  // ── Gantt date edits — optimistic local-first patch via the same validated
+  // mutation pipeline. Fired ONCE per completed drag with day-snapped ISO
+  // datetimes; bars derive purely from docs, so a validation failure simply
+  // re-renders the old dates (spring-back) after the toast. ──
+  const handleGanttUpdateDates = useCallback(
+    async (
+      doc: Record<string, unknown>,
+      source: CalendarSource,
+      next: { start: string; end: string },
+    ) => {
+      const id = String(doc.id)
+      setMovingDocIds((prev) => (prev.includes(id) ? prev : [...prev, id]))
+      try {
+        // Dot-path WRITES mirror the calendar's dot-path reads (getByPath):
+        // nested paths patch their whole root key via setByPath — RxDB's
+        // incrementalPatch merges top-level keys only, so the rebuilt root
+        // object keeps sibling fields intact while a plain 'a.b' key would
+        // land as a literal dotted property.
+        const patch: Record<string, unknown> = {}
+        const writeField = (path: string, value: string) => {
+          if (!path.includes('.')) {
+            patch[path] = value
+            return
+          }
+          const root = path.split('.')[0]
+          // Seed from the patch-so-far so start+end under the same root
+          // (e.g. scheduling.start / scheduling.end) compose, else the doc.
+          const base = { [root]: root in patch ? patch[root] : doc[root] }
+          patch[root] = setByPath(base, path, value)[root]
+        }
+        writeField(source.startField, next.start)
+        // Point sources (no endField) write only the start — GanttBar already
+        // disables resize for them (bar.point), so next.end mirrors next.start.
+        if (source.endField) writeField(source.endField, next.end)
+        const result = await validatedUpdate(id, patch, doc)
+        if (result.success === false) {
+          const firstError = result.errors._form ?? Object.values(result.errors)[0]
+          toast.showToast(
+            typeof firstError === 'string' ? firstError : 'Date update failed',
+            { type: 'error', icon: 'error' },
+          )
+        }
+      } catch {
+        toast.showToast('Date update failed', { type: 'error', icon: 'error' })
+      } finally {
+        setMovingDocIds((prev) => prev.filter((x) => x !== id))
+      }
+    },
+    [validatedUpdate, toast],
   )
 
   // --- Swipe to delete + shake to undo ---
@@ -830,16 +925,16 @@ export default function CollectionDocumentsScreen() {
   // is mounted at a time (not one per row — that was killing perf).
   const [previewItemId, setPreviewItemId] = useState<string | null>(null)
 
-  // Kanban card preview — opened by a STATIC long-press on a card (hold
-  // ~250ms, release without moving; the board's PanResponder drag and the
+  // Board preview (kanban cards AND gantt bars) — opened by a STATIC
+  // long-press (hold, release without moving; the PanResponder drag and the
   // preview share the long-press, disambiguated by finger travel) or from
-  // the card's ellipsis menu ("Preview"). Kanban cards are NOT wrapped in
-  // ScrollablePreview.Trigger: the module's raw UILongPressGestureRecognizer
-  // (0.35s) claims long-press at the UIKit layer before the card Pressable
-  // that drives drag-or-peek, so preview is a pure-JS BottomSheet +
-  // read-only DocumentForm (same inline pattern as the relationship picker,
-  // memory-bank 013).
-  const [kanbanPreviewDoc, setKanbanPreviewDoc] = useState<Record<string, unknown> | null>(null)
+  // the kanban card's ellipsis menu ("Preview"). Cards/bars are NOT wrapped
+  // in ScrollablePreview.Trigger: the module's raw
+  // UILongPressGestureRecognizer (0.35s) claims long-press at the UIKit
+  // layer before the Pressable that drives drag-or-peek, so preview is a
+  // pure-JS BottomSheet + read-only DocumentForm (same inline pattern as the
+  // relationship picker, memory-bank 013).
+  const [boardPreviewDoc, setBoardPreviewDoc] = useState<Record<string, unknown> | null>(null)
 
   const renderRow = useCallback(
     ({ item, rowContent }: { item: Record<string, unknown>; rowContent: React.ReactElement; onPress: () => void }) => {
@@ -869,39 +964,13 @@ export default function CollectionDocumentsScreen() {
         )
       }
 
-      // ── Tablet: table-style row ────────────────────────────────────────
-      const displayContent = showSidebar ? (
-        <View style={[tableStyles.row, { backgroundColor: tc.card, borderBottomColor: tc.hairline }]}>
-          <Text style={[tableStyles.titleCell, { color: tc.text }]} numberOfLines={1}>
-            {useAsTitle ? String(item[useAsTitle] ?? item.id ?? '') : String(item.id ?? '')}
-          </Text>
-          {tableFields.map((field) => (
-            <Text key={field} style={[tableStyles.fieldCell, { color: tc.textMuted }]} numberOfLines={1}>
-              {formatCellValue(item[field])}
-            </Text>
-          ))}
-          {hasDrafts && (
-            <View style={tableStyles.statusCellWrapper}>
-              <Text style={[
-                tableStyles.statusPill,
-                { color: tc.warning, backgroundColor: tc.warningBackground },
-                (item._status === 'published') && { color: tc.success, backgroundColor: tc.successBackground },
-              ]}>
-                {String(item._status ?? 'draft')}
-              </Text>
-            </View>
-          )}
-          <Text style={[tableStyles.dateCell, { color: tc.textMuted }]}>
-            {formatDate(item.updatedAt)}
-          </Text>
-          <Text style={[tableStyles.chevron, { color: tc.tertiary }]}>›</Text>
-        </View>
-      ) : rowContent
+      // rowContent comes fully formed from DocumentList — phone card or
+      // (tableMode) frozen-title table row; no screen-side row markup.
 
       // In selection mode: tap toggles selection instead of navigating
       // (swipe-to-delete is disabled — rows render without the wrapper)
       if (selectionMode) {
-        return wrapWithSelection(displayContent)
+        return wrapWithSelection(rowContent)
       }
 
       // Swipe-to-delete wraps OUTSIDE the peek trigger: the revealed Delete
@@ -928,7 +997,7 @@ export default function CollectionDocumentsScreen() {
             onPreviewOpen={() => setPreviewItemId(itemId)}
             onPreviewClose={() => setPreviewItemId(null)}
           >
-            {displayContent}
+            {rowContent}
             <ScrollablePreview.Content>
               <PreviewContextProvider value={true}>
                 {schemaMap && isThisPreviewOpen ? (
@@ -967,14 +1036,14 @@ export default function CollectionDocumentsScreen() {
         </SwipeToDeleteRow>
       )
     },
-    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId, showSidebar, useAsTitle, tableFields, hasDrafts, selectionMode, selectedIds, toggleSelection, tc],
+    [slug, handleDelete, schemaMap, noopSubmit, isPreview, router, PREVIEW_W, PREVIEW_H, previewItemId, showSidebar, selectionMode, selectedIds, toggleSelection, tc],
   )
 
   // ── Calendar row wrapper — long-press peek via ScrollablePreview.Trigger
   // (same pattern as list rows). NOT used for kanban cards: the trigger's
   // native UILongPressGestureRecognizer would steal the long-press that
   // drives the board's PanResponder drag-or-peek (cards preview via a
-  // static long-press or the ellipsis menu instead — see kanbanPreviewDoc
+  // static long-press or the ellipsis menu instead — see boardPreviewDoc
   // above). Tap can fire from both the trigger's primary action and the
   // inner row's Pressable — the timestamp guard collapses doubles. ──
   const lastNavRef = useRef(0)
@@ -1040,23 +1109,30 @@ export default function CollectionDocumentsScreen() {
     [previewItemId, PREVIEW_W, PREVIEW_H, navigateToDoc, schemaMap, slug, noopSubmit, handleDelete],
   )
 
-  // ── Table header (tablet) ────────────────────────────────────────────
-  // Column order is controlled via the Card Display Fields picker (⚙).
-  const tableHeader = showSidebar ? (
-    <View style={[tableStyles.headerRow, { backgroundColor: tc.background, borderBottomColor: tc.hairline }, { marginTop: headerHeight }]}>
-      <Text style={tableStyles.headerTitle}>
-        {useAsTitle ? humaniseFieldName(useAsTitle) : 'ID'}
-      </Text>
-      {tableFields.map((field) => (
-        <Text key={field} style={tableStyles.headerField} numberOfLines={1}>
-          {humaniseFieldName(field)}
-        </Text>
-      ))}
-      {hasDrafts && <Text style={tableStyles.headerStatus}>Status</Text>}
-      <Text style={tableStyles.headerDate}>Updated</Text>
-      <View style={{ width: 20 }} />
-    </View>
-  ) : null
+  // ── Scan-to-lookup — toolbar scanner popup resolving barcode/QR payloads
+  // to documents (local-first with REST fallback, see useScanLookup).
+  // 'found' navigates through the SAME double-nav guard rows use;
+  // 'multiple' closes the scanner and opens a picker sheet; 'none' toasts
+  // and KEEPS the scanner open for an immediate retry. ─────────────────────
+  const [scanOpen, setScanOpen] = useState(false)
+  const [scanMatches, setScanMatches] = useState<Record<string, unknown>[] | null>(null)
+  const { resolveScannedCode } = useScanLookup()
+
+  const handleScanned = useCallback(
+    async (value: string) => {
+      const res = await resolveScannedCode(slug, value)
+      if (res.status === 'found') {
+        setScanOpen(false)
+        navigateToDoc(String(res.doc.id))
+      } else if (res.status === 'multiple') {
+        setScanOpen(false)
+        setScanMatches(res.docs)
+      } else {
+        toast.showToast(`No match for "${value}"`, { type: 'error' })
+      }
+    },
+    [resolveScannedCode, slug, navigateToDoc, toast],
+  )
 
   return (
     <View style={{ flex: 1, backgroundColor: tc.background, width: '100%' }}>
@@ -1071,13 +1147,21 @@ export default function CollectionDocumentsScreen() {
               ...(!useNativeHeaderToolbar ? {
                 headerRight: () => (
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
+                    {/* Scan-to-lookup — mirrors the native toolbar's first item */}
+                    <Pressable
+                      onPress={() => setScanOpen(true)}
+                      hitSlop={8}
+                      accessibilityLabel="Scan code"
+                    >
+                      <QrCode size={22} color={tc.text} />
+                    </Pressable>
                     {/* View presets — save/share/apply saved views */}
                     <Pressable onPress={() => setPresetsSheetOpen(true)} hitSlop={8}>
                       <Bookmark size={22} color={tc.text} />
                     </Pressable>
-                    {/* View toggle — cycles table → kanban → calendar (only
-                        through the modes this collection supports); the icon
-                        shows the NEXT mode, before the action icons */}
+                    {/* View toggle — cycles table → kanban → calendar → gantt
+                        (only through the modes this collection supports); the
+                        icon shows the NEXT mode, before the action icons */}
                     {availableViewModes.length > 1 && (
                       <Pressable
                         onPress={() => handleViewModeChange(nextViewMode)}
@@ -1087,13 +1171,15 @@ export default function CollectionDocumentsScreen() {
                           <SquareKanban size={22} color={tc.text} />
                         ) : nextViewMode === 'calendar' ? (
                           <CalendarDays size={22} color={tc.text} />
+                        ) : nextViewMode === 'gantt' ? (
+                          <ChartGantt size={22} color={tc.text} />
                         ) : (
                           <Table2 size={22} color={tc.text} />
                         )}
                       </Pressable>
                     )}
                     {/* Selection mode is a table-only surface */}
-                    {!isKanban && !isCalendar && (
+                    {!isKanban && !isCalendar && !isGantt && (
                       <Pressable
                         onPress={() => setSelectionMode(!selectionMode)}
                         hitSlop={8}
@@ -1107,7 +1193,9 @@ export default function CollectionDocumentsScreen() {
                           ? setKanbanCustomizeOpen(true)
                           : isCalendar
                             ? setCalendarCustomizeOpen(true)
-                            : setSummaryPickerOpen(true)
+                            : isGantt
+                              ? setGanttCustomizeOpen(true)
+                              : setSummaryPickerOpen(true)
                       }
                       hitSlop={8}
                     >
@@ -1142,15 +1230,30 @@ export default function CollectionDocumentsScreen() {
           />
           {useNativeHeaderToolbar && (
             <Stack.Toolbar placement="right">
+              {/* Scan-to-lookup — FIRST item of the single right toolbar
+                  (sibling placement="right" toolbars override each other) */}
+              <Stack.Toolbar.Button
+                icon="qrcode.viewfinder"
+                tintColor={tc.text}
+                separateBackground
+                onPress={() => setScanOpen(true)}
+                accessibilityLabel="Scan code"
+              />
               {/* View selector — its own group BEFORE the Actions menu.
                   Two sibling <Stack.Toolbar placement="right"> elements
                   override each other (both set unstable_headerRightItems),
                   so the group renders first inside the single toolbar with
                   separateBackground + a spacer for visual distinction. */}
-              {(kanbanAvailable || calendarAvailable) && (
+              {(kanbanAvailable || calendarAvailable || ganttAvailable) && (
                 <Stack.Toolbar.Menu
                   icon={
-                    isCalendar ? 'calendar' : isKanban ? 'square.grid.2x2' : 'tablecells'
+                    isCalendar
+                      ? 'calendar'
+                      : isGantt
+                        ? 'chart.bar.doc.horizontal'
+                        : isKanban
+                          ? 'square.grid.2x2'
+                          : 'tablecells'
                   }
                   title="View"
                   tintColor={tc.text}
@@ -1158,7 +1261,7 @@ export default function CollectionDocumentsScreen() {
                 >
                   <Stack.Toolbar.MenuAction
                     icon="tablecells"
-                    isOn={!isKanban && !isCalendar}
+                    isOn={!isKanban && !isCalendar && !isGantt}
                     onPress={() => handleViewModeChange('table')}
                   >
                     Table
@@ -1182,6 +1285,16 @@ export default function CollectionDocumentsScreen() {
                       Calendar
                     </Stack.Toolbar.MenuAction>
                   )}
+                  {/* Gantt — same date-field gate as the calendar */}
+                  {ganttAvailable && (
+                    <Stack.Toolbar.MenuAction
+                      icon="chart.bar.doc.horizontal"
+                      isOn={isGantt}
+                      onPress={() => handleViewModeChange('gantt')}
+                    >
+                      Gantt
+                    </Stack.Toolbar.MenuAction>
+                  )}
                 </Stack.Toolbar.Menu>
               )}
               {/* Presets — part of the view-selector group (before Actions):
@@ -1196,7 +1309,7 @@ export default function CollectionDocumentsScreen() {
               {/* Actions menu — selection mode, generic bulk edit, and custom
                   list actions (labels from Payload custom components) */}
               <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions" tintColor={tc.text}>
-                {!selectionMode && !isKanban && !isCalendar && (
+                {!selectionMode && !isKanban && !isCalendar && !isGantt && (
                   <Stack.Toolbar.MenuAction
                     icon="checkmark.circle"
                     onPress={() => setSelectionMode(true)}
@@ -1271,7 +1384,9 @@ export default function CollectionDocumentsScreen() {
                     ? setKanbanCustomizeOpen(true)
                     : isCalendar
                       ? setCalendarCustomizeOpen(true)
-                      : setSummaryPickerOpen(true)
+                      : isGantt
+                        ? setGanttCustomizeOpen(true)
+                        : setSummaryPickerOpen(true)
                 }
               />
               <Stack.Toolbar.Button
@@ -1292,10 +1407,9 @@ export default function CollectionDocumentsScreen() {
           )}
         </>
       )}
-      {!isKanban && !isCalendar && tableHeader}
       {/* Selection mode action bar — generic Edit Selected + custom actions
           (table-mode-only, like swipe-delete) */}
-      {selectionMode && !isKanban && !isCalendar && (
+      {selectionMode && !isKanban && !isCalendar && !isGantt && (
         <SelectionActionBar
           selectedCount={selectedIds.length}
           actions={[
@@ -1355,7 +1469,7 @@ export default function CollectionDocumentsScreen() {
             // No ScrollablePreview.Trigger wrap here — its native long-press
             // recognizer kills the drag. Preview = static long-press (hold +
             // release without moving) or the ellipsis menu's "Preview".
-            onPreviewCard={setKanbanPreviewDoc}
+            onPreviewCard={setBoardPreviewDoc}
             loadingDocIds={movingDocIds}
           />
         </View>
@@ -1394,6 +1508,44 @@ export default function CollectionDocumentsScreen() {
             nativeModule={calendarNativeModule}
           />
         </View>
+      ) : isGantt ? (
+        // ── Gantt — same local-first docs through the same screen-hosted
+        // filter pipeline; sources from useGanttConfig (defaults via
+        // pickDefaultSources). Drag editing lives inside GanttChart
+        // (PanResponder-only); completed drags land in handleGanttUpdateDates
+        // and bars spring back on failure via the docs re-render. ──
+        <View style={{ flex: 1, paddingTop: headerHeight }}>
+          {kanbanHasActiveFilters && (
+            <View style={{ marginBottom: 4 }}>
+              <FilterChips
+                filters={kanbanFilters}
+                searchText={kanbanSearchText}
+                onRemove={removeKanbanFilter}
+                onClearAll={clearKanbanFilters}
+                onAddFilter={() => setKanbanFilterInternalOpen(true)}
+                onEdit={(f) => {
+                  setKanbanEditingFilter(f)
+                  setKanbanFilterInternalOpen(true)
+                }}
+              />
+            </View>
+          )}
+          <GanttChart
+            docs={boardDocs}
+            sources={ganttSources}
+            useAsTitle={useAsTitle}
+            onPressBar={(doc) => navigateToDoc(String(doc.id))}
+            // No ScrollablePreview.Trigger wrap here — its native long-press
+            // recognizer would pre-empt the bar's drag-or-peek hold. Preview
+            // = static long-press (hold + release without moving) → the same
+            // JS BottomSheet the kanban cards use.
+            onPreviewDoc={setBoardPreviewDoc}
+            onUpdateDates={handleGanttUpdateDates}
+            readOnlyDocIds={movingDocIds}
+            // Preset/config zoom; undefined → component default (28)
+            pxPerDay={ganttConfig.pxPerDay ?? undefined}
+          />
+        </View>
       ) : (
         <DocumentList
           collection={slug}
@@ -1415,6 +1567,14 @@ export default function CollectionDocumentsScreen() {
           localData={localData}
           onScroll={scrollHandler}
           scrollEventThrottle={16}
+          // Tablet table mode — web-admin-parity rows rendered by
+          // DocumentList itself (frozen title + shared horizontal track)
+          tableMode={showSidebar}
+          // Pin customisation — sticky header band / frozen title column,
+          // both default ON, toggled in the list settings sheet
+          stickyHeader={tablePins.header}
+          pinFirstColumn={tablePins.firstColumn}
+          onTablePinsChange={handleTablePinsChange}
           // Native Payload query presets (payload-query-presets, REST-only)
           // in the filter sheet + view-preset filter application/lifting
           queryPresetsCollection={slug}
@@ -1428,9 +1588,9 @@ export default function CollectionDocumentsScreen() {
             : {})}
         />
       )}
-      {/* Kanban/calendar filter editor — the screen hosts the same
+      {/* Kanban/calendar/gantt filter editor — the screen hosts the same
           FilterBottomSheet DocumentList opens internally in table mode */}
-      {(isKanban || isCalendar) && (
+      {(isKanban || isCalendar || isGantt) && (
         <FilterBottomSheet
           visible={filterSheetOpen || kanbanFilterInternalOpen}
           onClose={closeKanbanFilterSheet}
@@ -1450,8 +1610,8 @@ export default function CollectionDocumentsScreen() {
           }}
         />
       )}
-      {/* View presets — save/share/apply table, kanban & calendar views
-          (server 'view-presets' collection, local-first) */}
+      {/* View presets — save/share/apply table, kanban, calendar & gantt
+          views (server 'view-presets' collection, local-first) */}
       <PresetsSheet
         visible={presetsSheetOpen}
         onClose={() => setPresetsSheetOpen(false)}
@@ -1459,6 +1619,7 @@ export default function CollectionDocumentsScreen() {
         currentViewType={normalizedViewMode}
         currentConfig={kanbanConfig}
         currentCalendarConfig={currentCalendarSnapshot}
+        currentGanttConfig={currentGanttSnapshot}
         currentWhere={presetWhere}
         onApply={handleApplyPreset}
       />
@@ -1485,6 +1646,18 @@ export default function CollectionDocumentsScreen() {
           onSave={handleSaveCalendarConfig}
         />
       )}
+      {/* Gantt customisation — date sources (start/end/label/colour),
+          visibility toggles and the S/M/L timeline zoom */}
+      {ganttAvailable && (
+        <GanttCustomizeSheet
+          visible={ganttCustomizeOpen}
+          onClose={() => setGanttCustomizeOpen(false)}
+          dateFieldOptions={dateFieldOptions}
+          config={ganttConfig}
+          resolvedSources={ganttSources}
+          onSave={setGanttConfig}
+        />
+      )}
       {/* Bulk edit flow — field picker → FieldRenderer input → apply to all
           selected docs via the local-first validated mutation pipeline */}
       <BulkEditSheet
@@ -1500,16 +1673,17 @@ export default function CollectionDocumentsScreen() {
           exitSelectionMode()
         }}
       />
-      {/* Kanban card preview — pure-JS inline preview (BottomSheet +
-          read-only DocumentForm), opened from the card's ellipsis menu.
-          Kanban long-press belongs to the drag gesture, so the native
-          ScrollablePreview peek is never mounted on board cards. */}
+      {/* Board preview (kanban cards + gantt bars) — pure-JS inline preview
+          (BottomSheet + read-only DocumentForm), opened by a static
+          long-press or the kanban card's ellipsis menu. Long-press belongs
+          to the drag gesture on both surfaces, so the native
+          ScrollablePreview peek is never mounted on cards or bars. */}
       <BottomSheet
-        visible={kanbanPreviewDoc != null}
-        onClose={() => setKanbanPreviewDoc(null)}
+        visible={boardPreviewDoc != null}
+        onClose={() => setBoardPreviewDoc(null)}
         height={0.75}
       >
-        {kanbanPreviewDoc && schemaMap ? (
+        {boardPreviewDoc && schemaMap ? (
           <View style={{ flex: 1 }}>
             <View
               style={{
@@ -1524,12 +1698,12 @@ export default function CollectionDocumentsScreen() {
                 style={{ flex: 1, fontSize: 17, fontWeight: '700', color: tc.text }}
                 numberOfLines={1}
               >
-                {getDocumentTitle(kanbanPreviewDoc, useAsTitle)}
+                {getDocumentTitle(boardPreviewDoc, useAsTitle)}
               </Text>
               <Pressable
                 onPress={() => {
-                  const id = String(kanbanPreviewDoc.id)
-                  setKanbanPreviewDoc(null)
+                  const id = String(boardPreviewDoc.id)
+                  setBoardPreviewDoc(null)
                   navigateToDoc(id)
                 }}
                 hitSlop={8}
@@ -1543,7 +1717,7 @@ export default function CollectionDocumentsScreen() {
                   <DocumentForm
                     schemaMap={schemaMap}
                     slug={slug}
-                    initialData={kanbanPreviewDoc}
+                    initialData={boardPreviewDoc}
                     onSubmit={noopSubmit}
                     disabled
                     nativeForm={false}
@@ -1554,12 +1728,68 @@ export default function CollectionDocumentsScreen() {
           </View>
         ) : null}
       </BottomSheet>
+      {/* Scan-to-lookup popup — camera scanner (phone: centered peek-style,
+          tablet: floating top-right popup). Resolution lives in handleScanned;
+          'none' keeps the popup open so the user can retry immediately. */}
+      <ScanLookupSheet
+        visible={scanOpen}
+        onClose={() => setScanOpen(false)}
+        onScanned={handleScanned}
+      />
+      {/* Multiple scan matches — picker sheet (same inline list pattern as
+          the board preview sheet); tapping a row navigates through the
+          shared double-nav guard. */}
+      <BottomSheet
+        visible={scanMatches != null}
+        onClose={() => setScanMatches(null)}
+        height={0.5}
+      >
+        <Text style={{ fontSize: 17, fontWeight: '700', color: tc.text, marginBottom: 4 }}>
+          Multiple matches
+        </Text>
+        <Text style={{ fontSize: 13, color: tc.textMuted, marginBottom: 8 }}>
+          Several documents match the scanned code — pick one to open.
+        </Text>
+        <ScrollView bounces showsVerticalScrollIndicator contentContainerStyle={{ paddingBottom: 16 }}>
+          {(scanMatches ?? []).map((doc) => {
+            const id = String(doc.id)
+            return (
+              <Pressable
+                key={id}
+                onPress={() => {
+                  setScanMatches(null)
+                  navigateToDoc(id)
+                }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  paddingVertical: 14,
+                  paddingHorizontal: 4,
+                  borderBottomWidth: StyleSheet.hairlineWidth,
+                  borderBottomColor: tc.separator,
+                  opacity: pressed ? 0.6 : 1,
+                })}
+              >
+                <Text
+                  style={{ flex: 1, fontSize: 15, fontWeight: '600', color: tc.text }}
+                  numberOfLines={1}
+                >
+                  {getDocumentTitle(doc, useAsTitle)}
+                </Text>
+                <Text style={{ fontSize: 18, color: tc.tertiary, fontWeight: '300' }}>›</Text>
+              </Pressable>
+            )
+          })}
+        </ScrollView>
+      </BottomSheet>
     </View>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Table styles (tablet)
+// Selection action bar styles
 // ---------------------------------------------------------------------------
 
 const selectionStyles = StyleSheet.create({
@@ -1610,108 +1840,5 @@ const selectionStyles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
     color: '#1f1f1f',
-  },
-})
-
-const tableStyles = StyleSheet.create({
-  // Fixed header row above the list
-  headerRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
-    backgroundColor: '#f6f4f1',
-  },
-  headerTitle: {
-    width: 140,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginRight: 8,
-  },
-  headerField: {
-    flex: 1,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginRight: 4,
-  },
-  headerStatus: {
-    width: 80,
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-  headerDate: {
-    width: 110,
-    textAlign: 'right',
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#8E8E93',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-  },
-
-  // Data rows
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(0,0,0,0.06)',
-    backgroundColor: '#fff',
-  },
-  titleCell: {
-    width: 140,
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#1f1f1f',
-    marginRight: 8,
-  },
-  fieldCell: {
-    flex: 1,
-    fontSize: 14,
-    color: '#666',
-    marginRight: 4,
-  },
-  statusCellWrapper: {
-    width: 80,
-  },
-  statusPill: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#b45309',
-    backgroundColor: '#fef3c7',
-    alignSelf: 'flex-start',
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-    borderRadius: 4,
-    overflow: 'hidden',
-  },
-  statusPublished: {
-    color: '#166534',
-    backgroundColor: '#dcfce7',
-  },
-  dateCell: {
-    width: 110,
-    textAlign: 'right',
-    fontSize: 13,
-    color: '#666',
-  },
-  chevron: {
-    width: 20,
-    textAlign: 'center',
-    fontSize: 20,
-    color: '#ccc',
-    fontWeight: '300',
   },
 })

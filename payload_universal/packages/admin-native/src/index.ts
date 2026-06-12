@@ -108,6 +108,58 @@ export type {
   MonthGridFallbackProps,
 } from './calendar'
 
+// Gantt chart — infinitely scrollable, user-editable gantt over Payload docs
+// (the screen supplies docs, ScheduleSource entries — the server view-presets
+// `ganttSources` shape — and press/preview/update callbacks; drag editing is
+// a self-contained PanResponder tier: dedicated resize handles, hold-then-move
+// body shift, static-hold preview)
+export { GanttBar, GanttChart, TimeAxis } from './gantt'
+export {
+  buildGanttRows,
+  computeNextRange,
+  GANTT_CHART_DEFAULT_PX_PER_DAY,
+  GANTT_REGULAR_WIDTH,
+  GANTT_TITLE_COLUMN_WIDTH,
+  initialGanttWindow,
+  shiftIsoByDays,
+} from './gantt'
+export type {
+  GanttBarProps,
+  GanttBarSpec,
+  GanttChartProps,
+  GanttDragMode,
+  GanttRowModel,
+  TimeAxisProps,
+} from './gantt'
+
+// Scheduling — the shared, view-agnostic source/event layer behind the
+// calendar AND the gantt view (Schedule* canonical names + gantt date<->x
+// scale helpers; the Calendar* aliases above re-export the same values, so
+// only the NEW names are exported here to avoid duplicates)
+export {
+  clampDateRange,
+  collectionHasScheduleDateFields,
+  createGanttScale,
+  dateKeyFromDayIndex,
+  dayIndexFromKey,
+  DEFAULT_GANTT_PX_PER_DAY,
+  DEFAULT_SCHEDULE_PALETTE,
+  docsToScheduleEvents,
+  getFirstDayOfWeek,
+  isoToDate,
+  scheduleEventDocId,
+  weekKeysForDate,
+  weekStartKey,
+} from './scheduling'
+export type {
+  DateKeyRange,
+  GanttScale,
+  ScheduleDoc,
+  ScheduleEvent,
+  ScheduleFieldLike,
+  ScheduleSource,
+} from './scheduling'
+
 // Custom component overrides
 export {
   CustomComponentProvider,

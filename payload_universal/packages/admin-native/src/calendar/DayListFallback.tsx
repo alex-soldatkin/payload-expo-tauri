@@ -19,8 +19,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native'
 import { defaultTheme as t } from '../theme'
 import { useListColors } from '../hooks/useListColors'
 import type { ListColorPalette } from '../hooks/useListColors'
-import { eventOccursOnDate, formatEventTimeRange, toDateKey } from './types'
-import type { CalendarEvent } from './types'
+import { eventOccursOnDate, formatEventTimeRange, toDateKey } from '../scheduling'
+import type { CalendarEvent } from '../scheduling'
 
 // Optional: GlassView for liquid glass rows on iOS 26+
 let GlassView: React.ComponentType<any> | null = null

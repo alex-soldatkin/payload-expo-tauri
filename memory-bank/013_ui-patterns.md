@@ -970,6 +970,47 @@ Field labels (`FieldShell.tsx`) use iOS Settings style:
 
 ---
 
+## Design Language — Charts & Data-Visualization Surfaces (2026-06-12, standing directive)
+
+All current and FUTURE chart/data-viz views (kanban, calendar, gantt, and any
+charts to come) follow the established design language — liquid glass and
+native components throughout:
+
+1. **Liquid glass first.** Containers, headers, cards, bars, chips: GlassView /
+   GlassEffectContainer guarded by `isLiquidGlassAvailable()`, with
+   BlurView → bordered-solid fallback tiers. Never double-apply glass on
+   system surfaces that already render it (sheets, segmented controls).
+2. **Native components via the registry.** Controls come from `nativeComponents`
+   (SwiftUI on iOS, JC* on Android): segmented Pickers for mode switches,
+   Toggle (`toggleStyle('button')`) for selection chips, Toggle switches for
+   visibility, Menu/ContextMenu for item actions, ColorPicker for color
+   choices. Selection state is never just font-weight/opacity — use real
+   toggle affordances (filled + checkmark fallback).
+3. **Static charts: use `@expo/ui` Chart** (already registered: bar/line/pie/
+   area/point) before reaching for any third-party charting library. New
+   native chart pods require the ObjC class-collision check (DayView lesson)
+   and a binary build — strongly disfavored. (Evaluated GraphKit 2026-06-12:
+   WIP, static-only — inspiration not adoption.)
+4. **Interactive/editable viz is JS-composed** on the proven gesture tier:
+   PanResponder with capture-phase handoff, static-hold peek disambiguation,
+   scroll locking, idempotent completion (see the Kanban/Gantt patterns).
+   Injection-friendly package contracts: no expo-router, no data fetching;
+   screens supply docs + callbacks through the local-first pipeline.
+5. **One palette source**: `useListColors` (JS) / dynamic UIColor providers
+   (Swift). Source/series colors from the shared palette by index, tinted
+   accents at low alpha over glass. SF Symbols in native menus/toolbars;
+   lucide in JS and gesture trees.
+6. **Shared scheduling layer** (`admin-native/src/scheduling/`) is the single
+   home for source→event mapping, date math, and eligibility for every
+   time-based view — extend it rather than duplicating per view.
+7. **Tables**: sticky header row and a frozen (pinned) first column are the
+   DEFAULTS for every tabular surface (document list table mode, join tables,
+   future data grids), horizontally scrollable beyond the viewport with
+   type-aware fixed column widths. Both pins are user-customizable per
+   collection (settings sheet toggles, persisted with the other list config).
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink
@@ -1239,3 +1280,76 @@ Two preset systems, deliberately different transports:
 4. iOS-only modules declare `"platforms": ["apple"]` in `expo-module.config.json`; Android then resolves the same JS API with the flag `false` (no empty android/ scaffold needed).
 5. Keep the contracted public API in a `.ts` file (use `React.createElement`, not JSX) when other packages are typed against the exact path; `index.web.tsx` carries web no-ops.
 6. Swift side: parse props defensively (skip bad dates/ids, never crash on user data) and diff prop updates (Equatable) before reloading the native view — RN re-sends props on every render.
+
+---
+
+## Shared Scheduling Module Pattern (2026-06-12)
+
+`admin-native/src/scheduling/` is the shared, view-agnostic source/event layer behind every scheduling surface (calendar AND gantt). It is **pure data and math only** — no React components, no rendering constants, no imports from calendar/ or gantt/.
+
+### What lives in scheduling/
+
+| File | Contents |
+|---|---|
+| `types.ts` | `ScheduleSource` / `ScheduleEvent` / `ScheduleDoc` canonical names; `Calendar*` aliases for backward compat; `DEFAULT_SCHEDULE_PALETTE` |
+| `dateKeys.ts` | `toDateKey`, `todayDateKey`, `addDaysToKey`, `parseDateKey`, `weekStartKey`, `weekKeysForDate`, `isoToDate`, `normalizeDateKey`, `getFirstDayOfWeek` — all LOCAL-time, DST-immune |
+| `eventMapping.ts` | `docsToScheduleEvents`, `pickDefaultSources`, `collectionHasScheduleDateFields`, `INTERNAL_DATE_FIELDS`, `scheduleEventDocId` — and Calendar* aliases |
+| `events.ts` | `buildEventsByDateKey`, `eventOccursOnDate`, `formatEventTimeRange`, `formatLongDate`, `formatTimeOfDay`, `formatWeekRangeLabel`, `isMultiDayEvent` |
+| `ganttScale.ts` | `dayIndexFromKey`, `dateKeyFromDayIndex`, `createGanttScale`, `clampDateRange`, `DEFAULT_GANTT_PX_PER_DAY` (48 — wide-screen preset default); 17 runtime self-check assertions |
+
+### Compat aliases
+Every original `Calendar*` name is re-exported from `scheduling/index.ts` as an exact alias so `calendar/index.ts` can re-export them unchanged — zero app-side import paths changed when the scheduling module was extracted.
+
+### Key rules
+1. `calendar/` and `gantt/` MUST import all date/event/scale math from `../scheduling` — never duplicate.
+2. Add new view-agnostic helpers to `scheduling/`; keep view-specific rendering constants (`GANTT_BAR_HEIGHT`, `GANTT_TITLE_COLUMN_WIDTH`, etc.) in the view module.
+3. The `DEFAULT_GANTT_PX_PER_DAY = 48` in `scheduling/ganttScale.ts` is the server-preset default (wide screens). The component-level default `GANTT_CHART_DEFAULT_PX_PER_DAY = 28` lives in `gantt/types.ts` (phone-friendly density when no preset exists).
+
+---
+
+## Gantt View Injection Contract (2026-06-12)
+
+`@payload-universal/admin-native/src/gantt/` (types / GanttBar / GanttChart / TimeAxis / index barrel). Pure-React injection pattern: no expo-router, no data fetching, no native-module imports. The screen injects already-filtered docs, configured sources, and callbacks.
+
+**Screen → component contract (`GanttChartProps`):**
+- `docs: ScheduleDoc[]` — already-filtered, already-sorted local-first docs (same `boardDocs` pipeline as kanban/calendar). Order = row order (the screen applies `ganttOptions.rowSort` override before passing).
+- `sources: ScheduleSource[]` — `{ id, label, startField, endField?, color, hidden? }`. `startField`/`endField` are **dot-paths**. Sources without `endField` produce 16pt point diamonds (shiftable, not resizable). The bar's `point` flag is true when `!source.endField` — edge responders guard on it.
+- `useAsTitle?` — row/bar title via `getDocumentTitle` fallback chain.
+- `onPressBar(doc)` — tap on a bar body or frozen-column title → navigate to doc.
+- `onPreviewDoc?(doc)` — armed hold released with <8pt of travel → present preview sheet. MUST be a JS BottomSheet — **do NOT use ScrollablePreview.Trigger on bars** (a raw UIKit recognizer would claim the press before the JS long-press that powers drag-or-peek fires).
+- `onUpdateDates(doc, source, { start, end })` — fires once per completed drag (day-snapped ISO datetimes preserving wall-clock time). Bars derive purely from `docs`, so spring-back on failure is the screen's job (re-render from docs after a failed patch).
+- `readOnlyDocIds?` — docs with a patch in flight; their bars render dimmed and lose editing.
+- `pxPerDay?` — day column width in px (default `GANTT_CHART_DEFAULT_PX_PER_DAY = 28`). The S/M/L zoom picker maps 16/28/44.
+
+**Infinite-window technique:**
+The time window `[startKey, endKey]` is a state-managed range. Initial value = `initialGanttWindow(rows, todayKey)` (clamped ±366d auto). When scroll nears an edge (< `GANTT_EXTEND_THRESHOLD_DAYS = 7` columns), the window extends by `GANTT_EXTEND_DAYS = 60` days. Jump-free left-extension: adding days on the left shifts all computed x-coordinates, so `onContentSizeChange` bumps `contentOffset.x` by the same pixel delta (`newWidth - prevWidth`) before the user sees the next frame. The FlatList provides `getItemLayout` from pure row heights for native windowing on the vertical axis.
+
+**Gesture tiers (non-negotiable — bars live inside nested scrollables):**
+1. HANDLE RESIZE (left/right 20pt zones): dedicated PanResponder per zone, no long-press required, claims clearly horizontal `|dx| > 1.4|dy|` moves, refuses termination.
+2. BODY SHIFT: Pressable `onLongPress` (200ms) arms the drag (`armedRef`); bar-root PanResponder claims the FIRST move in capture phase (`onMoveShouldSetPanResponderCapture: () => armedRef.current`). `handedOffRef` prevents the racing Pressable `onPressOut` from triggering the static-hold peek path after the drag has started.
+3. STATIC HOLD → PEEK: armed hold released with `maxTravelRef < GANTT_STATIC_PRESS_MAX_DIST (8pt)` → `onPreviewDoc` via idempotent `finishDrag`.
+4. `finishDrag` is IDEMPOTENT: `activeRef` early-return guards all three release paths (responder release, responder terminate, Pressable onPressOut).
+5. During any drag, BOTH the horizontal ScrollView and the FlatList are locked (no `scrollEnabled` toggle — the chart calls `onDragStateChange(true/false)` and the containing screen holds scroll refs to call `.setNativeProps({ scrollEnabled: false })` on both).
+
+**Stable refs rule:** Per-bar callback props (`onPressBar`, `onPreviewDoc`, `onUpdateDates`) are captured into `propsRef.current` (a plain ref updated every render) so PanResponder/Pressable callbacks read current values without being recreated — PanResponder `useMemo` deps stay stable and no mid-drag re-renders wipe the responders.
+
+**`onUpdateDates` dot-path patch pattern:**
+```ts
+// Nested paths rebuild the whole root key (RxDB incrementalPatch
+// merges top-level keys only — not deep). Start + end under the same
+// root group must compose into a single partial object so neither
+// overwrites the other.
+const buildPatch = (doc, source, next) => {
+  const patch: Record<string, unknown> = {}
+  setByPath(patch, source.startField, next.start, doc) // seeds from doc
+  if (source.endField) setByPath(patch, source.endField, next.end, patch) // seeds from patch-so-far
+  return patch
+}
+```
+
+**Server-side shape:**
+```
+ViewPresets.ganttSources  — json, ScheduleSource[] shape, condition: viewType === 'gantt'
+ViewPresets.ganttOptions  — json, { pxPerDay?: number, rowSort?: string }, condition: viewType === 'gantt'
+```
+`presetToGanttConfig(preset)` → `{ sources, pxPerDay, rowSort }`. `liftSnapshot` omits null fields; if both are null the field is set to null json.

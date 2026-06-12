@@ -616,7 +616,7 @@ export interface ViewPreset {
    * Slug of the collection this view applies to (e.g. "posts")
    */
   relatedCollection: string;
-  viewType?: ('table' | 'kanban' | 'calendar') | null;
+  viewType?: ('table' | 'kanban' | 'calendar' | 'gantt') | null;
   /**
    * Select field whose options drive the kanban columns
    */
@@ -673,6 +673,30 @@ export interface ViewPreset {
    * Calendar mode the view opens in
    */
   calendarDefaultMode?: ('month' | 'week' | 'day') | null;
+  /**
+   * Array of { id, label, startField, endField?, color, hidden? } date sources shown on the gantt
+   */
+  ganttSources?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
+  /**
+   * Gantt options: { pxPerDay?: number, rowSort?: string }
+   */
+  ganttOptions?:
+    | {
+        [k: string]: unknown;
+      }
+    | unknown[]
+    | string
+    | number
+    | boolean
+    | null;
   /**
    * Optional Payload where-query applied to the whole board
    */
@@ -1147,6 +1171,8 @@ export interface ViewPresetsSelect<T extends boolean = true> {
   cardFields?: T;
   calendarSources?: T;
   calendarDefaultMode?: T;
+  ganttSources?: T;
+  ganttOptions?: T;
   where?: T;
   owner?: T;
   accessMode?: T;

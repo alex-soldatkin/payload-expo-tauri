@@ -32,14 +32,12 @@ import {
   buildEventsByDateKey,
   getFirstDayOfWeek,
   isMultiDayEvent,
-  MAX_MONTH_CELL_BARS,
-  MAX_MONTH_CELL_DOTS,
-  MAX_MONTH_CELL_STRIPS,
   parseDateKey,
   toDateKey,
   todayDateKey,
-} from './types'
-import type { CalendarEvent } from './types'
+} from '../scheduling'
+import type { CalendarEvent } from '../scheduling'
+import { MAX_MONTH_CELL_BARS, MAX_MONTH_CELL_DOTS, MAX_MONTH_CELL_STRIPS } from './types'
 
 // Optional: GlassView for the liquid glass grid card on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
