@@ -233,6 +233,26 @@ async function ensureUser({ email, name, role }) {
   return user
 }
 
+// LOCKOUT GUARD: seeding users into an EMPTY users collection initializes
+// Payload — first-register (web create-first-user AND the mobile first-user
+// screen) is permanently locked the moment ANY user exists. If the DB has no
+// users yet, create a known ADMIN account first and announce it loudly, so a
+// fresh-DB + seed sequence can never strand the operator without credentials.
+const preexisting = await payload.count({ collection: 'users' })
+let bootstrappedAdmin = null
+if (preexisting.totalDocs === 0) {
+  bootstrappedAdmin = await ensureUser({ email: 'admin@example.com', name: 'Ada Admin', role: 'admin' })
+  console.log('')
+  console.log('┌─────────────────────────────────────────────────────────────┐')
+  console.log('│  No users existed — created an ADMIN account for you:        │')
+  console.log(`│    email:    admin@example.com                               │`)
+  console.log(`│    password: ${SEED_PASSWORD}                              │`)
+  console.log('│  (create-first-user is now locked, as Payload considers the  │')
+  console.log('│  instance initialized — log in with the credentials above.)  │')
+  console.log('└─────────────────────────────────────────────────────────────┘')
+  console.log('')
+}
+
 const editorUser = await ensureUser({ email: 'editor@example.com', name: 'Elena Editor', role: 'editor' })
 const viewerUser = await ensureUser({ email: 'viewer@example.com', name: 'Victor Viewer', role: 'viewer' })
 

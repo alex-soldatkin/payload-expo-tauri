@@ -977,6 +977,12 @@ Refinement pass over Phase 27. Two parallel agents (swift / js) cross-verified. 
 - **Seed script** (apps/server/scripts/seed.mjs, `pnpm seed` / `--fresh`): users/media(sharp PNGs)/posts(12, all statuses)/pages(5, all blocks)/products(9, all lifecycleStages)/events(11, current+next month)/globals/view-presets(3 shared); env resolution identical to dev.mjs; timezone fields need sibling <name>_tz from Payload's IANA enum ('UTC' not in enum).
 - All six typecheck targets remain at ZERO.
 
+### Phase 29b — First-user lockout fix (2026-06-12)
+
+- **Lockout class found**: wiping the DB then running `pnpm seed` created editor/viewer users into an EMPTY users collection — Payload then reports initialized and first-register (web create-first-user AND the mobile first-user screen) is locked with no known credentials. Seed now bootstraps `admin@example.com` / `payload-test-1234` (role admin) FIRST when zero users exist and prints a loud credentials box.
+- **Mobile first-user detection made dynamic** (login.tsx): the screen now HYDRATES the persisted server URL on mount (previously it only wrote it — the init probe hit the hardcoded default URL and never saw the real server), re-checks `/api/users/init` on AppState foreground and after every failed login, so a reset server flips the screen to "Create Admin User" without restarting the app.
+- Seeded credentials: admin@example.com (when bootstrapped) / editor@example.com / viewer@example.com — all `payload-test-1234`.
+
 ## Commands
 - Start everything: `pnpm -C test_app dev:all`
 - Server only: `pnpm -C test_app dev:server`

@@ -11,6 +11,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import {
   ActivityIndicator,
+  AppState,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -74,11 +75,40 @@ export default function LoginScreen() {
     }
   }, [])
 
-  // On mount: check init against the default URL
+  // Keep the latest URL visible to listeners without re-subscribing.
+  const serverURLRef = useRef(serverURL)
+  serverURLRef.current = serverURL
+
+  // On mount: hydrate the persisted server URL (this screen previously only
+  // WROTE it — the init probe then hit the hardcoded default and first-user
+  // detection never saw the real server), then check init against it.
   useEffect(() => {
-    void checkInit(serverURL)
+    let cancelled = false
+    void (async () => {
+      const stored = await SecureStore.getItemAsync(BASE_URL_KEY).catch(() => null)
+      if (cancelled) return
+      if (stored && stored !== serverURLRef.current) {
+        // setServerURL triggers the debounced re-check below.
+        setServerURL(stored)
+      } else {
+        void checkInit(serverURLRef.current)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Re-check whenever the app returns to the foreground — the server may
+  // have been reset/seeded while the app sat on this screen ("dynamic"
+  // first-user detection without restarting the app).
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void checkInit(serverURLRef.current)
+    })
+    return () => sub.remove()
+  }, [checkInit])
 
   // Debounce re-check when serverURL changes (skip on initial render)
   const isFirstServerURLRender = useRef(true)
@@ -109,6 +139,10 @@ export default function LoginScreen() {
       await login(email, password)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
+      // A failed login may mean the database was reset since this screen
+      // mounted — re-probe so the screen flips to create-first-user mode
+      // dynamically when the server reports uninitialized.
+      void checkInit(serverURLRef.current)
     } finally {
       setIsSubmitting(false)
     }
