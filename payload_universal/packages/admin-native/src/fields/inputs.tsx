@@ -257,21 +257,12 @@ const NumberFieldNative: React.FC<FieldComponentProps<ClientNumberField>> = ({
     typeof value === 'number' ? value : value != null && value !== '' ? Number(value) : NaN
   const stepperBase = Number.isFinite(numericValue) ? clampNumber(numericValue, min, max) : (min ?? 0)
 
-  // The SwiftUI Stepper is uncontrolled — remount it (epoch key) whenever the
-  // form value changes from a source other than the stepper itself.
-  const lastStepperRef = useRef(stepperBase)
-  const [stepperEpoch, setStepperEpoch] = useState(0)
-  useEffect(() => {
-    if (showStepper && lastStepperRef.current !== stepperBase) {
-      lastStepperRef.current = stepperBase
-      setStepperEpoch((e) => e + 1)
-    }
-  }, [showStepper, stepperBase])
-
+  // STABLE @expo/ui: the SwiftUI Stepper is CONTROLLED (value/onValueChange)
+  // — the canary uncontrolled defaultValue/onValueChanged + epoch-remount
+  // echo workaround is obsolete.
   const handleStepper = (v: number) => {
     if (isDisabled) return
     const clamped = clampNumber(v, min, max)
-    lastStepperRef.current = clamped
     bridge.setText(String(clamped))
     onChange(clamped)
   }
@@ -282,28 +273,31 @@ const NumberFieldNative: React.FC<FieldComponentProps<ClientNumberField>> = ({
       ...(nativeComponents.fixedSize ? [nativeComponents.fixedSize({ horizontal: true, vertical: false })] : []),
       ...(isDisabled && nativeComponents.disabled ? [nativeComponents.disabled(true)] : []),
     ]
+    // Stable @expo/ui: keyboardType / autocorrection / onSubmit are MODIFIERS
+    // (the canary TextField props died); initial text via bridge.attachRef.
+    const textFieldModifiers = [
+      ...(nativeComponents.keyboardType ? [nativeComponents.keyboardType(keyboardType)] : []),
+      ...(nativeComponents.autocorrectionDisabled ? [nativeComponents.autocorrectionDisabled(true)] : []),
+      ...(nativeComponents.onSubmit ? [nativeComponents.onSubmit(() => { void bridge.ref.current?.blur?.() })] : []),
+      ...(isDisabled && nativeComponents.disabled ? [nativeComponents.disabled(true)] : []),
+    ]
     content = (
       <NativeHost matchContents={{ height: true }} style={isDisabled ? fieldShellStyles.disabledHost : undefined}>
         <HStack spacing={t.spacing.sm}>
           <NativeTextField
-            ref={(r: unknown) => { bridge.ref.current = r as { setText: (s: string) => Promise<void> } | null }}
-            defaultValue={bridge.initialValue}
+            ref={bridge.attachRef}
             placeholder={field.admin?.placeholder}
-            keyboardType={keyboardType}
-            autocorrection={false}
-            onChangeText={bridge.handleChangeText}
-            onChangeFocus={(focused: boolean) => { if (!focused) handleBlur() }}
-            onSubmit={() => { void bridge.ref.current?.blur?.() }}
-            modifiers={isDisabled && nativeComponents.disabled ? [nativeComponents.disabled(true)] : undefined}
+            onTextChange={bridge.handleChangeText}
+            onFocusChange={(focused: boolean) => { if (!focused) handleBlur() }}
+            modifiers={textFieldModifiers.length > 0 ? textFieldModifiers : undefined}
           />
           <Stepper
-            key={`stepper-${stepperEpoch}`}
             label=""
-            defaultValue={stepperBase}
+            value={stepperBase}
             min={min}
             max={max}
             step={step}
-            onValueChanged={handleStepper}
+            onValueChange={handleStepper}
             modifiers={stepperModifiers.length > 0 ? stepperModifiers : undefined}
           />
         </HStack>

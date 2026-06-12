@@ -135,7 +135,7 @@ export default function App() {
             <View key={collection.slug} className="mt-3 rounded-2xl bg-white p-4">
               <Text className="text-base font-semibold text-ink">{collection.slug}</Text>
               <Text className="text-xs text-ink-muted">{collection.count} schema entries</Text>
-              {collection.fields.map((field) => (
+              {collection.fields.map((field: { name: string; type: string }) => (
                 <Text key={`${collection.slug}-${field.name}`} className="mt-2 text-sm text-ink">
                   {field.name} — {field.type}
                 </Text>

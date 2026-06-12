@@ -11,23 +11,23 @@
  * delete / duplicate) must call `allowLeave()` first — the next removal
  * passes through without prompting.
  *
- * IMPLEMENTATION NOTES (hard-won, 2026-06-12):
+ * IMPLEMENTATION NOTES (hard-won, 2026-06-12; migrated to SDK 56 2026-06-12):
  * - `usePreventRemove` (not a manual beforeRemove listener) is REQUIRED for
  *   sheet presentations: it registers dismiss prevention with
- *   react-native-screens NATIVELY, so a swipe-down on a dirty sheet bounces
- *   the sheet back when the user picks "Keep Editing". A plain
- *   beforeRemove + preventDefault only keeps the JS route alive — the
- *   native sheet has already animated away and never returns.
- * - This import is only safe because metro.config.js pins
- *   '@react-navigation/native'/'@react-navigation/core' (incl. deep imports)
- *   to the copies expo-router resolves. Without the pin, pnpm provides a
- *   second module instance whose context differs from expo-router's
- *   NavigationContainer → "Couldn't find a navigation object" render crash.
- *   Restart Metro with -c after touching the resolver.
+ *   react-native-screens NATIVELY (NativeStackView sets
+ *   `preventNativeDismiss` from the prevent-remove context), so a swipe-down
+ *   on a dirty sheet bounces the sheet back when the user picks "Keep
+ *   Editing". A plain beforeRemove + preventDefault only keeps the JS route
+ *   alive — the native sheet has already animated away and never returns.
+ * - SDK 56: expo-router no longer depends on @react-navigation/*; it VENDORS
+ *   react-navigation under 'expo-router/react-navigation' (same
+ *   usePreventRemove signature and native wiring). Because the vendored copy
+ *   lives inside expo-router itself, there is exactly one module instance —
+ *   the old metro.config.js @react-navigation singleton pins are gone.
  */
 import { useCallback, useRef } from 'react'
 import { Alert } from 'react-native'
-import { useNavigation, usePreventRemove } from '@react-navigation/native'
+import { useNavigation, usePreventRemove } from 'expo-router/react-navigation'
 
 export function useUnsavedChangesGuard(dirty: boolean) {
   const navigation = useNavigation()

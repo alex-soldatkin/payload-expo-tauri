@@ -1,12 +1,12 @@
 /**
  * Uncontrolled native text bridge.
  *
- * SwiftUI TextField/SecureField and JC TextInput are UNCONTROLLED: mount
- * with `defaultValue`, listen via `onChangeText`, and set programmatically
- * via `ref.setText`. This hook bridges that to react-hook-form's controlled
- * values: text is pushed INTO the native field ONLY when the form value
- * changes from the outside (RHF reset / programmatic setValue) — keystrokes
- * are never echoed back as defaultValue.
+ * SwiftUI TextField/SecureField and the JCTextInput adapter are UNCONTROLLED.
+ * Stable @expo/ui removed the canary `defaultValue` prop on BOTH platforms:
+ * the field keeps internal state, so the initial value is pushed via
+ * `ref.setText` when the native view attaches (`attachRef`), and external
+ * form changes (RHF reset / programmatic setValue) are pushed the same way —
+ * keystrokes are never echoed back.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
 
@@ -18,9 +18,15 @@ export type NativeTextRef = {
 }
 
 export type TextBridge = {
-  /** Attach to the native field (callback ref or ref object). */
+  /** Live handle to the native field (read-only; attach via `attachRef`). */
   ref: { current: NativeTextRef | null }
-  /** Value at mount — feed as `defaultValue` (uncontrolled). */
+  /**
+   * Callback ref for the native field. Stores the handle AND pushes the
+   * current form value into the freshly attached native view via `setText`
+   * (stable @expo/ui text fields have no `defaultValue` prop).
+   */
+  attachRef: (r: NativeTextRef | null) => void
+  /** Value at mount (kept for fallback tiers that still take a defaultValue). */
   initialValue: string
   /** Forward native keystrokes to the form. */
   handleChangeText: (raw: string) => void
@@ -65,6 +71,16 @@ export const useUncontrolledTextBridge = (
     void ref.current?.setText(next)
   }, [])
 
+  // Native view attached (mount or remount): seed it with the current form
+  // value. Stable @expo/ui text fields keep internal state and have no
+  // `defaultValue` prop, so this is the only way to set the initial text.
+  const attachRef = useCallback((r: NativeTextRef | null) => {
+    ref.current = r
+    if (r && lastFormValueRef.current.length > 0) {
+      void r.setText(lastFormValueRef.current)
+    }
+  }, [])
+
   // External change (reset / setValue / server refresh): push into the native
   // field only when it didn't originate from this field's own keystrokes.
   useEffect(() => {
@@ -75,5 +91,5 @@ export const useUncontrolledTextBridge = (
     }
   }, [externalText])
 
-  return { ref, initialValue: initialRef.current, handleChangeText, setText, isEmpty }
+  return { ref, attachRef, initialValue: initialRef.current, handleChangeText, setText, isEmpty }
 }

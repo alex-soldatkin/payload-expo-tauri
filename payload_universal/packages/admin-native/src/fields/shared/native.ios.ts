@@ -2,8 +2,8 @@
  * Native component registry — iOS.
  *
  * Loads SwiftUI components and modifier functions from @expo/ui/swift-ui
- * (canary 55.0.0-canary-20260128 — verify exports against
- * node_modules/@expo/ui/build/swift-ui before adding entries).
+ * (STABLE 56.0.17 — verify exports against
+ * node_modules/@expo/ui/src/swift-ui before adding entries).
  * Falls back to emptyRegistry if @expo/ui JS package is missing.
  */
 import type { NativeComponentRegistry } from './types'
@@ -73,9 +73,16 @@ try {
     GridRow: safe(() => swiftUI.Grid?.Row),
     GlassEffectContainer: safe(() => swiftUI.GlassEffectContainer),
     Namespace: safe(() => swiftUI.Namespace),
-    // NOT in the canary @expo/ui — kept null so gates (RichTextToolbar)
-    // fall back to their JS path. Do NOT register swiftUI.ControlGroup.
-    ControlGroup: null,
+    // RE-REGISTERED in stable 56.0.17 (absent in canary). Existing gates
+    // (e.g. RichTextToolbar's JS fallback) now see a value — adopting it
+    // is design work tracked separately.
+    ControlGroup: safe(() => swiftUI.ControlGroup),
+    ScrollView: safe(() => swiftUI.ScrollView),
+    // NEW in stable 56: SwiftUI confirmationDialog with slot statics.
+    ConfirmationDialog: safe(() => swiftUI.ConfirmationDialog),
+    ConfirmationDialogTrigger: safe(() => swiftUI.ConfirmationDialog?.Trigger),
+    ConfirmationDialogActions: safe(() => swiftUI.ConfirmationDialog?.Actions),
+    ConfirmationDialogMessage: safe(() => swiftUI.ConfirmationDialog?.Message),
 
     // ── Modifier factories ──
     tag: modifiers.tag ?? null,
@@ -116,7 +123,12 @@ try {
     scrollDisabled: modifiers.scrollDisabled ?? null,
     scrollDismissesKeyboard: modifiers.scrollDismissesKeyboard ?? null,
     disabled: modifiers.disabled ?? null,
-    // NOT in the canary modifiers — kept null for forward compatibility.
+    // NEW in stable: replacements for the dead TextField/SecureField
+    // keyboardType/autocorrection/onSubmit PROPS.
+    keyboardType: modifiers.keyboardType ?? null,
+    autocorrectionDisabled: modifiers.autocorrectionDisabled ?? null,
+    onSubmit: modifiers.onSubmit ?? null,
+    // Still not exported by stable 56.0.17 — kept null for forward compatibility.
     formStyle: null,
   }
 } catch {

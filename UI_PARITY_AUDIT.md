@@ -1,6 +1,6 @@
 # Payload UI → Native Mobile Admin Parity Audit
 
-**Last updated:** 2026-06-12 (Phase 30 — Gantt view: fourth list-view mode; `admin-native/src/gantt/` infinite-window core (TimeAxis, GanttChart, GanttBar, types); shared scheduling extraction (`admin-native/src/scheduling/`); GanttCustomizeSheet + useGanttConfig + presets round-trip; server ViewPresets ganttSources/ganttOptions. Previous: Phase 29b first-user lockout fix; Phase 29 kanban PanResponder drag + calendar correctness + slide-over sidebar + seed; Phase 27b Apple-style month bars + week mode; Phase 27 native calendar views REQUIRES A NEW EAS BUILD; Phase 26 kanban boards + shareable view/query presets; Phase 25/25b on-device hotfixes + post-fleet UX round)
+**Last updated:** 2026-06-12 (Phase 31 — SDK 56 migration complete. expo 56.0.11 / RN 0.85.3 / expo-router 56.2.10 / @expo/ui 56.0.17 stable / TS 6.0.3 (app-local); @react-navigation/* fully removed, usePreventRemove via expo-router/react-navigation; registry re-verified against stable 56.0.17; ControlGroup/ConfirmationDialog/ScrollView re-enabled; JC* adapters updated; iOS floor 16.4; REQUIRES A NEW EAS BUILD. Previous: Phase 30b scrollable table + scan-to-lookup; Phase 30 Gantt view; Phase 29b first-user lockout fix; Phase 29 kanban PanResponder drag + calendar correctness + slide-over sidebar + seed; Phase 27b Apple-style month bars + week mode; Phase 27 native calendar views REQUIRES A NEW EAS BUILD; Phase 26 kanban boards + shareable view/query presets; Phase 25/25b on-device hotfixes + post-fleet UX round)
 
 This document is the current-truth status of the React Native admin (`@payload-universal/admin-native` + `test_app/apps/mobile-expo`) versus the Payload web admin. Field components are listed per platform tier; list/edit features are compared against the web admin feature-by-feature.
 
@@ -8,23 +8,18 @@ This document is the current-truth status of the React Native admin (`@payload-u
 
 ## @expo/ui version truth (read this first)
 
-Two versions of `@expo/ui` exist in the workspace:
+**Canary era is over.** Since SDK 56 (2026-06-12) the workspace converges on a single version: **56.0.17 stable**.
 
 | Location | Version | Role |
 |---|---|---|
-| `test_app/apps/mobile-expo/node_modules/@expo/ui` | `55.0.0-canary-20260128-67ce8d5` | **The version compiled into the native binary. The only truth.** |
-| `test_app/node_modules/@expo/ui` (root pnpm hoist) | `55.0.6` | Wrong version — transitive resolution. Metro pins all `@expo/ui/*` imports to the app copy via custom `resolveRequest`. |
+| `test_app/apps/mobile-expo/node_modules/@expo/ui` | `56.0.17` | **The version compiled into the native binary. The only truth.** |
+| `test_app/node_modules/@expo/ui` (root pnpm hoist) | `56.0.17` | Same version but different peer-hash physical copy. Metro pins all `@expo/ui/*` imports to the app copy via custom `resolveRequest` (pin remains load-bearing even at the same version — pnpm materializes multiple physical directories). |
 
-**The canary does NOT have:** `ControlGroup`, `ConfirmationDialog`, `ScrollView` (in swift-ui). Docs/types found online or in 55.0.6 will lie about this — always verify a component exists in `test_app/apps/mobile-expo/node_modules/@expo/ui/build/` before using it.
+**Stable 56.0.17 ADDS vs canary:** `ControlGroup` (back), `ConfirmationDialog` + Trigger/Actions/Message statics (new compound), swift-ui `ScrollView`, modifier keys `keyboardType`/`autocorrectionDisabled`/`onSubmit`, `pickerStyle('navigationLink')`. **TextField/SecureField API changed:** `defaultValue`/`onChangeText`/`onChangeFocus`/`keyboardType`/`autocorrection`/`onSubmit` props removed; replaced by `onTextChange`/`onFocusChange` + modifier-factory equivalents; initial text via `ref.setText`. **Stepper is now controlled** (value/onValueChange). See Phase 31 in 008_progress-log.md for the full JC* stable surface diff.
 
-**Verified canary surface** (documented in `payload_universal/packages/admin-native/src/fields/shared/types.ts`): 43 iOS SwiftUI components + 38 modifier factories registered. Android Jetpack Compose components with APIs that diverge from SwiftUI get distinct `JC*` registry keys:
-- `JCPicker` — `{options, selectedIndex, onOptionSelected, variant: 'segmented' | 'radio'}` (options-based, not children-based)
-- `JCBottomSheet` — `{isOpened, onIsOpenedChange}`
-- `JCSwitch` — `{value, onValueChange}`
-- `JCTextInput` — uncontrolled, **no placeholder support**
-- `JCDateTimePicker`, `JCButton` (children-not-label), `JCChip`, `JCAlertDialog`, …
+**Permanently null (no replacement):** `JCPicker`, `JCAlertDialog`, Android `ContextMenu` — Android select/radio/alert/action-menu fields fall back to JS.
 
-`fields/shared/types.ts` is the authoritative registry shape — read it before assuming any component or prop exists.
+`fields/shared/types.ts` is the authoritative registry shape — read it before assuming any component or prop exists. Stable's exports map entry for the root import changed from `src/index.ts` to `src/universal/index.ts`; the metro.config.js pin was updated accordingly.
 
 ---
 
@@ -34,10 +29,10 @@ Tier legend: **iOS** = SwiftUI primitive via registry; **Android** = Jetpack Com
 
 | Field type | iOS primitive | Android primitive | JS fallback | Notes |
 |---|---|---|---|---|
-| `text` | `TextField` (uncontrolled) | `JCTextInput` (uncontrolled, no placeholder) | RN TextInput | Via `NativeTextRow` + `useNativeTextBridge` (`defaultValue`+`onChangeText`, `ref.setText` only on external resets); `admin.autoComplete` |
+| `text` | `TextField` (uncontrolled) | `JCTextInput` (uncontrolled, no placeholder) | RN TextInput | Via `NativeTextRow` + `useNativeTextBridge` (stable: `onTextChange`/`onFocusChange`; initial via `attachRef→ref.setText`; `keyboardType`/`autocorrectionDisabled`/`onSubmit` via modifier factories); `admin.autoComplete` |
 | `email` | `TextField` (email keyboard) | `JCTextInput` | RN TextInput | Same bridge as text |
 | password (auth) | `SecureField` | `JCTextInput` (secure) | RN TextInput | |
-| `number` | `TextField` + `Stepper`/`HStack` when fully bounded integer | `JCTextInput` (numeric) | RN TextInput | Stepper is uncontrolled — remounted via epoch key on external value change; `admin.step` |
+| `number` | `TextField` + `Stepper`/`HStack` when fully bounded integer | `JCTextInput` (numeric) | RN TextInput | Stepper is now **controlled** (stable SDK 56 — `value`/`onValueChange`); epoch-remount guard removed; `admin.step` |
 | `textarea` | — (JS) | — (JS) | Autogrow multiline TextInput | `admin.rows`; carve-out in native Form; Phase 25: auto-grow measures in content space (padding on wrapper View), clamped + ≤2px-delta guarded — runaway grow loop fixed |
 | `code` | — (JS) | — (JS) | Monospace TextInput + line-number gutter | |
 | `json` | — (JS) | — (JS) | Monospace TextInput + live validity indicator | |
@@ -102,7 +97,7 @@ Tier legend: **iOS** = SwiftUI primitive via registry; **Android** = Jetpack Com
 | Custom actions (edit menu) | ✅ | ✅ `editActions` metadata → native SwiftUI Menu w/ SF Symbols + destructive roles (iOS), JC ContextMenu (Android) |
 | Duplicate | Built-in | ✅ Generic (Phase 24): `[id].tsx` `handleDuplicate` clones doc, strips id/timestamps/`_status`/RxDB internals, appends ' (Copy)' to `useAsTitle` + '-copy' to slug, resets to draft when drafts enabled, inserts via `validatedCreate`; iOS toolbar Actions menu + Android `DocumentActionsMenu` extraActions, before custom `editActions` |
 | Delete | Built-in | ✅ Generic destructive-confirm delete in the same iOS Actions menu / Android extraActions |
-| Unsaved-changes guard | ✅ (leave-without-saving modal) | ✅ (Phase 25b) `useUnsavedChangesGuard` — `usePreventRemove` discard confirm driven by DocumentForm's `onDirtyChange`; intentional navigations bypass via `allowLeave()`. Save is a dirty-state checkmark toolbar button (enabled+blue when dirty) |
+| Unsaved-changes guard | ✅ (leave-without-saving modal) | ✅ (Phase 25b; SDK 56 update Phase 31) `useUnsavedChangesGuard` — `usePreventRemove` from `expo-router/react-navigation` (NOT `@react-navigation/native` — removed in SDK 56); native sheet bounce-back intact; intentional navigations bypass via `allowLeave()`. Save is a dirty-state checkmark toolbar button (enabled+blue when dirty) |
 | Document locking / take-over | ✅ | ❌ (Users collection has `lockDocuments` server-side; no native UI) |
 | Live preview | ✅ | ❌ |
 | Inline relationship create | Drawer | ✅ `RelationshipInlineCreateProvider` (formSheet, `nativeForm={false}`) |
@@ -131,7 +126,19 @@ Collections: **Pages** (5 block types, named tabs, localized fields, autosave 15
 
 ---
 
-## Needs on-device verification (aggregated from Phases 23–30)
+## Needs on-device verification (aggregated from Phases 23–31)
+
+Phase 31 (SDK 56 migration — **REQUIRES A NEW EAS BUILD** before ANY on-device verification; current binary is SDK 55 canary):
+- **New EAS build required**: iOS floor is now 16.4 (podspec bumped); expo-camera pod updated (56.0.8); reanimated 4.3.1 + worklets 0.8.3 need native recompile; expo-router 56 vendored navigation layer must be in the binary. Local builds require Xcode 16.4+.
+- **Sheet bounce-back under the new router**: open a document with unsaved changes → swipe down the sheet → "Keep Editing" must bounce it back (native `preventNativeDismiss` wired through `expo-router/react-navigation`'s vendored `NativeStackView.native.js`). "Discard" must navigate away cleanly (allowLeave() bypass).
+- **usePreventRemove import source**: verify `useUnsavedChangesGuard.ts` resolves `usePreventRemove` and `useNavigation` from `expo-router/react-navigation` and that NO file in `mobile-expo` or `payload_universal` imports from `@react-navigation/*` directly (grep: zero hits expected).
+- **EnrichedTextInput under RN 0.85 Bridgeless**: the `UIManager.getViewManagerConfig` shim in `fields/richtext.tsx` guards against the Bridgeless null-view-config fallback (problem 2 — runtime path, not provable by bundle export). Verify the rich-text editor opens and types correctly; toolbar buttons (bold, italic, table) respond; Lexical JSON round-trips cleanly on save.
+- **Stepper now controlled**: number fields with integer bounds + Stepper should update live without cursor jump or double-fire; programmatic resets (RHF reset) must reflect in the native Stepper value (no epoch-remount needed).
+- **TextField stable API**: text/email/password/code fields open with the correct keyboard type (numeric, email, secure); autocorrect state matches field config; onSubmit modifier moves focus to next field or dismisses keyboard. No `defaultValue`-on-mount echo artifacts.
+- **ControlGroup re-enabled**: verify any UI using `ControlGroup` renders correctly in stable (was absent in canary, now confirmed present).
+- **All four view modes (table, kanban, calendar, gantt)**: exercise full round-trips after the new binary. Particular attention to the gantt and calendar views whose native swift code first compiled in build 6 (pre-SDK-56 binary).
+- **Scanner (expo-camera 56.0.8)**: scan-to-lookup sheet opens; camera preview renders; QR/barcode detection fires `onBarcodeScanned`; found-one-result navigates, multiple-results shows picker sheet, none toasts (this was guarded in the pre-SDK-56 binary as "fallback state" because the expo-camera pod update was part of SDK 56).
+- **reanimated-dnd drag (worklets 0.8.3)**: summary fields picker drag-to-reorder; kanban uses PanResponder so it is unaffected, but any Sortable-based UI (GanttCustomizeSheet, CalendarCustomizeSheet, KanbanCustomizeSheet, PresetsSheet) must function with the new worklets pairing.
 
 Phase 30 (gantt — code-verified, typechecked, bundle-exported; pure JS/RN — no new native pods, no new EAS build required):
 - **Infinite scroll both axes**: time axis scrolls smoothly beyond the initial window; left-extension does NOT jump the scroll position (contentOffset compensation fires cleanly in `onContentSizeChange`); right-extension appends days without gap.
@@ -199,7 +206,7 @@ UI / glass:
 Forms / behavior:
 - ~~`nativeForm` SwiftUI Form path + `FormCrashBoundary` across all sample collections~~ — **RESOLVED NEGATIVELY (Phase 25)**: it crashed natively on-device for fully-Form-compatible collections; the path is now opt-in and disabled by default. `FormCrashBoundary` cannot catch native crashes.
 - `Stack.Toolbar.MenuAction isOn` checkmarks (verified in typings only; older expo-router ignores silently).
-- api.tsx Stepper is natively uncontrolled — programmatic resets would not be reflected (nothing resets it today).
+- api.tsx Stepper: was natively uncontrolled (canary); now **controlled** in stable (SDK 56) — programmatic resets via the `value` prop work normally. The epoch-remount workaround has been removed.
 - Autosave polling (`getFormData` + JSON diff each interval) on very large block-heavy documents.
 - Non-default locale editing is online-only: no offline support, server errors via form banner, delete still hits the whole local doc.
 
@@ -211,20 +218,28 @@ Known debt (will bite later):
 
 ---
 
-## Typecheck baselines (2026-06-12, post-Phase-30) — ZERO everywhere
+## Typecheck baselines (2026-06-12, post-Phase-31 SDK 56 migration) — ZERO everywhere
 
-Run with `cd <dir> && /Users/…/test_app/node_modules/typescript/bin/tsc --noEmit` (NOT `npx tsc` — workspace name conflict). All six targets re-verified fresh after Phase 30 (Gantt view + shared scheduling extraction); `npx expo export --platform ios --dev` bundles clean (26MB). (`payload-universal-ui` has 2 pre-existing unrelated errors; it is not one of the six tracked targets.)
+**Two tsc binaries now exist** (changed in Phase 31 — mobile-expo has its own TS 6.0.3):
+- `mobile-expo`: `cd test_app/apps/mobile-expo && node_modules/typescript/bin/tsc --noEmit` (TS 6.0.3)
+- all other five targets: `cd <dir with tsconfig> && /Users/alexandersoldatkin/projects/payload_expo_tauri/test_app/node_modules/typescript/bin/tsc --noEmit` (TS 5.9.3)
 
-| Target | Errors | Was (Phase 23) |
+Do NOT use `npx tsc` anywhere — workspace name conflict (`@payload-universal/ui` claimed by two packages) breaks it.
+
+All six targets re-verified at ZERO after Phase 31; `npx expo export --platform ios --dev` bundles clean (21 MB). (`payload-universal-ui` has 2 pre-existing unrelated errors; it is not one of the six tracked targets.)
+
+| Target | Errors (Phase 31) | Notes |
 |---|---|---|
-| admin-native | **0** | 27 |
-| mobile-expo app | **0** | 46 |
-| server | **0** | 66 |
-| admin-schema | **0** | 16 |
-| local-db | **0** | 27 |
-| client-validators | **0** | (no tsconfig before — one was created) |
+| admin-native | **0** | TS 5.9.3 |
+| mobile-expo app | **0** | TS 6.0.3 (14 new errors fixed for real) |
+| server | **0** | TS 5.9.3 |
+| admin-schema | **0** | TS 5.9.3 |
+| local-db | **0** | TS 5.9.3 |
+| client-validators | **0** | TS 5.9.3 |
 
-Zero is the baseline now — any new error is a regression. No `@ts-expect-error` suppressions were used for the elimination (real fixes; a handful of justified `as` casts with comments). Notable mechanisms that must NOT be reverted:
-- server `tsconfig.json` `paths` pins `payload` + subpaths to the payload-main copy (kills the dual-payload-instance TS2322 class).
-- mobile-expo `tsconfig.json` `paths` dedupes `react-native` to the app copy (nativewind `className` augmentation) and maps `@payload-universal/local-db` to a generated declaration snapshot at `types/local-db` (type-only; Metro bundles the real source — remove once local-db's rxdb typings are fixed upstream).
+Zero is the baseline — any new error is a regression. No `@ts-expect-error` suppressions were used (real fixes; a handful of justified `as` casts with comments). Notable mechanisms that must NOT be reverted:
+- server `tsconfig.json` `paths` pins `payload` + subpaths to the payload-main copy (kills dual-payload-instance TS2322).
+- mobile-expo `tsconfig.json` `paths` dedupes `react-native` AND `@types/react` (dual `@types/react` 19.2.9/19.2.17 under TS 6 — added in Phase 31) to the app copy; maps `@payload-universal/local-db` to declaration snapshot at `types/local-db`.
+- css-env.d.ts `declare module '*.css'` satisfies TS 6's new TS2882 side-effect-import check.
 - rxdb v16 API corrections in local-db were runtime fixes, not just typing (`db.destroy()`→`db.close()`, guarded `pushNow?.()`, request-time token resolution in UploadQueueManager).
+- `StyleSheet.absoluteFillObject` removed in RN 0.85 — 3 sites inlined to `{ position:'absolute', left:0, right:0, top:0, bottom:0 }` (NOT reverted by adding back types).

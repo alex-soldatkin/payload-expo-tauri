@@ -19,7 +19,10 @@ export function useField<Value = any>(props: { path: string }) {
   const fieldProps = usePayloadField({ control: formContext?.control, name: props.path })
   return {
     value: fieldProps?.value as Value,
-    setValue: fieldProps?.onChange,
+    // Always-callable: generated custom components invoke setValue
+    // unconditionally (web @payloadcms/ui parity, where setValue is never
+    // undefined). No-op outside a form context instead of throwing.
+    setValue: (fieldProps?.onChange ?? (() => {})) as (value: unknown) => void,
     errorMessage: fieldProps?.error,
     showError: !!fieldProps?.error,
     initialValue: undefined, // Add if needed
@@ -63,7 +66,9 @@ export function useDocumentInfo() {
   return {
     collectionSlug: slug,
     globalSlug: undefined,
-    id: formData?.id,
+    // Web parity: @payloadcms/ui types id as number | string (not unknown) —
+    // keeps `{id && <Text/>}` a valid ReactNode in custom components.
+    id: formData?.id as string | number | undefined,
     preferencesKey: `document-${slug}-${formData?.id}`,
   }
 }

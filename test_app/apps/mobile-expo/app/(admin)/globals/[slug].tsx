@@ -11,7 +11,7 @@
 import React, { useEffect, useState } from 'react'
 import { ActivityIndicator, Alert, Platform, Text, useColorScheme, View } from 'react-native'
 import { Stack, useLocalSearchParams } from 'expo-router'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 
 import {
   DocumentForm,

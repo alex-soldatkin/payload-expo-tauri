@@ -6,6 +6,12 @@
       // into payload_universal/packages/*, which would miss the nativewind
       // `className` module augmentation (declared against the app's instance).
       "react-native": ["./node_modules/react-native/types/index.d.ts"],
+      // Dedupe react typings the same way (SDK 56 / TS 6): admin-native files
+      // otherwise resolve the workspace-hoisted @types/react 19.2.9 while app
+      // files use the local 19.2.17 — two type instances make branded types
+      // (e.g. VoidOrUndefinedOnly in ref callbacks) "unrelated".
+      "react": ["./node_modules/@types/react"],
+      "react/*": ["./node_modules/@types/react/*"],
       // Local typed wrapper for @payload-universal/local-db: the package ships
       // raw TS source with pre-existing (accepted-baseline) rxdb typing errors
       // that would otherwise fail this app's typecheck. types/local-db is a

@@ -378,31 +378,36 @@ After successful POST in push handler:
 
 ---
 
-## Metro Resolver: @expo/ui Version Pinning (2026-04-01)
+## Metro Resolver: @expo/ui + expo-router Singleton Pinning (updated 2026-06-12, SDK 56)
 
-### The Problem
-pnpm workspace had two versions of `@expo/ui`:
-- `55.0.0-canary-20260128` — installed in the mobile app, compiled into the native binary
-- `55.0.6` — resolved as a transitive dep from another workspace package
+### Why the pin exists (historical lesson — canary era)
+pnpm workspace had two versions of `@expo/ui` (55.0.0-canary and 55.0.6). Metro resolved `@expo/ui/swift-ui` from the wrong version, which referenced `SlotView` — a native view absent from the canary binary. Error: `ViewManagerAdapter_ExpoUI_SlotView must be a function (received undefined)`.
 
-Metro resolved `@expo/ui/swift-ui` from the **wrong version** (55.0.6), which used `SlotView` — a native view that doesn't exist in the canary binary. Error: `ViewManagerAdapter_ExpoUI_SlotView must be a function (received undefined)`.
+### Current pin end-state (SDK 56)
 
-### The Fix
-Custom `resolveRequest` in `metro.config.js` that pins ALL `@expo/ui` imports:
+**@expo/ui:** single version (56.0.17) but pnpm still materializes multiple physical copies per peer-hash bucket. The `resolveRequest` pin routes ALL `@expo/ui` and `@expo/ui/*` imports to the app's own copy via `fs.realpathSync`. The resolver was updated for stable's exports map layout: the root `'.'` entry now points to `src/universal/index.ts` (canary pointed to `src/index.ts`). The pin also covers the new `'@expo/ui/jetpack-compose/modifiers'` subpath needed for JC* modifier helpers.
+
+**expo-router:** ADDED as a new singleton pin in SDK 56. pnpm peer-hashing materializes a second physical `expo-router@56.2.10` inside `admin-native/node_modules`. Since the navigation context is now vendored INSIDE expo-router (no separate `@react-navigation/*`), a second copy = a second navigation context → "Couldn't find a navigation object" crash class. `@payload-universal/ui`'s native `Link` imports expo-router, making this pin load-bearing.
+
+**@react-navigation/native + @react-navigation/core:** REMOVED from pins. These packages no longer exist in the dependency tree; keeping the pins crashes Metro config load on `require.resolve`.
 
 ```js
 const fs = require('fs')
 const expoUIReal = fs.realpathSync(
   path.resolve(projectRoot, 'node_modules/@expo/ui')
 )
+const expoRouterReal = fs.realpathSync(
+  path.resolve(projectRoot, 'node_modules/expo-router')
+)
 
 resolveRequest: (context, moduleName, platform) => {
-  // Pin ALL @expo/ui imports including subpaths
+  // Singleton: expo-router (vendored nav context must be one instance)
+  if (moduleName === 'expo-router' || moduleName.startsWith('expo-router/')) {
+    // ... resolve via expoRouterReal + exports map
+  }
+  // Singleton: @expo/ui (all subpaths via exports map)
   if (moduleName === '@expo/ui' || moduleName.startsWith('@expo/ui/')) {
-    const subpath = moduleName === '@expo/ui'
-      ? ''
-      : moduleName.slice('@expo/ui/'.length)
-
+    const subpath = moduleName === '@expo/ui' ? '' : moduleName.slice('@expo/ui/'.length)
     if (subpath) {
       const pkg = require(path.join(expoUIReal, 'package.json'))
       const exportEntry = pkg.exports?.['./' + subpath]
@@ -418,12 +423,13 @@ resolveRequest: (context, moduleName, platform) => {
 }
 ```
 
-### Key lessons
-1. **`extraNodeModules` alone is insufficient** — it only maps the root package name, not subpath imports like `@expo/ui/swift-ui`
-2. **Must use `fs.realpathSync`** — pnpm uses symlinks, and `require.resolve` may not follow them correctly
-3. **Must read `package.json` exports** — `@expo/ui` uses conditional exports (`./swift-ui`, `./jetpack-compose`), so the resolver must map subpaths through the exports field
+### Key lessons (still apply)
+1. **`extraNodeModules` alone is insufficient** — it only maps the root package name, not subpath imports like `@expo/ui/jetpack-compose/modifiers`
+2. **Must use `fs.realpathSync`** — pnpm uses symlinks; `require.resolve` may not follow them
+3. **Must read `package.json` exports** — map subpaths through the exports field
 4. **Always clear Metro cache after changing resolver** — `npx expo start --dev-client -c`
-5. **The native binary version must match the JS version** — if they diverge, native views will be missing and components will crash at render time
+5. **The native binary version must match the JS version** — version divergence → missing native views → runtime crash
+6. **Packages that are fully absent from the dep tree must NOT be in the pin list** — `require.resolve` throws, crashing Metro config load
 
 ---
 
@@ -1021,34 +1027,53 @@ If Turbopack fails after config changes, delete `test_app/apps/server/.next` and
 
 ---
 
-## JC* Registry Key Convention (2026-06-10)
+## JC* Registry Key Convention (updated 2026-06-12, SDK 56 stable)
 
 Android Jetpack Compose components whose APIs diverge from their SwiftUI counterparts get **distinct `JC*` keys** in the native component registry — never overload the iOS key with a different prop shape.
 
-| Key | API shape |
-|---|---|
-| `JCPicker` | `{ options, selectedIndex, onOptionSelected, variant: 'segmented' \| 'radio' }` — options-based, not children-based |
-| `JCBottomSheet` | `{ isOpened, onIsOpenedChange }` |
-| `JCSwitch` | `{ value, onValueChange }` |
-| `JCTextInput` | Uncontrolled (`defaultValue` + `onChangeText`), **no placeholder support** |
-| `JCDateTimePicker` | Compose date/time picker |
-| `JCButton` | Children, not `label` prop |
-| `JCChip`, `JCAlertDialog` | Compose-specific |
+In SDK 56 stable, several JC* keys are now **adapters** over new universal or redesigned Compose components rather than direct bindings to old Compose-only APIs. Key names are kept for backward compatibility; the adapter implementation is in `native.android.ts`.
 
-Components with matching shapes share keys (`Host`, `Text`, …). Field components branch: `nativeComponents.Picker` (iOS) → `nativeComponents.JCPicker` (Android) → JS fallback. `fields/shared/types.ts` documents the full verified surface (43 iOS components + 38 modifier factories) — **read it for exact shapes; do not trust online docs** (registry reflects the canary binary, see version-pinning gotcha below).
+| Key | SDK 56 shape / binding | Notes |
+|---|---|---|
+| `JCSwitch` | Adapter over UNIVERSAL `Switch` | `value`/`onValueChange`/`label` kept; `variant`/`color`/`elementColors` dead |
+| `JCButton` | Adapter over UNIVERSAL `Button` | `variant` mapped: default/bordered/elevated→filled, borderless→text, outlined→outlined; string `children`→`label`; `leadingIcon`/`elementColors`/`color` dead |
+| `JCTextInput` | Adapter over `jc BasicTextField` | `jc TextFieldRef` kept `setText`/`clear`/`focus`/`blur`; `textBridge.attachRef` pushes current value on attach; `defaultValue` DEAD |
+| `JCBottomSheet` | Adapter over UNIVERSAL `BottomSheet` | `isOpened→isPresented`; `onIsOpenedChange(false)→onDismiss`; `skipPartiallyExpanded→snapPoints(['full'])` |
+| `JCChip` | Adapter over per-variant AssistChip/FilterChip/InputChip/SuggestionChip | `onPress→onClick`; icons/onDismiss dead |
+| `JCIconButton` | Adapter over IconButton/FilledIconButton/OutlinedIconButton | |
+| `JCCircularProgress`/`JCLinearProgress` | `*ProgressIndicator` | `trackColor` now top-level |
+| `JCDateTimePicker` | Direct binding, unchanged | Stable adds optional `elementColors`/`selectableDates` |
+
+**Permanently null — no compatible replacement:**
+- `JCPicker` — options/selectedIndex picker API removed from Compose; universal `Picker` is menu/wheel only; `SegmentedButton`/`RadioButton` are compound-slot APIs not suitable as a drop-in. Android select/radio fields fall back to JS.
+- `JCAlertDialog` — slot-children redesign; no adapter written; Android alert use-cases fall back to JS.
+- Android `ContextMenu` — removed from Compose; `DropdownMenu` is the M3 replacement but needs a separate key; Android document-action menus fall back to JS.
+
+**CRITICAL import change:** JC modifier helpers (`jcFillMaxWidth`, etc.) moved from the `@expo/ui` package root to `'@expo/ui/jetpack-compose/modifiers'`. The Metro `@expo/ui` pin now covers this subpath via the exports map. `native.android.ts` must `require('@expo/ui/jetpack-compose/modifiers')` to get these helpers — without it, ALL 20 jc* helpers are silently null.
+
+Components with matching shapes still share keys (`Host`, `Text`, …). Field components branch: `nativeComponents.Picker` (iOS) → `nativeComponents.JCPicker` (Android, now null — JS fallback path is used) → JS fallback. `fields/shared/types.ts` documents the full verified surface — **read it for exact shapes; do not trust online docs**.
 
 ---
 
-## Uncontrolled Native Text Bridge (2026-06-10)
+## Uncontrolled Native Text Bridge (updated 2026-06-12, SDK 56)
 
-SwiftUI `TextField`/`SecureField` and `JCTextInput` are **UNCONTROLLED**: mount with `defaultValue`, listen via `onChangeText`, set programmatically only via `ref.setText`. Echoing keystrokes back as a controlled `value` causes cursor jumps / dropped input.
+SwiftUI `TextField`/`SecureField` (iOS, @expo/ui stable) and `JCTextInput` (Android, adapter over `jc BasicTextField`) are **UNCONTROLLED**: initial text set via `ref.setText`, changes flow out via `onTextChange` (stable renamed `onChangeText`→`onTextChange`; focus via `onFocusChange`). Echoing keystrokes back as a controlled `value` causes cursor jumps / dropped input.
+
+**SDK 56 stable API change:** `TextField`/`SecureField` props renamed:
+- `onChangeText` → `onTextChange`
+- `onChangeFocus` → `onFocusChange`
+- `keyboardType`/`autocorrection`/`onSubmit` moved from props to **modifier factories** (`keyboardType()`, `autocorrectionDisabled()`, `onSubmit()` in the registry)
+- `defaultValue` **REMOVED** — initial text set via `ref.setText` only (call it in the `attachRef` callback: `ref.setText(currentFormValue)`)
 
 `fields/inputs/textBridge.ts` (`useNativeTextBridge`) bridges this to react-hook-form's controlled values via `lastFormValueRef`:
 1. `lastFormValueRef` records the last string the bridge knows the form holds.
-2. Keystrokes flow native → `handleChangeText` → form; the returned canonical string updates `lastFormValueRef` (keystrokes are never pushed back into the native field).
+2. Keystrokes flow native → `handleTextChange` → form; the returned canonical string updates `lastFormValueRef` (keystrokes are never pushed back into the native field).
 3. An external-sync effect pushes text INTO the native field via `ref.setText` **only** when the form value changes from outside (RHF `reset` / programmatic `setValue`) — detected as `externalText !== lastFormValueRef.current`.
+4. `attachRef` callback (called when native ref becomes available): immediately calls `ref.setText(currentFormValue)` to seed the initial value (replaces the old `defaultValue` prop pattern).
 
-Same epoch-remount idea applies to the SwiftUI `Stepper` (also uncontrolled, `defaultValue` + `onValueChanged`): remount with a bumped `key` when the external value diverges. The controlled `value`/`onValueChange` props it appears to accept **never fire**.
+**Stepper (iOS stable):** now **controlled** — accepts `value`/`onValueChange`. The epoch-remount echo guard (`key={epoch}`) that worked around the uncontrolled behavior is deleted. External resets go through normal controlled-component `value` prop updates.
+
+**JCTextInput (Android, stable):** `textBridge.attachRef` pushes the current form value on native attach — same seeding pattern as iOS stable TextField (the `defaultValue` Android canary prop is also gone in the adapter).
 
 ---
 
@@ -1088,15 +1113,27 @@ Same epoch-remount idea applies to the SwiftUI `Stepper` (also uncontrolled, `de
 
 ---
 
-## @expo/ui Canary Version Pinning Gotcha (2026-06-10)
+## @expo/ui Version Pinning (updated 2026-06-12, SDK 56 stable era)
 
-Two `@expo/ui` versions coexist in the pnpm workspace:
-- `test_app/apps/mobile-expo/node_modules/@expo/ui` → **`55.0.0-canary-20260128-67ce8d5`** — compiled into the native binary. The only truth.
-- `test_app/node_modules/@expo/ui` (root hoist) → `55.0.6` — wrong; Metro's custom `resolveRequest` pins all `@expo/ui/*` imports to the app copy (see Metro resolver section above), but **tooling, editors, and root-level `require.resolve` will happily find 55.0.6**.
+**Canary is gone.** Since SDK 56 the workspace converges on a single version: **56.0.17 stable**.
 
-The canary **lacks** `ControlGroup`, `ConfirmationDialog`, and swift-ui `ScrollView` — components that exist in 55.0.6 and in online docs. Writing code against the wrong surface produces undefined-component runtime crashes that typecheck fine.
+- `test_app/apps/mobile-expo/node_modules/@expo/ui` → `56.0.17` (app's resolved copy — the one compiled into the native binary; this is the only truth)
+- `test_app/node_modules/@expo/ui` (root pnpm hoist) → `56.0.17` (same version, but pnpm's peer-hash algorithm still materializes multiple physical copies for different peer hash buckets)
 
-**Rule:** before using any @expo/ui component or prop, verify it exists in `test_app/apps/mobile-expo/node_modules/@expo/ui/build/` (or check the registry in `fields/shared/types.ts`, which mirrors the verified canary surface). Never trust the hoisted copy or documentation.
+Because pnpm still creates multiple physical copies even at the same version, **the Metro `resolveRequest` pin remains load-bearing.** Without it Metro may resolve `@expo/ui/swift-ui` or the new `@expo/ui/jetpack-compose/modifiers` from a peer-hash copy that has a different realpath, potentially mismatching the loaded binary. The resolver was updated for stable's exports map layout (root import entry changed from `src/index.ts` to `src/universal/index.ts`).
+
+**Stable vs canary surface changes (summarized — see Phase 31 in 008 for full detail):**
+- Re-enabled: `ControlGroup`, `ConfirmationDialog` (+ Trigger/Actions/Message statics), swift-ui `ScrollView`
+- New modifiers: `keyboardType`, `autocorrectionDisabled`, `onSubmit`
+- `TextField`/`SecureField` lost controlled props (`defaultValue`/`onChangeText`) → now use `onTextChange` + modifier-based keyboard/submission props
+- `Stepper` is now **controlled** (value/onValueChange); epoch-remount guard deleted
+- JC modifier helpers moved to `@expo/ui/jetpack-compose/modifiers` (CRITICAL import change)
+- Several JC* keys are now adapters over redesigned universal components (see JC* section below)
+- Permanently dead with no replacement: `JCPicker`, `JCAlertDialog`, Android `ContextMenu`
+
+**Historical lesson (keep for context):** the canary version-pinning problem taught us that Metro's default resolution picks the wrong copy in multi-workspace pnpm. The singleton pin plus `fs.realpathSync` / exports-map reading was the fix. That architecture is unchanged; only the version and the exports entry path changed.
+
+**Rule:** before using any @expo/ui component or prop, verify it exists in `test_app/apps/mobile-expo/node_modules/@expo/ui/build/` or the registry in `fields/shared/types.ts`. Never trust documentation that may describe a different stable version — the registry is the ground truth.
 
 ---
 
@@ -1243,13 +1280,17 @@ Two preset systems, deliberately different transports:
 
 ---
 
-## usePreventRemove Unsaved-Changes Guard (2026-06-11)
+## usePreventRemove Unsaved-Changes Guard (updated 2026-06-12, SDK 56)
 
 `src/hooks/useUnsavedChangesGuard.ts` — pairs with DocumentForm's `onDirtyChange` contract:
 
 1. The screen tracks dirty via `<DocumentForm onDirtyChange={setFormDirty} />` (RHF `isDirty`; resets after successful submit). The same flag drives the checkmark Save button (`checkmark.circle.fill`, `variant="done"`, enabled+blue when dirty, disabled+gray otherwise, explicit `useListColors` tints).
-2. `usePreventRemove(dirty, cb)` (`@react-navigation/native`) intercepts back/swipe/dismiss and shows the discard confirm; on confirm it dispatches the stashed removal action.
+2. `usePreventRemove(dirty, cb)` from **`expo-router/react-navigation`** (NOT `@react-navigation/native` — that package no longer exists in the dependency tree since SDK 56) intercepts back/swipe/dismiss and shows the discard confirm; on confirm it dispatches the stashed removal action.
 3. Intentional navigations (save-then-navigate, delete, duplicate) call `allowLeave()` FIRST — a one-shot ref bypass consumed by the next removal attempt. Without it, your own `router.back()` after a successful save hits the guard.
+
+**SDK 56 decoupling note:** expo-router 56 vendors all of react-navigation's hooks internally. `usePreventRemove` is available at `expo-router/react-navigation` with an identical signature (`(preventRemove: boolean, cb: ({data: {action}}) => void) => void`) and identical native wiring — `NativeStackView.native.js` sets `preventNativeDismiss` from `usePreventRemoveContext`'s `preventedRoutes`. **Native sheet bounce-back ("Keep Editing") is fully intact.** The `allowLeave()` one-shot bypass is unchanged.
+
+`@react-navigation/*` is GONE from the lock file. Any import from `@react-navigation/native`, `@react-navigation/core`, etc. will throw at Metro config load (`require.resolve` fails). The codemod (`expo-codemod sdk-56-expo-router-react-navigation-replace`) rewrote all 7 affected files. If new code needs navigation hooks, import from `expo-router/react-navigation`.
 
 ---
 

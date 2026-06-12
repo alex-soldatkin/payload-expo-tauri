@@ -7,7 +7,7 @@
 import React, { useMemo } from 'react'
 import { Animated, Pressable, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 
 import {
   CollectionIcon,

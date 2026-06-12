@@ -334,12 +334,12 @@ export default function AccountScreen() {
             </Text>
           </View>
           <Text className="text-lg font-bold text-ink">{displayName}</Text>
-          {user?.email && (
+          {user?.email ? (
             <Text className="mt-1 text-sm text-ink-muted">{user.email as string}</Text>
-          )}
-          {user?.id && (
+          ) : null}
+          {user?.id ? (
             <Text className="mt-1 text-xs text-ink-muted">ID: {user.id as string}</Text>
-          )}
+          ) : null}
         </Card>
 
         {/* Sync Status + Progress */}

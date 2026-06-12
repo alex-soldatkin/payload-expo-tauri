@@ -119,7 +119,7 @@ try {
   //
   // 1. The Codegen Babel plugin (@react-native/babel-plugin-codegen) should
   //    transform this into an inline JS view config at bundle time, but it
-  //    crashes on RN 0.83 + @babel/traverse 7.29.
+  //    crashed on RN 0.83 + @babel/traverse 7.29 (SDK 55 canary era).
   //
   // 2. The fallback codegenNativeComponent function calls requireNativeComponent
   //    → getNativeComponentAttributes → UIManager.getViewManagerConfig. In
@@ -131,6 +131,13 @@ try {
   // EnrichedTextInputView. Metro's singleton resolver (metro.config.js) ensures
   // all react-native/* imports resolve to one copy, so this patch is seen by
   // both the registration and the renderer.
+  //
+  // RN 0.85 / SDK 56 (2026-06-12): kept intentionally. Even if the babel
+  // codegen crash (#1) is fixed in 0.85, the Bridgeless null-view-config
+  // fallback (#2) is a runtime path that only an on-device repro can rule
+  // out. The patch is additive (only intercepts EnrichedTextInputView) and
+  // harmless when the codegen transform works. Re-test removal on a new
+  // SDK 56 dev build before deleting.
   const { UIManager } = require('react-native')
   const origGetConfig = UIManager.getViewManagerConfig
   if (origGetConfig) {

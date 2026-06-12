@@ -666,7 +666,12 @@ const styles = StyleSheet.create({
     height: RETICLE,
   },
   viewfinderBorder: {
-    ...StyleSheet.absoluteFillObject,
+    // RN 0.85 removed StyleSheet.absoluteFillObject — inline the equivalent.
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
     borderRadius: 18,
     borderCurve: 'continuous',
     borderWidth: 1,

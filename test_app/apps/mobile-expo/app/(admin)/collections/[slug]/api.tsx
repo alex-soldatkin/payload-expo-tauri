@@ -283,15 +283,11 @@ export default function APIInspectorSheet() {
   const [depth, setDepth] = useState(1)
   const [locale, setLocale] = useState<string>(localization?.defaultLocale ?? '')
 
-  // The SwiftUI Stepper is UNCONTROLLED (registry truth — fields/shared/
-  // types.ts: defaultValue + onValueChanged). Its initial value is latched
-  // ONCE; `depth` state must never be echoed back into native props
-  // (defaultValue/label), because the native canary replays
-  // `value = clamp(defaultValue)` on `.onAppear` and `.onChange(of: value)`
-  // fires for programmatic writes too — echoed props re-arm that cycle on
-  // every commit → nested-update loop (same class as the details sheet).
-  const stepperDefaultRef = useRef(depth)
-
+  // STABLE @expo/ui 56: the SwiftUI Stepper is CONTROLLED (value/
+  // onValueChange) — the canary's uncontrolled defaultValue/onValueChanged
+  // contract (and its onAppear echo-loop workaround) is obsolete. The
+  // functional setState below still bails on no-change values, so a native
+  // echo of the same value can never re-render.
   const handleDepthChange = useCallback((v: number) => {
     setDepth((prev) => {
       const next = Math.max(0, Math.min(10, Math.round(v)))
@@ -403,19 +399,19 @@ export default function APIInspectorSheet() {
             </View>
           )}
 
-          {/* Depth stepper 0..10 — live value rendered in RN, NEVER in the
-              native control's props (see stepperDefaultRef note above) */}
+          {/* Depth stepper 0..10 — stable Stepper is CONTROLLED; the live
+              label still renders in RN (native Stepper has no label text) */}
           <View style={styles.controlRow}>
             <Text style={[styles.controlLabel, { color: textColor }]}>Depth: {depth}</Text>
             {canUseNativeControls && SStepper ? (
               <SHost matchContents={MATCH_CONTENTS} style={styles.hostFill}>
                 <SStepper
                   label=""
-                  defaultValue={stepperDefaultRef.current}
+                  value={depth}
                   min={0}
                   max={10}
                   step={1}
-                  onValueChanged={handleDepthChange}
+                  onValueChange={handleDepthChange}
                 />
               </SHost>
             ) : (

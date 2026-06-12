@@ -10,7 +10,6 @@
       "android"
     ],
     "userInterfaceStyle": "automatic",
-    "sdkVersion": "55.0.0",
     "ios": {
       "bundleIdentifier": "com.alexsoldatkin.payload-universal-mobile",
       "supportsTablet": true
@@ -23,7 +22,9 @@
     },
     "plugins": [
       "expo-router",
-      "expo-secure-store"
+      "expo-secure-store",
+      "expo-sqlite",
+      "@react-native-community/datetimepicker"
     ],
     "extra": {
       "router": {},

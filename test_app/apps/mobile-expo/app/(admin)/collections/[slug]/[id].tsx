@@ -15,7 +15,7 @@ import React, { useCallback, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Alert, Animated, Platform, Pressable, Text, useColorScheme, useWindowDimensions, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
 import type { SFSymbol } from 'sf-symbols-typescript'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 import { Save } from 'lucide-react-native'
 
 import {

@@ -17,10 +17,17 @@ config.watchFolders = [
   path.resolve(monoRoot, 'payload-main/packages'),
 ]
 
-// Modules that must resolve to the app's own copy (never hoisted/duplicated)
+// Modules that must resolve to the app's own copy (never hoisted/duplicated).
+// expo-router joined this list on SDK 56: it VENDORS react-navigation
+// (expo-router/react-navigation), so its navigation context lives inside the
+// package — pnpm peer-hashing gives workspace packages (e.g.
+// @payload-universal/ui's Link) a second physical expo-router@56.x copy,
+// and a second copy means a second context → "Couldn't find a navigation
+// object" crashes. Pinning to the app's copy keeps one instance app-wide.
 const singletonModules = {
   react: path.resolve(projectRoot, 'node_modules/react'),
   'react-native': path.resolve(projectRoot, 'node_modules/react-native'),
+  'expo-router': path.resolve(projectRoot, 'node_modules/expo-router'),
 }
 
 // Resolve the real path for @expo/ui (pnpm uses symlinks)
@@ -28,23 +35,10 @@ const expoUIReal = fs.realpathSync(
   path.resolve(projectRoot, 'node_modules/@expo/ui')
 )
 
-// Pin @react-navigation/* to the copies EXPO-ROUTER resolves. pnpm gives the
-// app and expo-router different physical copies; @react-navigation context
-// objects then differ per copy, so app-level useNavigation/usePreventRemove
-// crash with "Couldn't find a navigation object" (2026-06-12, unsaved-changes
-// guard). Anchoring resolution at expo-router's own directory guarantees one
-// shared instance — and usePreventRemove's NATIVE dismiss prevention (sheet
-// bounce-back on cancel) only works when the instances match.
-const expoRouterDir = path.dirname(
-  require.resolve('expo-router/package.json', { paths: [projectRoot] })
-)
-const navNativeDir = path.dirname(
-  require.resolve('@react-navigation/native/package.json', { paths: [expoRouterDir] })
-)
-const navSingletonAnchors = {
-  '@react-navigation/native': expoRouterDir,
-  '@react-navigation/core': navNativeDir,
-}
+// SDK 56 NOTE: the former @react-navigation/native+core singleton pins are
+// GONE — expo-router 56 no longer depends on @react-navigation/*; it vendors
+// react-navigation internally (import from 'expo-router/react-navigation'),
+// so a single navigation-context instance is guaranteed by construction.
 
 config.resolver = {
   ...config.resolver,
@@ -77,43 +71,28 @@ config.resolver = {
       }
     }
 
-    // Pin @react-navigation/native + core (incl. deep imports) to the copies
-    // expo-router resolves — single navigation context instance app-wide.
-    for (const [pkg, anchorDir] of Object.entries(navSingletonAnchors)) {
-      if (moduleName === pkg || moduleName.startsWith(pkg + '/')) {
-        try {
-          const resolved = require.resolve(moduleName, { paths: [anchorDir] })
-          return { filePath: resolved, type: 'sourceFile' }
-        } catch { /* let default resolver handle it */ }
-      }
-    }
-
     // Pin ALL @expo/ui imports (including subpaths like @expo/ui/swift-ui)
-    // to the app's canary version, preventing Metro from resolving the
-    // incompatible stable version from the workspace root.
+    // to the app's copy (stable 56.x since the SDK 56 migration; the canary
+    // is gone and the workspace converges on one VERSION now). STILL
+    // REQUIRED: pnpm peer-hashing materializes @expo/ui 56.x as multiple
+    // physical copies (the app's vs the one linked into
+    // @payload-universal/admin-native's node_modules), and Metro's
+    // hierarchical resolution would load a second module instance for
+    // imports inside admin-native source files without this pin.
     if (moduleName === '@expo/ui' || moduleName.startsWith('@expo/ui/')) {
-      const subpath = moduleName === '@expo/ui'
-        ? ''
-        : moduleName.slice('@expo/ui/'.length)
-
-      // Use the package.json exports to resolve the subpath
-      if (subpath) {
-        const pkg = require(path.join(expoUIReal, 'package.json'))
-        const exportKey = './' + subpath
-        const exportEntry = pkg.exports?.[exportKey]
-        if (exportEntry) {
-          const entryFile = typeof exportEntry === 'string'
-            ? exportEntry
-            : exportEntry.default || exportEntry.import || Object.values(exportEntry)[0]
-          const resolved = path.resolve(expoUIReal, entryFile)
+      const pkg = require(path.join(expoUIReal, 'package.json'))
+      const exportKey = moduleName === '@expo/ui'
+        ? '.'
+        : './' + moduleName.slice('@expo/ui/'.length)
+      const exportEntry = pkg.exports?.[exportKey]
+      if (exportEntry) {
+        const entryFile = typeof exportEntry === 'string'
+          ? exportEntry
+          : exportEntry.default || exportEntry.import || Object.values(exportEntry)[0]
+        const resolved = path.resolve(expoUIReal, entryFile)
+        if (fs.existsSync(resolved)) {
           return { filePath: resolved, type: 'sourceFile' }
         }
-      }
-
-      // Root import
-      const mainEntry = path.resolve(expoUIReal, 'src/index.ts')
-      if (fs.existsSync(mainEntry)) {
-        return { filePath: mainEntry, type: 'sourceFile' }
       }
     }
 

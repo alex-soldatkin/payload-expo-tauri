@@ -275,7 +275,7 @@ export function DocumentListTableHeader({
 
       {/* Scrolling column headers — the horizontal pan surface */}
       <Animated.ScrollView
-        ref={trackScrollRef as React.Ref<unknown> as React.Ref<ScrollView>}
+        ref={trackScrollRef as unknown as React.ComponentProps<typeof Animated.ScrollView>['ref']}
         horizontal
         onScroll={onScroll}
         scrollEventThrottle={16}

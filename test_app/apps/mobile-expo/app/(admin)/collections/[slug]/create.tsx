@@ -26,7 +26,7 @@ import React, { useMemo, useRef, useState } from 'react'
 import { useUnsavedChangesGuard } from '@/src/hooks/useUnsavedChangesGuard'
 import { ActivityIndicator, Pressable, Text, TextInput, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 
 import {
   DocumentForm,

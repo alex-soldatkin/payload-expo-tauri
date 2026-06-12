@@ -1,7 +1,8 @@
 /**
  * RichTextToolbar — native SwiftUI glass toolbar with a JS pill fallback.
  *
- * iOS native tier (canary @expo/ui has NO ControlGroup — never use it):
+ * iOS native tier (stable @expo/ui 56 re-added ControlGroup — now registered,
+ * but adopting it here is design work; this toolbar intentionally skips it):
  *   GlassEffectContainer wrapping HStack groups of Buttons inside a single
  *   NativeHost, all inside a horizontal RN ScrollView for overflow.
  *   - inactive:  buttonStyle('glass')          (bordered pre-iOS 26)

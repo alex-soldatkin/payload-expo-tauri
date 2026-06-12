@@ -6,7 +6,8 @@ Pod::Spec.new do |s|
   s.author         = ''
   s.homepage       = 'https://docs.expo.dev/modules/'
   s.platforms      = {
-    :ios => '15.1'
+    # Expo SDK 56 minimum (was 15.1 on SDK 55)
+    :ios => '16.4'
   }
   s.source         = { git: '' }
   s.static_framework = true

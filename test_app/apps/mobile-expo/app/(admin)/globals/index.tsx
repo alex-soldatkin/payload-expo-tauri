@@ -6,7 +6,7 @@
 import React from 'react'
 import { Pressable, ScrollView, Text, View } from 'react-native'
 import { useRouter } from 'expo-router'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 
 import { getGlobalLabel, useMenuModel } from '@payload-universal/admin-native'
 import { useResponsive } from '@/hooks/useResponsive'

@@ -1032,3 +1032,104 @@ Three parallel work streams (shared scheduling extraction / gantt core / integra
 - EAS build (simulator): `cd test_app/apps/mobile-expo && eas build --platform ios --profile development-simulator --local`
 - EAS build (device .ipa): `cd test_app/apps/mobile-expo && eas build --platform ios --profile development --local`
 - Install sim build: `xcrun simctl install booted PayloadUniversalMobile.app`
+
+### Phase 31 — SDK 56 migration (2026-06-12)
+
+Canary era is over. The app now runs on the first fully stable SDK 56 release.
+
+**Version matrix (before → after):**
+
+| Package | Before | After |
+|---|---|---|
+| expo | 55.0.0-canary-20260128-67ce8d5 | 56.0.11 |
+| react-native | 0.83.1 | 0.85.3 |
+| react | 19.2.0 | 19.2.3 |
+| expo-router | 55.0.0-canary | 56.2.10 |
+| @expo/ui | 55.0.0-canary → **56.0.17 stable** | pnpm dedupe removed 55.0.6 transitive copy too — ONE version now |
+| expo-camera | 55.0.4-canary | 56.0.8 |
+| expo-file-system | 55.0.4-canary | 56.0.8 |
+| react-native-reanimated | 4.2.1 | 4.3.1 |
+| react-native-worklets | 0.7.1 | 0.8.3 (pairing rule changed: reanimated 4.3.x peers on worklets 0.8.x) |
+| react-native-screens | 4.20.0 | 4.25.2 |
+| typescript (app-local) | 5.9.3 | 6.0.3 |
+| jest-expo | 55.x-canary | 56.0.5 |
+| @react-native-community/datetimepicker | 8.6.0 | 9.1.0 |
+| @expo/metro-runtime | (stale canary auto-peer) | ~56.0.15 (explicit) |
+| @expo/dom-webview | 55.0.2 (stale auto-peer) | ^56.0.5 (explicit) |
+
+**Root cause of `expo install --fix` initially reporting "up to date":** `app.json` hardcoded `"sdkVersion": "55.0.0"` which made the tool validate against the SDK 55 manifest. Removed; sdkVersion is now inferred from the expo package version. A second `--fix` pass after removal aligned all remaining peers.
+
+**expo-router / @react-navigation decoupling:**
+
+SDK 56's expo-router no longer depends on `@react-navigation/*` as an external package — it vendors the navigation layer internally and exposes it at `expo-router/react-navigation` (public export entry). `@react-navigation/*` packages are fully gone from the dependency tree.
+
+Codemod applied: `expo-codemod 56.0.4`, `sdk-56-expo-router-react-navigation-replace`. Rewrote all 7 files that imported from `@react-navigation/*` (6 screens using `useHeaderHeight` + `useUnsavedChangesGuard.ts`).
+
+**`usePreventRemove` post-decoupling — NATIVE DISMISS PREVENTION IS INTACT:**
+expo-router 56 vendors react-navigation at `expo-router/build/react-navigation` (public entry `expo-router/react-navigation`). Its `usePreventRemove` has an identical signature and identical native wiring: vendored `NativeStackView.native.js` sets `preventNativeDismiss` from `usePreventRemoveContext`'s `preventedRoutes`. Dirty-sheet swipe-down still bounces back on "Keep Editing". The `allowLeave()` one-shot bypass contract is untouched. **Zero changes were needed in the three consumer screens** — the hook API is unchanged.
+
+**Metro pin end-state (metro.config.js):**
+1. `@react-navigation/native` + `@react-navigation/core` pins **REMOVED** — packages are unresolvable, keeping the pins crashes Metro config load.
+2. `react`/`react-native` deep-import singleton pins **KEPT** — pnpm multi-copy reality is unchanged under RN 0.85.
+3. `expo-router` **ADDED** as a singleton pin — pnpm peer-hashing materializes a second physical `expo-router@56.2.10` inside `admin-native`'s node_modules; since the navigation context is now vendored inside expo-router, two copies = two contexts → "Couldn't find a navigation object" crash class. `@payload-universal/ui`'s native `Link` imports expo-router, making this load-bearing.
+4. `@expo/ui` pin **KEPT** with updated resolver — stable's `package.json` exports entry is `src/universal/index.ts` (canary's was `src/index.ts`); the pin now resolves the root import correctly and all subpaths via the exports map (covers the new `@expo/ui/jetpack-compose/modifiers` require added for JC* modifier helpers).
+
+**`@expo/ui` stable surface — registry changes (`fields/shared/types.ts` + `native.ios.ts` + `native.android.ts`):**
+
+Re-enabled (were absent in canary, confirmed present in stable 56.0.17):
+- `ControlGroup` (back in stable)
+- `ConfirmationDialog` + `Trigger`/`Actions`/`Message` statics (new compound, 4 keys)
+- swift-ui `ScrollView` (new key: `axes`/`showsIndicators`)
+- 3 new modifier keys: `keyboardType`, `autocorrectionDisabled`, `onSubmit`
+- `emptyRegistry` updated to include the 4 `ConfirmationDialog` keys (fixes pre-existing TS2739)
+
+iOS contract changes (affects `NativeTextRow`, `NumberField`, `fields/inputs.tsx`):
+- `TextField`/`SecureField` **lost** `defaultValue`/`onChangeText`/`onChangeFocus`/`keyboardType`/`autocorrection`/`onSubmit` → replaced by `onTextChange`/`onFocusChange` + modifier-based `keyboardType()`/`autocorrectionDisabled()`/`onSubmit()`. `placeholder` survived. Initial text now set via `ref.setText`.
+- `Stepper` is now **controlled** (`value`/`onValueChange`) — epoch-remount echo guard deleted.
+- `BottomSheet` (swift-ui): `isPresented` shape unchanged + new `onDismiss` + lazy-mounts (nothing renders until first open, unmounts after dismissal).
+- `pickerStyle` gains `'navigationLink'` option.
+
+Android JC* unifications (key names kept, zero consumer API changes):
+- JC modifier helpers moved from `@expo/ui` root to `@expo/ui/jetpack-compose/modifiers` — **CRITICAL**: without the new require all 20 `jc*` helpers (including load-bearing `jcFillMaxWidth`) would be silently null. Metro `@expo/ui` pin now covers this subpath via the exports map.
+- `Divider` → `jc.HorizontalDivider` (single Divider API removed)
+- `JCSwitch` → adapter over UNIVERSAL `Switch` (value/onValueChange/label kept; variant/color/elementColors dead — checkbox is a separate component)
+- `JCButton` → adapter over UNIVERSAL `Button` redesign (variant default|bordered|elevated→filled, borderless→text, outlined→outlined; string children→label; leadingIcon/elementColors/color dead — `AddRowButton` stays native minus its icon)
+- `JCTextInput` → adapter over `jc BasicTextField` (`jc TextFieldRef` kept `setText`/`clear`/`focus`/`blur`; `textBridge.attachRef` pushes current value on native attach matching the iOS stable pattern for initial-value seeding; `defaultValue` dead)
+- `JCBottomSheet` → adapter over UNIVERSAL `BottomSheet` (`isOpened→isPresented`, `onIsOpenedChange(false)→onDismiss`, `skipPartiallyExpanded→snapPoints(['full'])`)
+- `JCChip` → adapter over per-variant AssistChip/FilterChip/InputChip/SuggestionChip with Label slot (`onPress→onClick`; icons/onDismiss dead)
+- `JCIconButton` → adapter over IconButton/FilledIconButton/OutlinedIconButton
+- `JCCircularProgress`/`JCLinearProgress` → `*ProgressIndicator` (`trackColor` now top-level)
+- `JCRow`/`JCColumn` gain `{ spacedBy }` arrangements; `JCShape` gains `RoundedCorner`; `jcClip` contract changed (BuiltinShape config, not Shape JSX)
+- `JCDateTimePicker`: unchanged (prop-for-prop; stable adds optional `elementColors`/`selectableDates`)
+
+Permanently null — no compatible replacement (documented in registry, Android fields fall back to JS):
+- `JCPicker` (options/selectedIndex picker removed; `SegmentedButton`/`RadioButton` are compound-slot APIs; universal `Picker` is menu/wheel only — not suitable for all existing uses)
+- `JCAlertDialog` (slot-children redesign)
+- Android `ContextMenu` (removed; `DropdownMenu` is the Material 3 replacement — would require a separate registry key)
+
+**TS 6 / RN 0.85 errors fixed (mobile-expo target — 14 errors, all fixed for real, no suppressions):**
+- `StyleSheet.absoluteFillObject` removed at runtime+types in RN 0.85 — 3 sites inlined to `{ position:'absolute', left:0, right:0, top:0, bottom:0 }`
+- Dual `@types/react` 19.2.9/19.2.17 — deduped via tsconfig `paths` pin mirroring the existing `react-native` pin
+- `Animated.ScrollView` ref cast made version-proof via `ComponentProps<typeof Animated.ScrollView>['ref']`
+- `unknown`-typed JSX guards converted to ternaries
+- `CalendarNativeModule` widened to `| null` matching the module's actual exports
+- TS 6 new TS2882 side-effect-import check — satisfied with `css-env.d.ts` `declare module '*.css'`
+- `@payload-universal/ui` shim's `setValue` made always-callable and `useDocumentInfo` `id` typed `string|number|undefined` — fixed at the root instead of in generated custom components
+
+**Pod / iOS floor:**
+- Both local podspecs (`calendar-view` AND `scrollable-preview`) bumped iOS 15.1 → 16.4 (scrollable-preview tvOS also bumped to 16.4) — SDK 56 minimum is iOS 16.4.
+- **REQUIRES A NEW EAS BUILD**: the native binary must be rebuilt for the iOS 16.4 floor, expo-camera's updated camera pod, and the reanimated 4.3.1/worklets 0.8.3 native update.
+- Local builds require Xcode 16.4+. The EAS cloud builder constraint is Xcode 26.4-compatible (`image: "latest"` in eas.json points to the cloud's current stable Xcode, which is 16.x series as of this writing; if Xcode 26.4 cloud support is needed, check EAS image availability before kicking a build).
+
+**Other fixes:**
+- `expo-file-system/legacy` import: the upload queue's two dynamic `import('expo-file-system')` calls switched to `'expo-file-system/legacy'` — SDK 56's main entry replaces `deleteAsync` and other legacy functions with stubs that THROW at runtime. The previous catch-block swallowing masked the failure; local files were never cleaned up after upload.
+
+**expo-doctor:** 21 checks, 19 pass; 2 accepted findings:
+- Same-version duplicate warnings (expo/expo-router/expo-asset 56.x in multiple pnpm peer-hash dirs) — structural to multi-workspace pnpm; Metro singleton pins enforce runtime correctness; native builds unaffected since versions match.
+- Non-CNG warning (checked-in ios/android folders; app.json native props don't sync on EAS) — pre-existing project structure.
+
+**tsc binary paths (CHANGED — see tooling-gotchas memory):**
+- `mobile-expo` now typechecks with its OWN TS 6.0.3: `test_app/apps/mobile-expo/node_modules/typescript/bin/tsc`
+- All other five targets keep workspace TS 5.9.3: `test_app/node_modules/typescript/bin/tsc`
+
+**All six targets verified at ZERO post-migration.** Metro smoke: `npx expo export --platform ios --dev` succeeded (21 MB bundle, zero resolution errors).

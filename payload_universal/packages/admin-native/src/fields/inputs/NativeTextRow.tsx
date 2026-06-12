@@ -2,10 +2,14 @@
  * Single-line native text input row.
  *
  *   iOS     → SwiftUI TextField / SecureField (registry-gated)
- *   Android → JC TextInput (registry-gated; placeholder rendered as a JS
- *             overlay because JCTextInput has no placeholder prop)
+ *   Android → JCTextInput registry adapter over JC BasicTextField
+ *             (placeholder rendered as a JS overlay — still no native
+ *             placeholder prop)
  *
  * Both natives are UNCONTROLLED — driven by useUncontrolledTextBridge.
+ * STABLE @expo/ui 56: `defaultValue` died on both platforms (initial text is
+ * pushed via bridge.attachRef → ref.setText), and the iOS keyboardType/
+ * autocorrection/onSubmit PROPS became MODIFIERS (registry keys).
  * Callers must gate on hasNativeSingleLineText / hasNativeSecureText and
  * fall back to the RN TextInput tier otherwise.
  */
@@ -14,9 +18,10 @@ import { StyleSheet, Text, View } from 'react-native'
 
 import { defaultTheme as t } from '../../theme'
 import { fieldShellStyles, nativeComponents } from '../shared'
+import type { NativeModifier } from '../shared'
 import { NativeHost } from '../NativeHost'
 import { useInputColors } from './colors'
-import type { NativeTextRef, TextBridge } from './textBridge'
+import type { TextBridge } from './textBridge'
 
 /** Whether a native single-line text input exists on this platform. */
 export const hasNativeSingleLineText = Boolean(
@@ -70,17 +75,27 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
 }) => {
   const colors = useInputColors()
 
-  const setRef = (r: unknown) => {
-    bridge.ref.current = r as NativeTextRef | null
-  }
   const handleFocusChange = (focused: boolean) => {
     if (!focused) onBlur?.()
   }
   const handleSubmit = () => {
     void bridge.ref.current?.blur?.()
   }
-  const disabledModifiers =
-    disabled && nativeComponents.disabled ? [nativeComponents.disabled(true)] : undefined
+  // Stable @expo/ui: keyboardType / autocorrection / onSubmit are MODIFIERS
+  // on iOS (the canary props died).
+  const iosModifiers: NativeModifier[] = []
+  if (keyboardType && nativeComponents.keyboardType) {
+    iosModifiers.push(nativeComponents.keyboardType(keyboardType as Parameters<NonNullable<typeof nativeComponents.keyboardType>>[0]))
+  }
+  if (autocorrection === false && nativeComponents.autocorrectionDisabled) {
+    iosModifiers.push(nativeComponents.autocorrectionDisabled(true))
+  }
+  if (nativeComponents.onSubmit) {
+    iosModifiers.push(nativeComponents.onSubmit(handleSubmit))
+  }
+  if (disabled && nativeComponents.disabled) {
+    iosModifiers.push(nativeComponents.disabled(true))
+  }
 
   // ── iOS: SwiftUI SecureField ──
   const SecureField = nativeComponents.SecureField
@@ -91,14 +106,11 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
         style={disabled ? fieldShellStyles.disabledHost : undefined}
       >
         <SecureField
-          ref={setRef}
-          defaultValue={bridge.initialValue}
+          ref={bridge.attachRef}
           placeholder={placeholder}
-          keyboardType={keyboardType}
-          onChangeText={bridge.handleChangeText}
-          onChangeFocus={handleFocusChange}
-          onSubmit={handleSubmit}
-          modifiers={disabledModifiers}
+          onTextChange={bridge.handleChangeText}
+          onFocusChange={handleFocusChange}
+          modifiers={iosModifiers.length > 0 ? iosModifiers : undefined}
         />
       </NativeHost>
     )
@@ -113,21 +125,17 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
         style={disabled ? fieldShellStyles.disabledHost : undefined}
       >
         <TextField
-          ref={setRef}
-          defaultValue={bridge.initialValue}
+          ref={bridge.attachRef}
           placeholder={placeholder}
-          keyboardType={keyboardType}
-          autocorrection={autocorrection}
-          onChangeText={bridge.handleChangeText}
-          onChangeFocus={handleFocusChange}
-          onSubmit={handleSubmit}
-          modifiers={disabledModifiers}
+          onTextChange={bridge.handleChangeText}
+          onFocusChange={handleFocusChange}
+          modifiers={iosModifiers.length > 0 ? iosModifiers : undefined}
         />
       </NativeHost>
     )
   }
 
-  // ── Android: JC TextInput (no secure variant — callers fall back for passwords) ──
+  // ── Android: JCTextInput adapter (no secure variant — callers fall back for passwords) ──
   const JCTextInput = nativeComponents.JCTextInput
   if (JCTextInput && !secure) {
     return (
@@ -137,8 +145,7 @@ export const NativeTextRow: React.FC<NativeTextRowProps> = ({
       >
         <NativeHost matchContents={{ height: true }}>
           <JCTextInput
-            ref={setRef}
-            defaultValue={bridge.initialValue}
+            ref={bridge.attachRef}
             onChangeText={bridge.handleChangeText}
             keyboardType={toJCKeyboard(keyboardType)}
             autocorrection={autocorrection}

@@ -430,7 +430,8 @@ const createStyles = (c: ListColorPalette) =>
       position: 'absolute',
       height: GANTT_BAR_HEIGHT,
     },
-    pressable: StyleSheet.absoluteFillObject,
+    // RN 0.85 removed StyleSheet.absoluteFillObject — inline the equivalent.
+    pressable: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 },
 
     rect: {
       flex: 1,
@@ -458,7 +459,11 @@ const createStyles = (c: ListColorPalette) =>
     },
 
     pointWrap: {
-      ...StyleSheet.absoluteFillObject,
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      bottom: 0,
       alignItems: 'center',
       justifyContent: 'center',
     },

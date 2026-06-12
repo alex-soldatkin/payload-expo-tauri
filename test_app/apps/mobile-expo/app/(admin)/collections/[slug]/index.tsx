@@ -17,7 +17,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Alert, Animated as RNAnimated, Platform, Pressable, ScrollView, StyleSheet, Text, View, useWindowDimensions } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter, useIsPreview } from 'expo-router'
 import type { SFSymbol } from 'sf-symbols-typescript'
-import { useHeaderHeight } from '@react-navigation/elements'
+import { useHeaderHeight } from "expo-router/react-navigation"
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { Bookmark, CalendarDays, ChartGantt, CheckSquare, Filter, Plus, QrCode, Settings, SquareKanban, Table2 } from 'lucide-react-native'
 import { DeviceMotion } from 'expo-sensors'
@@ -260,7 +260,7 @@ function SelectionActionBar({ selectedCount, actions, onAction, onDone }: Select
       <View style={selectionStyles.actions}>
         {useNative ? (
           // ── Native SwiftUI buttons — each in its own NativeHost ────────
-          <>
+          (<>
             {actions.map((action) => (
               <NativeHost key={action.key} matchContents>
                 <NativeButton
@@ -287,10 +287,10 @@ function SelectionActionBar({ selectedCount, actions, onAction, onDone }: Select
                 ]}
               />
             </NativeHost>
-          </>
+          </>)
         ) : (
           // ── Pressable fallback (Android / @expo/ui unavailable) ─────────
-          <>
+          (<>
             {actions.map((action) => (
               <Pressable
                 key={action.key}
@@ -311,11 +311,11 @@ function SelectionActionBar({ selectedCount, actions, onAction, onDone }: Select
             >
               <Text style={[selectionStyles.cancelLabel, { color: c.text }]}>Done</Text>
             </Pressable>
-          </>
+          </>)
         )}
       </View>
     </View>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1439,7 +1439,7 @@ export default function CollectionDocumentsScreen() {
       {isKanban && kanbanStatusField ? (
         // ── Kanban board — same local-first docs, filtered + sorted like the
         // table; the toolbar search/sort/filter controls stay live above it ──
-        <View style={{ flex: 1, paddingTop: headerHeight }}>
+        (<View style={{ flex: 1, paddingTop: headerHeight }}>
           {kanbanHasActiveFilters && (
             <View style={{ marginBottom: 4 }}>
               <FilterChips
@@ -1472,13 +1472,13 @@ export default function CollectionDocumentsScreen() {
             onPreviewCard={setBoardPreviewDoc}
             loadingDocIds={movingDocIds}
           />
-        </View>
+        </View>)
       ) : isCalendar ? (
         // ── Calendar — same local-first docs through the same screen-hosted
         // filter pipeline; sources from useCalendarConfig (defaults via
         // pickDefaultSources); native month/day views injected from the app's
         // calendar-view module with JS fallbacks inside CalendarView ──
-        <View style={{ flex: 1, paddingTop: headerHeight }}>
+        (<View style={{ flex: 1, paddingTop: headerHeight }}>
           {kanbanHasActiveFilters && (
             <View style={{ marginBottom: 4 }}>
               <FilterChips
@@ -1507,14 +1507,14 @@ export default function CollectionDocumentsScreen() {
             renderDocRow={renderDocWithPeek}
             nativeModule={calendarNativeModule}
           />
-        </View>
+        </View>)
       ) : isGantt ? (
         // ── Gantt — same local-first docs through the same screen-hosted
         // filter pipeline; sources from useGanttConfig (defaults via
         // pickDefaultSources). Drag editing lives inside GanttChart
         // (PanResponder-only); completed drags land in handleGanttUpdateDates
         // and bars spring back on failure via the docs re-render. ──
-        <View style={{ flex: 1, paddingTop: headerHeight }}>
+        (<View style={{ flex: 1, paddingTop: headerHeight }}>
           {kanbanHasActiveFilters && (
             <View style={{ marginBottom: 4 }}>
               <FilterChips
@@ -1545,7 +1545,7 @@ export default function CollectionDocumentsScreen() {
             // Preset/config zoom; undefined → component default (28)
             pxPerDay={ganttConfig.pxPerDay ?? undefined}
           />
-        </View>
+        </View>)
       ) : (
         <DocumentList
           collection={slug}
@@ -1785,7 +1785,7 @@ export default function CollectionDocumentsScreen() {
         </ScrollView>
       </BottomSheet>
     </View>
-  )
+  );
 }
 
 // ---------------------------------------------------------------------------

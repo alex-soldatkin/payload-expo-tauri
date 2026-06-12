@@ -4,13 +4,20 @@
  * Extracted into a standalone file (no .ios.ts / .android.ts variants)
  * so Metro platform resolution doesn't cause circular imports.
  *
+ * Verified against STABLE @expo/ui 56.0.17 (SDK 56; production-ready —
+ * previously built against 55.0.0-canary-20260128).
+ *
  * Conventions:
  * - Every entry is nullable. ALWAYS null-check before use — entries are null
  *   on platforms where the component doesn't exist (and in Expo Go).
- * - iOS-shaped keys (SwiftUI canary surface) are null on Android.
- * - `JC*`-prefixed keys are Jetpack Compose components whose API shape
- *   diverges from the iOS counterpart (documented inline). They are null
- *   on iOS. Never overload an iOS-shaped key with a JC component.
+ * - iOS-shaped keys (SwiftUI surface) are null on Android.
+ * - `JC*`-prefixed keys are Android-only (null on iOS). In stable they map to
+ *   `@expo/ui/jetpack-compose` exports, the new cross-platform `@expo/ui`
+ *   UNIVERSAL exports, or thin registry adapters that preserve the canary
+ *   prop contract — see native.android.ts. Two canary JC shapes DIED in
+ *   stable with no contract-compatible replacement (JCPicker, JCAlertDialog);
+ *   those keys are permanently null (documented inline) so existing gates
+ *   fall back to JS.
  * - Modifier entries are FACTORY FUNCTIONS returning `{ $type, ... }`
  *   configs. Always call them (`pickerStyle!('segmented')`) — never pass
  *   object literals (missing $type = silently ignored).
@@ -32,12 +39,24 @@ export type NativeComponentRegistry = {
   // when the JC API shape is compatible — see native.android.ts)
   // ───────────────────────────────────────────────────────────────────────
 
-  /** Platform-appropriate Host wrapper. */
+  /**
+   * Platform-appropriate Host wrapper.
+   * Stable: `ignoreSafeArea` is iOS-only; the JC Host replaced it with
+   * `ignoreSafeAreaKeyboardInsets?: boolean` — pass per-platform (NativeHost
+   * handles this). `matchContents` can only be set once on mount (both
+   * platforms).
+   */
   Host: React.ComponentType<{
     matchContents?: boolean | { vertical?: boolean; horizontal?: boolean }
     colorScheme?: 'light' | 'dark' | null
+    /** iOS only in stable. */
     ignoreSafeArea?: 'all' | 'keyboard'
+    /** Android (JC Host) only in stable. */
+    ignoreSafeAreaKeyboardInsets?: boolean
+    /** Stable: propose the viewport size to SwiftUI/Compose (for Form etc.). */
+    useViewportSizeMeasurement?: boolean
     onLayoutContent?: (event: { nativeEvent: { width: number; height: number } }) => void
+    pointerEvents?: 'box-none' | 'none' | 'box-only' | 'auto'
     style?: any
     children: React.ReactNode
   }> | null
@@ -63,7 +82,12 @@ export type NativeComponentRegistry = {
     modifiers?: NativeModifier[]
   }> | null
 
-  /** Native picker (single-select, tag-based). SwiftUI Picker (iOS only — see JCPicker for Android). */
+  /**
+   * Native picker (single-select, tag-based). SwiftUI Picker. The tag/children
+   * contract is UNCHANGED in stable: options are `Text` children carrying a
+   * `tag(value)` modifier; `onSelectionChange` receives the selected tag.
+   * iOS only (the canary JC Picker was REMOVED in stable — see JCPicker).
+   */
   Picker: React.ComponentType<{
     selection?: string | number | null
     onSelectionChange?: (selection: string | number | null) => void
@@ -89,10 +113,18 @@ export type NativeComponentRegistry = {
     modifiers?: NativeModifier[] | JCModifier[]
   }> | null
 
-  /** Native bottom sheet (SwiftUI .sheet presentation; iOS only — see JCBottomSheet for Android). */
+  /**
+   * Native bottom sheet (SwiftUI .sheet presentation; iOS only — see
+   * JCBottomSheet for Android). `isPresented`/`onIsPresentedChange` shape is
+   * UNCHANGED in stable; `onDismiss` (fires after full dismissal) is new.
+   * Stable also LAZY-MOUNTS: nothing renders until first presented, and the
+   * native view unmounts after dismissal — don't rely on sheet children
+   * mounting eagerly.
+   */
   BottomSheet: React.ComponentType<{
     isPresented: boolean
     onIsPresentedChange: (isPresented: boolean) => void
+    onDismiss?: () => void
     fitToContents?: boolean
     children?: React.ReactNode
     modifiers?: NativeModifier[]
@@ -101,6 +133,18 @@ export type NativeComponentRegistry = {
   /** Group wrapper for applying SwiftUI modifiers to children. iOS only. */
   Group: React.ComponentType<{
     children?: React.ReactNode
+    modifiers?: NativeModifier[]
+  }> | null
+
+  /**
+   * SwiftUI ScrollView. RE-REGISTERED in stable 56.0.17 (was absent in
+   * canary). Pair with the scrollPosition/onScrollPhaseChange modifiers
+   * (iOS 18+) for programmatic control. iOS only.
+   */
+  ScrollView: React.ComponentType<{
+    axes?: 'vertical' | 'horizontal' | 'both'
+    showsIndicators?: boolean
+    children: React.ReactNode
     modifiers?: NativeModifier[]
   }> | null
 
@@ -115,10 +159,11 @@ export type NativeComponentRegistry = {
   }> | null
 
   /**
-   * Native control group. SwiftUI ControlGroup.
-   * ALWAYS NULL: the canary @expo/ui (55.0.0-canary-20260128) does not export
-   * ControlGroup. Key kept so existing gates (RichTextToolbar) keep falling
-   * back to their JS toolbar path without a type break.
+   * Native control group. SwiftUI ControlGroup (iOS 16+).
+   * RE-REGISTERED in stable 56.0.17 (was absent in canary — gates that
+   * null-checked it, e.g. RichTextToolbar's JS fallback, now see a value;
+   * adopting it is design work, not done in the SDK 56 migration).
+   * Children can be Button/Toggle/Picker controls.
    */
   ControlGroup: React.ComponentType<{
     label?: string | React.ReactNode
@@ -126,6 +171,30 @@ export type NativeComponentRegistry = {
     children?: React.ReactNode
     modifiers?: NativeModifier[]
   }> | null
+
+  /**
+   * SwiftUI confirmationDialog (action-sheet style). NEW in stable 56.
+   * Compound: children must include ConfirmationDialogTrigger and
+   * ConfirmationDialogActions (Buttons; role='destructive'/'cancel'
+   * respected), optionally ConfirmationDialogMessage. iOS only.
+   */
+  ConfirmationDialog: React.ComponentType<{
+    title: string
+    isPresented?: boolean
+    onIsPresentedChange?: (isPresented: boolean) => void
+    titleVisibility?: 'automatic' | 'visible' | 'hidden'
+    children: React.ReactNode
+    modifiers?: NativeModifier[]
+  }> | null
+
+  /** ConfirmationDialog.Trigger — the element that opens the dialog. iOS only. */
+  ConfirmationDialogTrigger: React.ComponentType<{ children: React.ReactNode }> | null
+
+  /** ConfirmationDialog.Actions — the dialog's action Buttons. iOS only. */
+  ConfirmationDialogActions: React.ComponentType<{ children: React.ReactNode }> | null
+
+  /** ConfirmationDialog.Message — optional message body. iOS only. */
+  ConfirmationDialogMessage: React.ComponentType<{ children: React.ReactNode }> | null
 
   // ── Form primitives (iOS 16+) ──
 
@@ -174,46 +243,58 @@ export type NativeComponentRegistry = {
   // ── Inputs (iOS) ──
 
   /**
-   * SwiftUI TextField. UNCONTROLLED: defaultValue + onChangeText; set
-   * programmatically via ref.setText or key-remount. iOS only — see JCTextInput.
+   * SwiftUI TextField. STABLE SHAPE CHANGED from canary:
+   * - `defaultValue`/`onChangeText`/`onChangeFocus` DIED → field keeps internal
+   *   state when no `text` ObservableState is passed; push the initial value
+   *   via `ref.setText(...)` on first attach (textBridge.attachRef does this)
+   *   and listen via `onTextChange`/`onFocusChange`.
+   * - `keyboardType`/`autocorrection`/`onSubmit`/`multiline` props DIED →
+   *   use the keyboardType()/autocorrectionDisabled()/onSubmit() modifier
+   *   registry keys and `axis: 'vertical'` instead.
+   * - `placeholder` SURVIVED (still a plain prop).
+   * ref: { setText, clear, focus, blur, setSelection }. iOS only — see JCTextInput.
    */
   TextField: React.ComponentType<{
     ref?: any
-    defaultValue?: string
     placeholder?: string
-    onChangeText?: (value: string) => void
-    onChangeFocus?: (focused: boolean) => void
-    onSubmit?: (value: string) => void
-    multiline?: boolean
-    allowNewlines?: boolean
-    numberOfLines?: number
-    keyboardType?: string
-    autocorrection?: boolean
+    onTextChange?: (text: string) => void
+    onFocusChange?: (focused: boolean) => void
+    onSelectionChange?: (selection: { start: number; end: number }) => void
+    axis?: 'horizontal' | 'vertical'
+    maxLength?: number
     autoFocus?: boolean
+    children?: React.ReactNode
     modifiers?: NativeModifier[]
   }> | null
 
-  /** SwiftUI SecureField (password input). UNCONTROLLED like TextField. iOS only. */
+  /**
+   * SwiftUI SecureField (password input). Same stable shape change as
+   * TextField (onTextChange/onFocusChange; initial value via ref.setText;
+   * keyboardType/onSubmit via modifiers). iOS only.
+   */
   SecureField: React.ComponentType<{
     ref?: any
-    defaultValue?: string
     placeholder?: string
-    onChangeText?: (value: string) => void
-    onSubmit?: (value: string) => void
-    onChangeFocus?: (focused: boolean) => void
-    keyboardType?: string
+    onTextChange?: (text: string) => void
+    onFocusChange?: (focused: boolean) => void
+    maxLength?: number
     autoFocus?: boolean
+    children?: React.ReactNode
     modifiers?: NativeModifier[]
   }> | null
 
-  /** SwiftUI Stepper (- / + control). UNCONTROLLED: defaultValue + onValueChanged. iOS only. */
+  /**
+   * SwiftUI Stepper (- / + control). STABLE IS CONTROLLED: `value` +
+   * `onValueChange` (canary's uncontrolled defaultValue/onValueChanged +
+   * epoch-remount echo workaround is OBSOLETE). iOS only.
+   */
   Stepper: React.ComponentType<{
     label: string
-    defaultValue?: number
+    value?: number
     step?: number
     min?: number
     max?: number
-    onValueChanged: (value: number) => void
+    onValueChange: (value: number) => void
     modifiers?: NativeModifier[]
   }> | null
 
@@ -263,19 +344,24 @@ export type NativeComponentRegistry = {
     modifiers?: NativeModifier[]
   }> | null
 
-  /** ContextMenu (long-press menu). Compose with ContextMenuTrigger/Items/Preview children. */
+  /**
+   * ContextMenu (long-press menu). Compose with ContextMenuTrigger/Items/Preview.
+   * STABLE: iOS only — the JC ContextMenu was REMOVED in stable 56 (DropdownMenu
+   * is the Material replacement; adopting it is design work). Android gates
+   * fall through to JS menus.
+   */
   ContextMenu: React.ComponentType<{
     children: React.ReactNode
     modifiers?: NativeModifier[] | JCModifier[]
   }> | null
 
-  /** ContextMenu.Trigger — the visible element that owns the long-press. Both platforms. */
+  /** ContextMenu.Trigger — the visible element that owns the long-press. iOS only in stable. */
   ContextMenuTrigger: React.ComponentType<{ children: React.ReactNode }> | null
 
-  /** ContextMenu.Items — menu entries (Buttons, Toggles, Pickers, submenus). Both platforms. */
+  /** ContextMenu.Items — menu entries (Buttons, Toggles, Pickers, submenus). iOS only in stable. */
   ContextMenuItems: React.ComponentType<{ children: React.ReactNode }> | null
 
-  /** ContextMenu.Preview — optional custom preview shown while the menu is open. */
+  /** ContextMenu.Preview — optional custom preview shown while the menu is open. iOS only in stable. */
   ContextMenuPreview: React.ComponentType<{ children: React.ReactNode }> | null
 
   /** SwiftUI Popover (anchored floating panel). Compose with PopoverTrigger/PopoverContent. iOS only. */
@@ -351,7 +437,11 @@ export type NativeComponentRegistry = {
     modifiers?: NativeModifier[]
   }> | null
 
-  /** Native divider/separator hairline. Both platforms. */
+  /**
+   * Native divider/separator hairline. Both platforms.
+   * Android: stable removed the single JC `Divider` — this key maps to
+   * `HorizontalDivider` (visual parity with canary).
+   */
   Divider: React.ComponentType<{
     modifiers?: NativeModifier[] | JCModifier[]
   }> | null
@@ -421,7 +511,7 @@ export type NativeComponentRegistry = {
   /** Modifier factory: `tag` for Picker options. */
   tag: ((value: string | number) => NativeModifier) | null
 
-  /** Modifier factory: `pickerStyle` ('automatic' | 'menu' | 'segmented' | 'wheel' | 'inline' | 'palette'). */
+  /** Modifier factory: `pickerStyle` ('automatic' | 'menu' | 'segmented' | 'wheel' | 'inline' | 'palette' | 'navigationLink'). */
   pickerStyle: ((style: string) => NativeModifier) | null
 
   /** Modifier factory: `datePickerStyle` ('automatic' | 'compact' | 'graphical' | 'wheel'). */
@@ -536,9 +626,27 @@ export type NativeComponentRegistry = {
   disabled: ((disabled?: boolean) => NativeModifier) | null
 
   /**
+   * Modifier factory: `keyboardType` for TextField/SecureField. NEW in stable
+   * (replaces the canary `keyboardType` PROP, which died).
+   */
+  keyboardType: ((keyboardType: 'default' | 'email-address' | 'numeric' | 'phone-pad' | 'ascii-capable' | 'numbers-and-punctuation' | 'url' | 'name-phone-pad' | 'decimal-pad' | 'twitter' | 'web-search' | 'ascii-capable-number-pad') => NativeModifier) | null
+
+  /**
+   * Modifier factory: `autocorrectionDisabled` for text inputs. NEW in stable
+   * (replaces the canary `autocorrection` PROP, which died). Defaults to true.
+   */
+  autocorrectionDisabled: ((disabled?: boolean) => NativeModifier) | null
+
+  /**
+   * Modifier factory: `onSubmit` — fires when the user submits a text input
+   * (return key). NEW in stable (replaces the canary `onSubmit` PROP).
+   */
+  onSubmit: ((handler: () => void) => NativeModifier) | null
+
+  /**
    * Modifier factory: `formStyle`.
-   * ALWAYS NULL: not exported by the canary @expo/ui modifiers. Key kept for
-   * forward compatibility — gate on it before use.
+   * ALWAYS NULL: still not exported by stable 56.0.17 @expo/ui modifiers
+   * (re-verified). Key kept for forward compatibility — gate on it before use.
    */
   formStyle: ((style: 'automatic' | 'grouped' | 'columns') => NativeModifier) | null
 
@@ -547,7 +655,15 @@ export type NativeComponentRegistry = {
   // Distinct keys because the JC API shapes diverge from SwiftUI.
   // ───────────────────────────────────────────────────────────────────────
 
-  /** JC Button. Props: { onPress?, children?: string|JSX, variant?: 'default'|'bordered'|'borderless'|'outlined'|'elevated', systemImage?: MaterialIcon, leadingIcon?, trailingIcon?, elementColors?, color?, disabled?, modifiers? }. Text goes in children (not `label`); icons are Material names (not SF Symbols). */
+  /**
+   * JC Button. STABLE: backed by a registry adapter over the UNIVERSAL
+   * `@expo/ui` Button (the jc Button was redesigned to { onClick, colors,
+   * shape, contentPadding } with per-variant components). The canary contract
+   * is preserved: onPress/disabled/children(string→label) work; variant maps
+   * 'outlined'→'outlined', 'borderless'→'text', 'default'/'bordered'/
+   * 'elevated'→'filled'. DEAD (accepted but ignored): leadingIcon,
+   * trailingIcon, systemImage, elementColors, color.
+   */
   JCButton: React.ComponentType<{
     onPress?: () => void
     leadingIcon?: string
@@ -561,7 +677,14 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC IconButton. Props: { onPress?, variant?: 'default'|'bordered'|'outlined', children?: JSX (icon), elementColors?, color?, disabled?, modifiers? }. */
+  /**
+   * JC IconButton. STABLE: registry adapter over jc IconButton variants
+   * (stable split { variant } into IconButton/FilledIconButton/
+   * OutlinedIconButton with { onClick, enabled, colors }). Canary contract
+   * preserved: onPress/disabled/children work; variant maps 'default'→
+   * IconButton, 'bordered'→FilledIconButton, 'outlined'→OutlinedIconButton;
+   * elementColors maps to `colors`. DEAD (ignored): color.
+   */
   JCIconButton: React.ComponentType<{
     onPress?: () => void
     variant?: 'default' | 'bordered' | 'outlined'
@@ -572,7 +695,15 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC Chip (Material assist/filter/input/suggestion chips). Props: { variant?, label, leadingIcon?, trailingIcon?, selected?, enabled?, onPress?, onDismiss?, modifiers? }. */
+  /**
+   * JC Chip (Material assist/filter/input/suggestion chips). STABLE: registry
+   * adapter — stable split the single Chip into AssistChip/FilterChip/
+   * InputChip/SuggestionChip with slot children (Chip.Label etc.) and
+   * onClick. Canary contract preserved: variant picks the component; label
+   * renders into the Label slot (jc Text); selected/enabled pass through;
+   * onPress→onClick. DEAD (ignored): leadingIcon, trailingIcon, iconSize,
+   * textStyle, onDismiss.
+   */
   JCChip: React.ComponentType<{
     variant?: 'assist' | 'filter' | 'input' | 'suggestion'
     label: string
@@ -587,21 +718,32 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC Switch/Checkbox. Props: { value: boolean, onValueChange?, label?, variant?: 'switch'|'checkbox'|'button', color?, elementColors?, modifiers? }. Note: `value`/`onValueChange` (NOT isOn/onIsOnChange like iOS Toggle). */
+  /**
+   * JC Switch. STABLE: points at the UNIVERSAL `@expo/ui` Switch, which kept
+   * the canary core contract { value, onValueChange, label } and adds
+   * `disabled`. Still `value`/`onValueChange` (NOT isOn/onIsOnChange like the
+   * iOS Toggle). DEAD in stable: `variant` ('checkbox' is now the separate
+   * jc/universal Checkbox component — design work), `color`, `elementColors`.
+   */
   JCSwitch: React.ComponentType<{
     value: boolean
-    label?: string
-    variant?: 'checkbox' | 'switch' | 'button'
     onValueChange?: (value: boolean) => void
-    color?: string
-    elementColors?: Record<string, string>
+    label?: string
+    disabled?: boolean
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC TextInput. UNCONTROLLED: { defaultValue?, onChangeText, multiline?, numberOfLines?, keyboardType?, autocorrection?, autoCapitalize?, modifiers?, ref?.setText }. No placeholder prop. */
+  /**
+   * JC TextInput. STABLE: registry adapter over jc BasicTextField (the
+   * canary TextInput export died; the stable jc text fields mirror the
+   * SwiftUI contract: internal state + ref.setText + onValueChange).
+   * STILL UNCONTROLLED, but `defaultValue` DIED — push the initial value via
+   * `ref.setText(...)` on first attach (textBridge.attachRef does this),
+   * exactly like the iOS TextField. ref: { setText, clear, focus, blur,
+   * setSelection }. Still no placeholder prop (JS overlay stays).
+   */
   JCTextInput: React.ComponentType<{
     ref?: any
-    defaultValue?: string
     onChangeText: (value: string) => void
     multiline?: boolean
     numberOfLines?: number
@@ -611,7 +753,16 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC Picker. Options-based (NOT tag-based like iOS): { options: string[], selectedIndex: number|null, onOptionSelected?({nativeEvent:{index,label}}), variant?: 'segmented'|'radio', elementColors?, color?, modifiers? }. */
+  /**
+   * JC Picker. PERMANENTLY NULL in stable: the canary options-based jc Picker
+   * (options/selectedIndex/onOptionSelected with 'segmented'/'radio'
+   * variants) was REMOVED. The stable replacements have incompatible
+   * contracts: jc SingleChoiceSegmentedButtonRow + SegmentedButton /
+   * RadioButton (compound slot APIs) or the universal Picker
+   * (selectedValue/onValueChange + <Picker.Item>, 'menu'/'wheel' only).
+   * Adopting either is design work — consumers (select/radio fields) gate on
+   * this key and fall back to their JS tier on Android.
+   */
   JCPicker: React.ComponentType<{
     options: string[]
     selectedIndex: number | null
@@ -623,7 +774,14 @@ export type NativeComponentRegistry = {
     buttonModifiers?: JCModifier[]
   }> | null
 
-  /** JC BottomSheet. Props: { isOpened: boolean, onIsOpenedChange: (opened) => void, skipPartiallyExpanded?, children } (NOT isPresented like iOS). */
+  /**
+   * JC BottomSheet. STABLE: registry adapter over the UNIVERSAL `@expo/ui`
+   * BottomSheet (the canary jc BottomSheet died; jc ModalBottomSheet has an
+   * incompatible imperative contract). Canary contract preserved:
+   * isOpened→isPresented; onIsOpenedChange(false) fires on user dismissal;
+   * skipPartiallyExpanded→snapPoints:['full']. SELF-HOSTING — render it
+   * directly, do NOT wrap in NativeHost. (NOT isPresented like iOS.)
+   */
   JCBottomSheet: React.ComponentType<{
     isOpened: boolean
     onIsOpenedChange: (isOpened: boolean) => void
@@ -631,7 +789,14 @@ export type NativeComponentRegistry = {
     children: React.ReactNode
   }> | null
 
-  /** JC AlertDialog (Material dialog; no iOS equivalent in canary). Props: { visible?, title?, text?, confirmButtonText?, dismissButtonText?, onConfirmPressed?, onDismissPressed?, modifiers? }. */
+  /**
+   * JC AlertDialog. PERMANENTLY NULL in stable: the canary flat-props dialog
+   * (visible/title/text/confirmButtonText/onConfirmPressed/...) was
+   * redesigned to a slot-children API (AlertDialog.Title/.Text/
+   * .ConfirmButton/.DismissButton + onDismissRequest) with no
+   * contract-compatible mapping. Adopting the slot API is design work —
+   * gate on this key and fall back to RN Alert/JS dialogs.
+   */
   JCAlertDialog: React.ComponentType<{
     visible?: boolean
     title?: string
@@ -645,7 +810,11 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC DateTimePicker. Props: { initialDate?: ISO string|null, onDateSelected?(date: Date), variant?: 'picker'|'input', displayedComponents?: 'date'|'hourAndMinute'|'dateAndTime', is24Hour?, showVariantToggle?, color?, modifiers? } (NOT selection/onDateChange like iOS). */
+  /**
+   * JC DateTimePicker. UNCHANGED in stable (same initialDate ISO string /
+   * onDateSelected(Date) / variant contract; stable adds optional
+   * elementColors + selectableDates). (NOT selection/onDateChange like iOS.)
+   */
   JCDateTimePicker: React.ComponentType<{
     initialDate?: string | null
     onDateSelected?: (date: Date) => void
@@ -657,19 +826,26 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC CircularProgress (spinner when progress null/undefined). Props: { progress?: number|null, color?, elementColors?: { trackColor? }, modifiers? }. */
+  /**
+   * JC CircularProgress (spinner when progress null/undefined). STABLE:
+   * maps to jc CircularProgressIndicator — `elementColors.trackColor` died,
+   * `trackColor` is now top-level.
+   */
   JCCircularProgress: React.ComponentType<{
     progress?: number | null
     color?: string
-    elementColors?: { trackColor?: string }
+    trackColor?: string
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC LinearProgress (bar). Props: { progress?: number|null, color?, elementColors?: { trackColor? }, modifiers? }. */
+  /**
+   * JC LinearProgress (bar). STABLE: maps to jc LinearProgressIndicator —
+   * `elementColors.trackColor` died, `trackColor` is now top-level.
+   */
   JCLinearProgress: React.ComponentType<{
     progress?: number | null
     color?: string
-    elementColors?: { trackColor?: string }
+    trackColor?: string
     modifiers?: JCModifier[]
   }> | null
 
@@ -679,23 +855,28 @@ export type NativeComponentRegistry = {
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC layout Row. Props: { children?, horizontalArrangement?, verticalAlignment?, modifiers? }. */
+  /** JC layout Row. Stable adds the `{ spacedBy }` arrangement form (gap in dp). */
   JCRow: React.ComponentType<{
     children?: React.ReactNode
-    horizontalArrangement?: 'start' | 'end' | 'center' | 'spaceBetween' | 'spaceAround' | 'spaceEvenly'
+    horizontalArrangement?: 'start' | 'end' | 'center' | 'spaceBetween' | 'spaceAround' | 'spaceEvenly' | { spacedBy: number }
     verticalAlignment?: 'top' | 'bottom' | 'center'
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC layout Column. Props: { children?, verticalArrangement?, horizontalAlignment?, modifiers? }. */
+  /** JC layout Column. Stable adds the `{ spacedBy }` arrangement form (gap in dp). */
   JCColumn: React.ComponentType<{
     children?: React.ReactNode
-    verticalArrangement?: 'top' | 'bottom' | 'center' | 'spaceBetween' | 'spaceAround' | 'spaceEvenly'
+    verticalArrangement?: 'top' | 'bottom' | 'center' | 'spaceBetween' | 'spaceAround' | 'spaceEvenly' | { spacedBy: number }
     horizontalAlignment?: 'start' | 'end' | 'center'
     modifiers?: JCModifier[]
   }> | null
 
-  /** JC Shape constructors namespace: { Star, PillStar, Pill, Circle, Rectangle, Polygon }. Shape JSX is used by jcClip and Button `shape`. */
+  /**
+   * JC Shape constructors namespace: { Star, PillStar, Pill, Circle,
+   * Rectangle, Polygon, RoundedCorner (new in stable) }. Shape JSX is used by
+   * the jc Button/IconButton `shape` prop. NOTE: stable's `clip` modifier
+   * (jcClip) no longer takes Shape JSX — see jcClip.
+   */
   JCShape: {
     Star: (props: any) => any
     PillStar: (props: any) => any
@@ -703,9 +884,12 @@ export type NativeComponentRegistry = {
     Circle: (props: any) => any
     Rectangle: (props: any) => any
     Polygon: (props: any) => any
+    RoundedCorner?: (props: any) => any
   } | null
 
-  // ── Jetpack Compose modifier helpers (Android only — positional args, unlike SwiftUI) ──
+  // ── Jetpack Compose modifier helpers (Android only — positional args, unlike SwiftUI).
+  // STABLE: these moved from the '@expo/ui/jetpack-compose' ROOT to the
+  // '@expo/ui/jetpack-compose/modifiers' subpath (native.android.ts requires both). ──
 
   /** JC modifier: padding(all) in dp. */
   jcPaddingAll: ((all: number) => JCModifier) | null
@@ -745,7 +929,12 @@ export type NativeComponentRegistry = {
   jcClickable: ((callback: () => void) => JCModifier) | null
   /** JC modifier: testID(tag). */
   jcTestID: ((tag: string) => JCModifier) | null
-  /** JC modifier: clip(shapeJSX) — pass a JCShape element. */
+  /**
+   * JC modifier: clip(shape). STABLE CONTRACT CHANGED: takes a built-in
+   * shape config from the jc modifiers module (e.g. the `Shapes` record's
+   * entries: 'circle' | 'rectangle' | corner/star configs), NOT a JCShape
+   * JSX element like in canary. Passing JSX is silently ignored natively.
+   */
   jcClip: ((shape: any) => JCModifier) | null
 }
 
@@ -760,8 +949,13 @@ export const emptyRegistry: NativeComponentRegistry = {
   Text: null,
   BottomSheet: null,
   Group: null,
+  ScrollView: null,
   Button: null,
   ControlGroup: null,
+  ConfirmationDialog: null,
+  ConfirmationDialogTrigger: null,
+  ConfirmationDialogActions: null,
+  ConfirmationDialogMessage: null,
   Form: null,
   Section: null,
   LabeledContent: null,
@@ -834,6 +1028,9 @@ export const emptyRegistry: NativeComponentRegistry = {
   scrollDisabled: null,
   scrollDismissesKeyboard: null,
   disabled: null,
+  keyboardType: null,
+  autocorrectionDisabled: null,
+  onSubmit: null,
   formStyle: null,
   JCButton: null,
   JCIconButton: null,

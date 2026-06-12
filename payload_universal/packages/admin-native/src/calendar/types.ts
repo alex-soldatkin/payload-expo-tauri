@@ -46,8 +46,11 @@ export type CalendarMode = 'month' | 'week' | 'day'
  */
 export type CalendarNativeModule = {
   isNativeCalendarAvailable: boolean
-  NativeCalendarMonth: React.ComponentType<any>
-  NativeCalendarDay: React.ComponentType<any>
+  // null when the native view isn't registered (e.g. Expo Go) — the module
+  // exports `ComponentType | null` and consumers gate on
+  // isNativeCalendarAvailable before rendering.
+  NativeCalendarMonth: React.ComponentType<any> | null
+  NativeCalendarDay: React.ComponentType<any> | null
 }
 
 export type CalendarViewProps = {
