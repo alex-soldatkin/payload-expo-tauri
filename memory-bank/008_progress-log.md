@@ -1170,3 +1170,65 @@ Permanently null — no compatible replacement (documented in registry, Android 
 - Media single-field section: alt-text field renders as one clean rounded card with zero internal dividers.
 - Label alignment: all field families share the CONTENT_INSET grid via FormSection row wrapper.
 - Dark mode: all field chrome uses `useListColors()` / `useInputColors()` — no hardcoded light-mode colours in row-plane styles.
+
+---
+
+## Phase 33 — No-god-files refactor (2026-06-13)
+
+Purely structural pass enforcing the **max-400-lines** rule (memory-bank/013).
+Zero behavior change — only MOVED code between files; same runtime, same
+exports, same render output. 32 god files deleted, ~288 sibling/extraction
+files created.
+
+**Two extraction patterns:**
+- **Package files** (`payload_universal/**`): `<dir>/<File>.tsx` → folder
+  `<dir>/<File>/index.tsx` re-exporting EVERY old symbol, with siblings split
+  by responsibility — `components/` (sub-components), `hooks/` (use* hooks),
+  `types.ts`, `styles.ts` (StyleSheet factories), `utils.ts` (pure helpers).
+  Node/TS resolve `from './<File>'` → `./<File>/index`, so the package barrel
+  (`src/index.ts`) and ALL consumers stayed byte-identical — public import
+  paths unchanged. (Same shape applied to app component sheets under
+  `mobile-expo/src/components/<Sheet>/`.)
+- **Route files** (`mobile-expo/app/**`): CANNOT become folder/index —
+  expo-router routes every file under `app/`. Slimmed IN PLACE (default export
+  + route params kept), with chrome extracted to
+  `src/screens/<route-name>/` (or `src/components/` for shared) and imported
+  back. 36 files created under `src/screens/`.
+
+**Targets cleared (before → after max line count):**
+- `[slug]/index.tsx` collection-list route: **2092 → 273** (thin route +
+  `src/screens/collection-list/`, all extracts ≤339).
+- `DocumentList.tsx`: **2072 →** folder; `DocumentList/index.tsx` 450 (cohesive
+  composition root, 13 siblings).
+- `DocumentForm.tsx`: **1419 →** folder; `DocumentForm/index.tsx` + 10 siblings.
+- `FilterBottomSheet.tsx` **1251**, `richtext.tsx` **1173** → folders.
+- `GanttCustomizeSheet` **811**, `CalendarCustomizeSheet` **806**,
+  `ScanLookupSheet` **778**, `PresetsSheet` **744**, `OverlaySidebar` **658**,
+  `KanbanCustomizeSheet` **650** (app sheets) → folder/index.
+- Plus: DocumentListTable, VersionDiff/VersionsBottomSheet, Toast,
+  MentionPicker, TableEditor, htmlToLexical, useDocumentListFilters,
+  CalendarView/MonthGridFallback, GanttBar/GanttChart, KanbanBoard, join, the
+  inputs/structural/pickers field families; route files `[id]` (644→336),
+  `api` (587→304), `_layout` (477→100), `account` (465→311); package barrels
+  admin-schema (528→18), local-db storage (583→thin), client-validators
+  builtinValidators.
+
+**Before/after maximum:** **2092 lines → 450 lines** (DocumentList/index.tsx,
+a single cohesive composition root at the ≤450 ceiling).
+
+**Reconcile verification (authoritative):**
+- All six typecheck targets at **ZERO** errors on fresh run: admin-native,
+  mobile-expo app, server, admin-schema, local-db, client-validators
+  (per CONV rule 6 — repo tsc, never `npx tsc`).
+- Deep-import grep: NO consumer references a deep path into any
+  former-god-file (all resolve through `<Unit>/index`); barrels untouched.
+- Metro smoke: `npx expo export --platform ios --dev` → 21 MB iOS bundle,
+  **zero module-resolution errors** (proves Metro bundler resolution, not just
+  tsc). Export dir cleaned up.
+- Residual ≤450 cohesive units (acceptable per rule 4): DocumentList/index
+  (450), MonthGridFallback/index (420), CalendarView/index (408), gantt/types
+  (417, pure types+consts), GanttBar/index (405), GanttChart/index (401),
+  local-db storage/instance (401).
+- **Follow-up** (>400, ≤450, NOT in any assignment inventory — split when next
+  touched): `kanban/KanbanCard.tsx` (417), `fields/RichTextToolbar.tsx` (414),
+  `mobile-expo/src/components/BulkEditSheet.tsx` (419).

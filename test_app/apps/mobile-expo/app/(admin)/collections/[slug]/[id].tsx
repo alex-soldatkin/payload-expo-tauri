@@ -12,14 +12,11 @@
  *    directly (not local-first) and can be compared and restored.
  */
 import React, { useCallback, useMemo, useRef, useState } from 'react'
-import { ActivityIndicator, Alert, Animated, Platform, Pressable, Text, useColorScheme, useWindowDimensions, View } from 'react-native'
+import { ActivityIndicator, Animated, Platform, Pressable, Text, useColorScheme, useWindowDimensions, View } from 'react-native'
 import { Stack, useLocalSearchParams, useRouter } from 'expo-router'
-import type { SFSymbol } from 'sf-symbols-typescript'
 import { useHeaderHeight } from "expo-router/react-navigation"
-import { Save } from 'lucide-react-native'
 
 import {
-  DocumentActionsMenu,
   DocumentForm,
   extractRootFields,
   getCollectionLabel,
@@ -31,7 +28,6 @@ import {
   useEditActionHandlers,
   useListColors,
   useMenuModel,
-  useToast,
   VersionsBottomSheet,
   type DocumentFormHandle,
 } from '@payload-universal/admin-native'
@@ -40,28 +36,12 @@ import { useHeaderScrollY } from '@/components/HeaderScrollContext'
 import { useAutosave } from '@/src/hooks/useAutosave'
 import { useLocaleEditing } from '@/src/hooks/useLocaleEditing'
 import { useUnsavedChangesGuard } from '@/src/hooks/useUnsavedChangesGuard'
-
-/** Resolve a locale label that may be a string or an i18n record. */
-const localeLabel = (locale: { code: string; label?: string | Record<string, string> }): string => {
-  if (typeof locale.label === 'string') return locale.label
-  if (locale.label && typeof locale.label === 'object') {
-    return locale.label.en ?? Object.values(locale.label)[0] ?? locale.code
-  }
-  return locale.code
-}
-
-const formatTime = (d: Date): string =>
-  `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-
-/**
- * Stack.Toolbar is an experimental expo-router API (unstable_headerRightItems
- * → react-native-screens bar button items). Guard at runtime so the screen
- * falls back to the always-available `headerRight` path when the API is
- * missing (older expo-router) instead of silently rendering no save button.
- */
-const hasStackToolbar =
-  typeof (Stack as { Toolbar?: unknown }).Toolbar === 'function' &&
-  Boolean((Stack as { Toolbar?: { Button?: unknown } }).Toolbar?.Button)
+import { DocumentEditToolbar } from '@/src/screens/document-edit/components/DocumentEditToolbar'
+import { DocumentHeaderRight } from '@/src/screens/document-edit/components/DocumentHeaderRight'
+import { EditStatusPills } from '@/src/screens/document-edit/components/EditStatusPills'
+import { useDocumentActions } from '@/src/screens/document-edit/hooks/useDocumentActions'
+import type { DocumentToolbarProps } from '@/src/screens/document-edit/types'
+import { hasStackToolbar } from '@/src/screens/document-edit/utils'
 
 export default function DocumentEditScreen() {
   const { slug, id } = useLocalSearchParams<{ slug: string; id: string }>()
@@ -116,8 +96,6 @@ export default function DocumentEditScreen() {
     errors: validationErrors,
     clearFieldError,
   } = useValidatedMutations(localDB, slug, rootFields)
-
-  const toast = useToast()
 
   // Feature flags from collection config
   const hasDrafts = collectionMeta?.drafts ?? false
@@ -221,102 +199,24 @@ export default function DocumentEditScreen() {
   // API config for direct server calls (versions are server-side only)
   const apiConfig = useMemo(() => ({ baseURL, token }), [baseURL, token])
 
-  const handleSubmit = async (data: Record<string, unknown>, options?: { status?: 'draft' | 'published' }) => {
-    // Non-default locale: whole-doc REST PATCH with ?locale=X (correct
-    // Payload semantics — localized fields write only the active locale).
-    if (!isDefaultLocale) {
-      await saveRemote(data, options)
-      return
-    }
-    // Merge status into the data for the local DB write
-    const writeData = options?.status
-      ? { ...data, _status: options.status }
-      : data
-    const result = await validatedUpdate(id, writeData, (doc as Record<string, unknown>) ?? undefined)
-    // `=== false` (not `!`): non-strict tsconfig does not narrow the
-    // boolean-literal discriminant of this union on truthiness checks.
-    if (result.success === false) {
-      // Throw so DocumentForm can display the error banner and toast.
-      // The field-level errors are already in validationErrors state.
-      const count = Object.keys(result.errors).length
-      const err = new Error(`${count} field${count !== 1 ? 's' : ''} failed validation`)
-      throw err
-    }
-  }
-
-  const handleDelete = () => {
-    Alert.alert(
-      'Delete',
-      `Are you sure you want to delete this ${collectionLabel}?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await remove(id)
-              allowLeave()
-              router.back()
-            } catch (err) {
-              Alert.alert('Error', err instanceof Error ? err.message : 'Delete failed')
-            }
-          },
-        },
-      ],
-    )
-  }
-
-  // Generic Duplicate — works for every collection (generalizes the old
-  // posts-specific handler): clone the doc, strip the id and internal/RxDB
-  // bookkeeping fields, reset _status to draft (when drafts are enabled),
-  // insert through the validated local-first pipeline, then open the copy.
-  const handleDuplicate = async () => {
-    if (!doc) return
-    const {
-      id: _id,
-      _rev,
-      _meta,
-      _attachments,
-      _deleted,
-      _locallyModified,
-      _status,
-      createdAt,
-      updatedAt,
-      ...rest
-    } = doc as Record<string, unknown>
-
-    const data: Record<string, unknown> = { ...rest }
-    // Make the copy distinguishable in lists (and dodge obvious unique
-    // collisions on the common `slug` pattern) — best-effort, like web admin
-    if (useAsTitle && typeof data[useAsTitle] === 'string' && data[useAsTitle]) {
-      data[useAsTitle] = `${data[useAsTitle]} (Copy)`
-    }
-    if (typeof data.slug === 'string' && data.slug) {
-      data.slug = `${data.slug}-copy`
-    }
-    if (hasDrafts) data._status = 'draft'
-
-    const result = await validatedCreate(data)
-    // `=== false` (not `!`): non-strict tsconfig does not narrow the
-    // boolean-literal discriminant of this union on truthiness checks.
-    if (result.success === false) {
-      const count = Object.keys(result.errors).length
-      Alert.alert('Duplicate failed', `${count} field${count !== 1 ? 's' : ''} failed validation`)
-      return
-    }
-    toast.showToast(hasDrafts ? 'Duplicated as draft' : 'Duplicated', { type: 'success', icon: 'success' })
-    if (result.id) {
-      allowLeave()
-      router.push(`/(admin)/collections/${slug}/${result.id}`)
-    }
-  }
-
-  // After a version restore, trigger an immediate pull to pick up the
-  // restored data from the server into the local DB.
-  const handleVersionRestore = () => {
-    localDB?.pullNow(slug)
-  }
+  // Local-first document actions (submit / delete / duplicate / restore)
+  const { handleSubmit, handleDelete, handleDuplicate, handleVersionRestore } =
+    useDocumentActions({
+      slug,
+      id,
+      doc,
+      collectionLabel,
+      useAsTitle,
+      hasDrafts,
+      isDefaultLocale,
+      router,
+      localDB,
+      remove,
+      saveRemote,
+      validatedUpdate,
+      validatedCreate,
+      allowLeave,
+    })
 
   const title = formDoc ? getDocumentTitle(formDoc, useAsTitle) : 'Loading...'
 
@@ -352,210 +252,44 @@ export default function DocumentEditScreen() {
     )
   }
 
+  // Shared props for both header toolbar surfaces (native Stack.Toolbar +
+  // headerRight fallback).
+  const toolbarProps: DocumentToolbarProps = {
+    pc,
+    hasVersions,
+    hasDrafts,
+    docStatus,
+    resolvedEditActions,
+    editHandlers,
+    doc,
+    slug,
+    id,
+    localDB,
+    baseURL,
+    token,
+    localization,
+    activeLocale,
+    setActiveLocale,
+    formDirty,
+    formRef,
+    router,
+    windowWidth,
+    onViewVersions: () => setVersionsVisible(true),
+    onDuplicate: handleDuplicate,
+    onDelete: handleDelete,
+  }
+
   return (
     <View className="flex-1 bg-paper">
       <Stack.Screen
         options={{
           title: title,
           ...(!useNativeHeaderToolbar ? {
-            headerRight: () => (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginRight: 4 }}>
-                <DocumentActionsMenu
-                  hasVersions={hasVersions}
-                  hasDrafts={hasDrafts}
-                  currentStatus={docStatus}
-                  onViewVersions={() => setVersionsVisible(true)}
-                  onSaveDraft={() => formRef.current?.submitWithStatus('draft')}
-                  onPublish={() => formRef.current?.submitWithStatus('published')}
-                  onUnpublish={() => formRef.current?.submitWithStatus('draft')}
-                  extraActions={[
-                    // Generic document actions — every collection
-                    {
-                      label: 'Duplicate',
-                      icon: 'plus.square.on.square',
-                      onPress: handleDuplicate,
-                    },
-                    {
-                      label: 'Delete',
-                      icon: 'trash',
-                      destructive: true,
-                      onPress: handleDelete,
-                    },
-                    ...resolvedEditActions.map((action) => ({
-                      label: action.label,
-                      icon: action.icon,
-                      destructive: action.destructive,
-                      onPress: () => {
-                        const handler = editHandlers[action.key]
-                        if (handler && doc) {
-                          handler({
-                            collectionSlug: slug,
-                            documentId: id,
-                            doc: doc as Record<string, unknown>,
-                            localDB,
-                            baseURL,
-                            token,
-                          })
-                        }
-                      },
-                    })),
-                    // API inspector (web admin parity)
-                    {
-                      label: 'API',
-                      icon: 'curlybraces',
-                      onPress: () => router.push(`/collections/${slug}/api?id=${id}`),
-                    },
-                    // Locale switcher (Localizer parity)
-                    ...(localization
-                      ? localization.locales.map((l) => ({
-                          label: `${activeLocale === l.code ? '✓ ' : ''}Locale: ${localeLabel(l)}`,
-                          icon: 'globe',
-                          onPress: () => setActiveLocale(l.code),
-                        }))
-                      : []),
-                  ]}
-                />
-                <Pressable
-                  disabled={!formDirty}
-                  onPress={() => {
-                    if (hasDrafts) {
-                      const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
-                      formRef.current?.submitWithStatus(status)
-                    } else {
-                      formRef.current?.submit()
-                    }
-                  }}
-                  hitSlop={8}
-                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: formDirty ? 1 : 0.45 }}
-                >
-                  <Save size={22} color={formDirty ? pc.primary : pc.textMuted} />
-                  <Text style={{ color: formDirty ? pc.primary : pc.textMuted, fontSize: 15, fontWeight: '600' }}>Save</Text>
-                </Pressable>
-              </View>
-            ),
+            headerRight: () => <DocumentHeaderRight {...toolbarProps} />,
           } : {}),
         }}
       />
-      {useNativeHeaderToolbar && (
-        <Stack.Toolbar placement="right">
-          {/* Always rendered: the API inspector entry exists for every collection.
-              Explicit tintColor on every item: header items must stay visible
-              in both color schemes (no reliance on inherited header tint). */}
-          <Stack.Toolbar.Menu icon="ellipsis.circle" title="Actions" tintColor={pc.text}>
-              {hasVersions && (
-                <Stack.Toolbar.MenuAction
-                  icon="clock.arrow.circlepath"
-                  onPress={() => setVersionsVisible(true)}
-                >
-                  Versions
-                </Stack.Toolbar.MenuAction>
-              )}
-              {hasDrafts && docStatus !== 'published' && (
-                <Stack.Toolbar.MenuAction
-                  icon="arrow.up.doc"
-                  onPress={() => formRef.current?.submitWithStatus('published')}
-                >
-                  Publish
-                </Stack.Toolbar.MenuAction>
-              )}
-              {hasDrafts && docStatus === 'published' && (
-                <Stack.Toolbar.MenuAction
-                  icon="arrow.down.doc"
-                  onPress={() => formRef.current?.submitWithStatus('draft')}
-                >
-                  Unpublish
-                </Stack.Toolbar.MenuAction>
-              )}
-              {/* Generic document actions — every collection */}
-              <Stack.Toolbar.MenuAction
-                icon="plus.square.on.square"
-                onPress={handleDuplicate}
-              >
-                Duplicate
-              </Stack.Toolbar.MenuAction>
-              <Stack.Toolbar.MenuAction
-                icon="trash"
-                destructive
-                onPress={handleDelete}
-              >
-                Delete
-              </Stack.Toolbar.MenuAction>
-              {/* Custom edit actions from Payload config */}
-              {resolvedEditActions.map((action) => (
-                <Stack.Toolbar.MenuAction
-                  key={action.key}
-                  icon={(action.icon || 'bolt') as SFSymbol}
-                  onPress={() => {
-                    const handler = editHandlers[action.key]
-                    if (handler && doc) {
-                      handler({
-                        collectionSlug: slug,
-                        documentId: id,
-                        doc: doc as Record<string, unknown>,
-                        localDB,
-                        baseURL,
-                        token,
-                      })
-                    }
-                  }}
-                >
-                  {action.label}
-                </Stack.Toolbar.MenuAction>
-              ))}
-              {/* API inspector — web admin "API" view parity (formSheet) */}
-              <Stack.Toolbar.MenuAction
-                icon="curlybraces"
-                onPress={() => router.push(`/collections/${slug}/api?id=${id}`)}
-              >
-                API
-              </Stack.Toolbar.MenuAction>
-            </Stack.Toolbar.Menu>
-          {/* Locale switcher (Localizer parity) — only when localization is configured */}
-          {localization && (
-            <Stack.Toolbar.Menu icon="globe" title="Locale" tintColor={pc.text}>
-              {localization.locales.map((l) => (
-                <Stack.Toolbar.MenuAction
-                  key={l.code}
-                  isOn={activeLocale === l.code}
-                  onPress={() => setActiveLocale(l.code)}
-                >
-                  {localeLabel(l)}
-                </Stack.Toolbar.MenuAction>
-              ))}
-            </Stack.Toolbar.Menu>
-          )}
-          {/* Sidebar details — opens/dismisses the formSheet. Wide layouts
-              (iPad) get DocumentForm's Notes-style edge tab instead, so the
-              toolbar button only renders on phone-width windows. */}
-          {windowWidth < 768 && (
-            <Stack.Toolbar.Button
-              icon="sidebar.right"
-              tintColor={pc.text}
-              onPress={() => router.push(`/collections/${slug}/details?id=${id}`)}
-            />
-          )}
-          {/* Save — large checkmark icon, dirty-state driven (iOS convention):
-              blue + enabled while the form has unsaved edits, gray + disabled
-              otherwise. Explicit tint per scheme so it can never vanish. */}
-          <Stack.Toolbar.Button
-            icon="checkmark.circle.fill"
-            variant="done"
-            disabled={!formDirty}
-            tintColor={formDirty ? pc.primary : pc.textMuted}
-            accessibilityLabel="Save"
-            onPress={() => {
-              if (hasDrafts) {
-                const status = (docStatus === 'published' ? 'published' : 'draft') as 'draft' | 'published'
-                formRef.current?.submitWithStatus(status)
-              } else {
-                formRef.current?.submit()
-              }
-            }}
-          >
-            Save
-          </Stack.Toolbar.Button>
-        </Stack.Toolbar>
-      )}
+      {useNativeHeaderToolbar && <DocumentEditToolbar {...toolbarProps} />}
 
       <DocumentForm
         // Remount when the locale changes so initialData re-seeds the form
@@ -577,55 +311,13 @@ export default function DocumentEditScreen() {
         onDirtyChange={setFormDirty}
       />
 
-      {/* Locale + autosave status pills — subtle overlay near the title/status row */}
-      {(!isDefaultLocale || autosave.status !== 'idle') && (
-        <View
-          pointerEvents="none"
-          style={{
-            position: 'absolute',
-            top: headerHeight + 6,
-            right: 16,
-            zIndex: 20,
-            flexDirection: 'row',
-            gap: 6,
-          }}
-        >
-          {!isDefaultLocale && (
-            <View
-              style={{
-                backgroundColor: isDark ? 'rgba(10,132,255,0.28)' : 'rgba(0,122,255,0.12)',
-                borderRadius: 10,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '600', color: isDark ? '#6db2ff' : '#0a66c2' }}>
-                {activeLocale} · online
-              </Text>
-            </View>
-          )}
-          {autosave.status !== 'idle' && (
-            <View
-              style={{
-                backgroundColor: isDark ? 'rgba(120,120,128,0.32)' : 'rgba(120,120,128,0.14)',
-                borderRadius: 10,
-                paddingHorizontal: 8,
-                paddingVertical: 3,
-              }}
-            >
-              <Text style={{ fontSize: 11, fontWeight: '500', color: isDark ? '#aeaeb2' : '#6b7280' }}>
-                {autosave.status === 'saving'
-                  ? 'Saving…'
-                  : autosave.status === 'error'
-                    ? 'Autosave failed'
-                    : autosave.lastSavedAt
-                      ? `Saved · ${formatTime(autosave.lastSavedAt)}`
-                      : 'Saved'}
-              </Text>
-            </View>
-          )}
-        </View>
-      )}
+      <EditStatusPills
+        isDark={isDark}
+        isDefaultLocale={isDefaultLocale}
+        activeLocale={activeLocale}
+        autosave={autosave}
+        headerHeight={headerHeight}
+      />
 
       {/* Versions bottom sheet */}
       {hasVersions && (

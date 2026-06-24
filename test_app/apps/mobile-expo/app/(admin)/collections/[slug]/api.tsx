@@ -12,14 +12,12 @@
  * Sections sit in liquid-glass containers (GlassView, guarded) with solid
  * fallbacks; the palette follows the system color scheme.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import {
   ActivityIndicator,
-  Platform,
   Pressable,
   ScrollView,
   Share,
-  StyleSheet,
   Switch,
   Text,
   View,
@@ -34,54 +32,19 @@ import {
   useMenuModel,
 } from '@payload-universal/admin-native'
 
-// ── Optional native modules (guarded — graceful fallback tiers) ──────────
-let GlassView: React.ComponentType<any> | null = null
-let liquidGlassAvailable = false
-try {
-  const glassModule = require('expo-glass-effect')
-  GlassView = glassModule.GlassView
-  liquidGlassAvailable = glassModule.isLiquidGlassAvailable?.() ?? false
-} catch {
-  /* not available */
-}
-
-// App screens MAY import @expo/ui/swift-ui directly (tab layout precedent).
-// Modifiers are factory calls imported from '@expo/ui/swift-ui/modifiers'.
-let SHost: any = null
-let SPicker: any = null
-let SStepper: any = null
-let SToggle: any = null
-let SText: any = null
-let pickerStyleMod: ((style: string) => any) | null = null
-let tagMod: ((tag: string) => any) | null = null
-if (Platform.OS === 'ios') {
-  try {
-    const ui = require('@expo/ui/swift-ui')
-    const mods = require('@expo/ui/swift-ui/modifiers')
-    SHost = ui.Host
-    SPicker = ui.Picker
-    SStepper = ui.Stepper
-    SToggle = ui.Toggle
-    SText = ui.Text
-    pickerStyleMod = mods.pickerStyle
-    tagMod = mods.tag
-  } catch {
-    /* @expo/ui not available */
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Stable identities for native-bound props.
-//
-// Every value handed to a SwiftUI host/control must be referentially AND
-// value stable across renders. Per-render-fresh objects re-apply native props
-// on each commit, which re-arms SwiftUI body re-evaluation + `.onAppear`
-// echo events mid-update — the render-loop class documented for the details
-// sheet (memory-bank 008, Phase 25 item 2: DatePicker onAppear echo +
-// `selection={new Date()}` re-arming the cycle).
-// ---------------------------------------------------------------------------
-
-const MATCH_CONTENTS = { vertical: true }
+import { JsonNode, darkJson, lightJson } from '@/src/screens/api-inspector/JsonTree'
+import { Section } from '@/src/screens/api-inspector/Section'
+import {
+  MATCH_CONTENTS,
+  SHost,
+  SPicker,
+  SStepper,
+  SText,
+  SToggle,
+  pickerStyleMod,
+  tagMod,
+} from '@/src/screens/api-inspector/nativeControls'
+import { styles } from '@/src/screens/api-inspector/styles'
 
 const renderNullHeaderItem = () => null
 
@@ -92,165 +55,6 @@ const SCREEN_OPTIONS = {
   headerRight: renderNullHeaderItem,
   headerLeft: renderNullHeaderItem,
 }
-
-// ---------------------------------------------------------------------------
-// JSON tree — pure JS, chevron-expandable, monospace, type-colored values
-// ---------------------------------------------------------------------------
-
-const MONO = Platform.select({ ios: 'Menlo', android: 'monospace', default: 'monospace' })
-
-type JsonPalette = {
-  key: string
-  string: string
-  number: string
-  boolean: string
-  null: string
-  punct: string
-  chevron: string
-}
-
-const lightJson: JsonPalette = {
-  key: '#0550ae',
-  string: '#a3262c',
-  number: '#6f42c1',
-  boolean: '#bc4c00',
-  null: '#8E8E93',
-  punct: '#6e7781',
-  chevron: '#8E8E93',
-}
-
-const darkJson: JsonPalette = {
-  key: '#79c0ff',
-  string: '#ffa198',
-  number: '#d2a8ff',
-  boolean: '#ffab70',
-  null: '#8E8E93',
-  punct: '#8b949e',
-  chevron: '#8E8E93',
-}
-
-const leafColor = (value: unknown, p: JsonPalette): string => {
-  if (value === null) return p.null
-  switch (typeof value) {
-    case 'string':
-      return p.string
-    case 'number':
-      return p.number
-    case 'boolean':
-      return p.boolean
-    default:
-      return p.punct
-  }
-}
-
-const leafText = (value: unknown): string => {
-  if (value === null) return 'null'
-  if (typeof value === 'string') return JSON.stringify(value)
-  return String(value)
-}
-
-const JsonNode: React.FC<{
-  name: string | null
-  value: unknown
-  depth: number
-  palette: JsonPalette
-}> = ({ name, value, depth, palette }) => {
-  // Root + first level start expanded; deeper nodes start collapsed.
-  const [expanded, setExpanded] = useState(depth < 2)
-
-  const isArray = Array.isArray(value)
-  const isObject = value !== null && typeof value === 'object'
-
-  const keyLabel = name !== null ? (
-    <Text style={[jsonStyles.mono, { color: palette.key }]}>
-      {JSON.stringify(name)}
-      <Text style={{ color: palette.punct }}>: </Text>
-    </Text>
-  ) : null
-
-  if (!isObject) {
-    return (
-      <View style={[jsonStyles.row, { paddingLeft: depth * 14 }]}>
-        <Text style={jsonStyles.mono} numberOfLines={3}>
-          {keyLabel}
-          <Text style={[jsonStyles.mono, { color: leafColor(value, palette) }]}>
-            {leafText(value)}
-          </Text>
-        </Text>
-      </View>
-    )
-  }
-
-  const entries: Array<[string | null, unknown]> = isArray
-    ? (value as unknown[]).map((v, i) => [String(i), v] as [string, unknown])
-    : Object.entries(value as Record<string, unknown>)
-  const summary = isArray
-    ? `[${entries.length}]`
-    : `{${entries.length} ${entries.length === 1 ? 'key' : 'keys'}}`
-
-  return (
-    <View>
-      <Pressable
-        style={[jsonStyles.row, { paddingLeft: depth * 14 }]}
-        onPress={() => setExpanded((e) => !e)}
-        hitSlop={4}
-      >
-        <Text style={[jsonStyles.chevron, { color: palette.chevron }]}>
-          {expanded ? '▾' : '▸'}
-        </Text>
-        <Text style={jsonStyles.mono} numberOfLines={1}>
-          {keyLabel}
-          <Text style={[jsonStyles.mono, { color: palette.punct }]}>
-            {expanded ? (isArray ? '[' : '{') : summary}
-          </Text>
-        </Text>
-      </Pressable>
-      {expanded && (
-        <>
-          {entries.map(([k, v], i) => (
-            <JsonNode key={`${k}-${i}`} name={k} value={v} depth={depth + 1} palette={palette} />
-          ))}
-          <View style={[jsonStyles.row, { paddingLeft: depth * 14 }]}>
-            <Text style={[jsonStyles.mono, { color: palette.punct }]}>
-              {isArray ? ']' : '}'}
-            </Text>
-          </View>
-        </>
-      )}
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Glass section wrapper (graceful tiers).
-//
-// Top-level component with a STABLE type: when this was a useCallback-built
-// component inside the screen, every color-scheme flip produced a new
-// component type → React remounted all three sections → the SwiftUI hosts
-// (Toggle/Stepper/Picker) were recreated → their `.onAppear` echoes fired
-// setState again. A stable type only re-renders; it never remounts.
-// ---------------------------------------------------------------------------
-
-const Section: React.FC<{
-  isDark: boolean
-  children: React.ReactNode
-  style?: any
-}> = ({ isDark, children, style }) =>
-  liquidGlassAvailable && GlassView ? (
-    <GlassView style={[styles.section, style]} glassEffectStyle="regular">
-      {children}
-    </GlassView>
-  ) : (
-    <View
-      style={[
-        styles.section,
-        { backgroundColor: isDark ? 'rgba(44,44,46,0.9)' : 'rgba(255,255,255,0.92)' },
-        style,
-      ]}
-    >
-      {children}
-    </View>
-  )
 
 // ---------------------------------------------------------------------------
 // Screen
@@ -498,90 +302,3 @@ export default function APIInspectorSheet() {
     </View>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  content: { padding: 16, paddingBottom: 48, gap: 12 },
-
-  section: {
-    borderRadius: 16,
-    padding: 16,
-    overflow: 'hidden',
-  },
-  sectionLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    marginBottom: 8,
-  },
-
-  urlText: {
-    fontFamily: MONO,
-    fontSize: 12,
-    lineHeight: 17,
-  },
-
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 6,
-    minHeight: 36,
-  },
-  controlLabel: { fontSize: 15 },
-  hostFill: { flex: 1 },
-
-  stepperFallback: { flexDirection: 'row', gap: 8 },
-  stepBtn: {
-    width: 36,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: 'rgba(120,120,128,0.16)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  stepBtnText: { fontSize: 18, fontWeight: '600' },
-
-  localeChips: { flex: 1 },
-  chipRow: { flexDirection: 'row', gap: 8, marginTop: 6, flexWrap: 'wrap' },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    backgroundColor: 'rgba(120,120,128,0.16)',
-  },
-  chipActive: { backgroundColor: '#007AFF' },
-  chipText: { fontSize: 13, fontWeight: '600' },
-
-  jsonSection: { paddingVertical: 12 },
-  jsonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  errorText: { color: '#FF3B30', fontSize: 13, marginBottom: 6 },
-})
-
-const jsonStyles = StyleSheet.create({
-  row: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    paddingVertical: 1,
-  },
-  mono: {
-    fontFamily: MONO,
-    fontSize: 12,
-    lineHeight: 18,
-  },
-  chevron: {
-    fontFamily: MONO,
-    fontSize: 12,
-    lineHeight: 18,
-    width: 14,
-  },
-})

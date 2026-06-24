@@ -3,9 +3,13 @@
  * live sync progress, and provides reset/logout actions.
  *
  * On tablet, content is constrained to a comfortable reading width.
+ *
+ * Preference cards / sync sections live in src/components:
+ *   - PreferencePickerRow.tsx — segmented picker row (SwiftUI / chip fallback)
+ *   - SyncProgressBar.tsx      — animated live sync progress bar
  */
-import React, { useEffect, useRef, useState } from 'react'
-import { Alert, Animated, Platform, Pressable, ScrollView, Text, useColorScheme, View } from 'react-native'
+import React, { useEffect, useState } from 'react'
+import { Alert, Platform, Pressable, ScrollView, Text, View } from 'react-native'
 
 // Optional: GlassView for liquid glass cards on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -18,27 +22,6 @@ try {
   /* not available */
 }
 
-// App screens MAY import @expo/ui/swift-ui directly (tab layout precedent).
-// SwiftUI modifiers MUST be factory calls from '@expo/ui/swift-ui/modifiers'.
-let SHost: any = null
-let SPicker: any = null
-let SText: any = null
-let pickerStyleMod: ((style: string) => any) | null = null
-let tagMod: ((tag: string) => any) | null = null
-if (Platform.OS === 'ios') {
-  try {
-    const ui = require('@expo/ui/swift-ui')
-    const mods = require('@expo/ui/swift-ui/modifiers')
-    SHost = ui.Host
-    SPicker = ui.Picker
-    SText = ui.Text
-    pickerStyleMod = mods.pickerStyle
-    tagMod = mods.tag
-  } catch {
-    /* @expo/ui not available */
-  }
-}
-
 import {
   SyncStatusSection,
   useAdminSchema,
@@ -49,6 +32,8 @@ import {
 } from '@payload-universal/admin-native'
 import { useLocalDB, useLocalDBStatus, usePendingUploads } from '@payload-universal/local-db'
 import { useResponsive } from '@/hooks/useResponsive'
+import { PreferencePickerRow } from '@/src/components/PreferencePickerRow'
+import { SyncProgressBar } from '@/src/components/SyncProgressBar'
 import {
   ADMIN_LANGUAGE_OPTIONS,
   APPEARANCE_OPTIONS,
@@ -59,145 +44,6 @@ import {
   type AdminLanguage,
   type AppearancePreference,
 } from '@/src/preferences'
-
-// ---------------------------------------------------------------------------
-// Settings-style segmented picker row — native SwiftUI Picker when available,
-// chip fallback otherwise.
-// ---------------------------------------------------------------------------
-
-function PreferencePickerRow<T extends string>({
-  label,
-  options,
-  optionLabels,
-  value,
-  onChange,
-}: {
-  label: string
-  options: T[]
-  optionLabels: Record<string, string>
-  value: T
-  onChange: (value: T) => void
-}) {
-  const isDark = useColorScheme() === 'dark'
-  if (SHost && SPicker && SText && pickerStyleMod && tagMod) {
-    return (
-      <View style={{ paddingVertical: 6 }}>
-        <Text className="mb-2 text-sm font-semibold text-ink">{label}</Text>
-        {/* matchContents — zero-height hosts swallow touches */}
-        <SHost matchContents={{ vertical: true }} style={{ width: '100%' }}>
-          <SPicker
-            selection={value}
-            onSelectionChange={(sel: string | number | null) => {
-              if (typeof sel === 'string' && (options as string[]).includes(sel)) {
-                onChange(sel as T)
-              }
-            }}
-            modifiers={[pickerStyleMod('segmented')]}
-          >
-            {options.map((opt) => (
-              <SText key={opt} modifiers={[tagMod!(opt)]}>
-                {optionLabels[opt] ?? opt}
-              </SText>
-            ))}
-          </SPicker>
-        </SHost>
-      </View>
-    )
-  }
-
-  // JS fallback — chip row
-  return (
-    <View style={{ paddingVertical: 6 }}>
-      <Text className="mb-2 text-sm font-semibold text-ink">{label}</Text>
-      <View style={{ flexDirection: 'row', gap: 8, flexWrap: 'wrap' }}>
-        {options.map((opt) => (
-          <Pressable
-            key={opt}
-            onPress={() => onChange(opt)}
-            style={{
-              paddingHorizontal: 14,
-              paddingVertical: 6,
-              borderRadius: 16,
-              backgroundColor: value === opt ? '#007AFF' : 'rgba(120,120,128,0.16)',
-            }}
-          >
-            <Text
-              style={{
-                fontSize: 13,
-                fontWeight: '600',
-                color: value === opt ? '#fff' : isDark ? '#f2f2f2' : '#1f1f1f',
-              }}
-            >
-              {optionLabels[opt] ?? opt}
-            </Text>
-          </Pressable>
-        ))}
-      </View>
-    </View>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Animated progress bar
-// ---------------------------------------------------------------------------
-
-const SyncProgressBar: React.FC<{ percent: number; syncing: boolean; current: string | null }> = ({
-  percent,
-  syncing,
-  current,
-}) => {
-  const isDark = useColorScheme() === 'dark'
-  const widthAnim = useRef(new Animated.Value(0)).current
-
-  useEffect(() => {
-    Animated.timing(widthAnim, {
-      toValue: percent,
-      duration: 300,
-      useNativeDriver: false,
-    }).start()
-  }, [percent, widthAnim])
-
-  // Only show during active sync — hide when idle (whether at 0% or 100%)
-  if (!syncing) return null
-
-  return (
-    <View style={{ marginTop: 12 }}>
-      {/* Track */}
-      <View
-        style={{
-          height: 6,
-          borderRadius: 3,
-          backgroundColor: isDark ? 'rgba(255,255,255,0.10)' : 'rgba(0,0,0,0.06)',
-          overflow: 'hidden',
-        }}
-      >
-        {/* Fill */}
-        <Animated.View
-          style={{
-            height: '100%',
-            borderRadius: 3,
-            backgroundColor: syncing ? '#007AFF' : '#34C759',
-            width: widthAnim.interpolate({
-              inputRange: [0, 100],
-              outputRange: ['0%', '100%'],
-              extrapolate: 'clamp',
-            }),
-          }}
-        />
-      </View>
-
-      {/* Label */}
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 }}>
-        <Text style={{ fontSize: 11, color: '#8E8E93' }}>
-          {current ? `Syncing ${current}...` : syncing ? 'Starting sync...' : 'Sync complete'}
-        </Text>
-        <Text style={{ fontSize: 11, fontVariant: ['tabular-nums'], color: '#8E8E93' }}>
-          {percent}%
-        </Text>
-      </View>
-    </View>
-  )
-}
 
 // ---------------------------------------------------------------------------
 // Main screen

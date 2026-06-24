@@ -1060,13 +1060,30 @@ Rules:
   keep `<Unit>.tsx` as a thin barrel) so consumers are untouched.
 - Split by RESPONSIBILITY, not by line-count alone: a hook, a sub-component,
   the styles, and the types are the natural seams.
+- ≤450 is acceptable only for ONE genuinely cohesive unit (a thin composition
+  root, or a pure types+constants module); everything else targets ≤400.
+- **Route files** (`test_app/apps/mobile-expo/app/**`) CANNOT become
+  `<Unit>/index` — expo-router routes every file under `app/`. Slim them
+  IN PLACE: extract sub-components / hooks / styles / types to
+  `src/screens/<route-name>/` (or `src/components/` for shared) and import
+  them back. The route file stays at its path, thin (≤400), keeping its
+  default export and route params.
 - Applies to .tsx/.ts in payload_universal packages AND the app; generated
   files (src/generated/**) and vendored upstreams (payload-main, spacedrive)
   are exempt.
 - Enforce on every new/edited file: if an edit would push a file past 400,
-  extract first. Known current offenders (refactor targets): DocumentForm.tsx,
-  the [slug]/index.tsx screen, GanttChart.tsx, CalendarView.tsx, structural
-  field files, DocumentList.tsx — split as they are next touched.
+  extract first. **Phase 33 (2026-06-13) cleared the original offender set**
+  (DocumentForm, DocumentList, DocumentListTable, FilterBottomSheet,
+  GanttChart, GanttBar, CalendarView, MonthGridFallback, KanbanBoard, the
+  richtext/inputs/structural/pickers field families, htmlToLexical,
+  useDocumentListFilters, Toast, VersionDiff/VersionsBottomSheet, MentionPicker,
+  TableEditor, the [slug]/index + [id] + api + _layout + account routes, the
+  six customize/preset/sidebar app sheets, plus admin-schema / local-db /
+  client-validators barrels). Residual ≤450 cohesive units: DocumentList/index
+  (450, composition root), gantt/types (417), MonthGridFallback/index (420).
+  Stragglers still >400 not yet split (≤450, follow-up): kanban/KanbanCard.tsx
+  (417), fields/RichTextToolbar.tsx (414), app src/components/BulkEditSheet.tsx
+  (419).
 
 ---
 
