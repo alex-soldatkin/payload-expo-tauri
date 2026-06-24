@@ -1039,6 +1039,37 @@ native components throughout:
 
 ---
 
+## Code Convention — No God Files (max 400 lines, 2026-06-13, standing rule)
+
+ANY source file exceeding **400 lines** MUST be split using subdirectory
+conventions — no god files. When a component/module crosses the threshold,
+refactor it into a folder named after the unit with conventional subfiles:
+
+```
+<Unit>/
+  index.tsx        # the component / public entry (thin — composition only)
+  components/      # sub-components extracted from the render tree
+  hooks/           # extracted custom hooks (use* logic)
+  types.ts         # prop types, domain types, schemas
+  styles.ts        # StyleSheet factories / token maps
+  utils.ts         # pure helpers
+```
+
+Rules:
+- The public import path must NOT change — re-export from `<Unit>/index` (or
+  keep `<Unit>.tsx` as a thin barrel) so consumers are untouched.
+- Split by RESPONSIBILITY, not by line-count alone: a hook, a sub-component,
+  the styles, and the types are the natural seams.
+- Applies to .tsx/.ts in payload_universal packages AND the app; generated
+  files (src/generated/**) and vendored upstreams (payload-main, spacedrive)
+  are exempt.
+- Enforce on every new/edited file: if an edit would push a file past 400,
+  extract first. Known current offenders (refactor targets): DocumentForm.tsx,
+  the [slug]/index.tsx screen, GanttChart.tsx, CalendarView.tsx, structural
+  field files, DocumentList.tsx — split as they are next touched.
+
+---
+
 ## Turbopack / Monorepo
 
 ### Root node_modules symlink
