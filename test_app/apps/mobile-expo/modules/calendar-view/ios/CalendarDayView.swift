@@ -22,6 +22,14 @@ import UIKit
 //   didSet derives dark-aware background/text colors per presentation.
 // - CalendarKit styles use dynamic system colors throughout → dark mode works
 //   without extra handling; prop changes call reloadData() on the pager.
+// - INITIAL VERTICAL POSITION: CalendarKit only auto-scrolls on page MOVES
+//   (autoScrollToFirstEvent fires from move completions / swipe transitions,
+//   never on first display), so without help the timeline opens at 00:00.
+//   After the first layout the view positions itself once: day with events →
+//   scrollToFirstEventIfNeeded; empty day → 07:00, or (current hour − 1) when
+//   the displayed day is today. The red current-time indicator is CalendarKit's
+//   built-in TimelineView now-line (shown on today by default; nothing here
+//   overrides style.timeIndicator, so it stays visible).
 
 final class CalendarDayView: ExpoView {
   let onPressEvent = EventDispatcher()
@@ -33,6 +41,8 @@ final class CalendarDayView: ExpoView {
   /// Day key last set via the `date` prop (or last emitted) — used to break
   /// controlled-component feedback loops.
   private var lastDayKey: String?
+  /// One-shot guard for the first-display vertical position (see header).
+  private var didApplyInitialScroll = false
 
   required init(appContext: AppContext? = nil) {
     dayView = CalendarKit.DayView(calendar: Calendar.current)
@@ -52,6 +62,32 @@ final class CalendarDayView: ExpoView {
   override func layoutSubviews() {
     super.layoutSubviews()
     dayView.frame = bounds
+    applyInitialScrollIfNeeded()
+  }
+
+  /// First-display vertical position (CalendarKit's autoScrollToFirstEvent
+  /// only runs on page moves, so the initial page would sit at 00:00).
+  /// Deferred one runloop so the pager's pages have laid out.
+  private func applyInitialScrollIfNeeded() {
+    guard !didApplyInitialScroll, bounds.height > 0 else { return }
+    didApplyInitialScroll = true
+    DispatchQueue.main.async { [weak self] in
+      guard let self else { return }
+      let displayed = self.dayView.state?.selectedDate ?? Date()
+      if !self.eventsForDate(displayed).isEmpty {
+        // Day with events — reuse CalendarKit's own first-event positioning.
+        self.dayView.scrollToFirstEventIfNeeded(animated: false)
+        return
+      }
+      // Empty day — rest at 07:00, or one hour above "now" on today.
+      let hour: Float
+      if self.dayCalendar.isDateInToday(displayed) {
+        hour = Float(max(self.dayCalendar.component(.hour, from: Date()) - 1, 0))
+      } else {
+        hour = 7
+      }
+      self.dayView.scrollTo(hour24: hour, animated: false)
+    }
   }
 
   // MARK: Props

@@ -337,6 +337,9 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
         accessibilityRole="button"
         accessibilityLabel={key}
       >
+        {/* State language (shared with WeekStrip): SELECTED = filled primary
+            pill; TODAY (unselected) = primary RING + primary bold number —
+            today stays visibly distinct from a selected day in both schemes. */}
         <View
           style={[
             styles.dayBadge,
@@ -348,7 +351,7 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
             style={[
               styles.dayText,
               !inMonth && { color: colors.textPlaceholder },
-              isToday && !isSelected && { color: colors.text, fontWeight: '700' },
+              isToday && !isSelected && { color: colors.primary, fontWeight: '700' },
               isSelected && { color: colors.primaryText, fontWeight: '700' },
             ]}
           >
@@ -408,6 +411,9 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
         accessibilityRole="button"
         accessibilityLabel={key}
       >
+        {/* State language (shared with WeekStrip): SELECTED = filled primary
+            pill; TODAY (unselected) = primary RING + primary bold number —
+            today stays visibly distinct from a selected day in both schemes. */}
         <View
           style={[
             styles.dayBadge,
@@ -419,7 +425,7 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
             style={[
               styles.dayText,
               !inMonth && { color: colors.textPlaceholder },
-              isToday && !isSelected && { color: colors.text, fontWeight: '700' },
+              isToday && !isSelected && { color: colors.primary, fontWeight: '700' },
               isSelected && { color: colors.primaryText, fontWeight: '700' },
             ]}
           >
@@ -604,11 +610,18 @@ const createStyles = (c: ListColorPalette) =>
     cardFill: { flex: 1, marginHorizontal: 0 },
     inner: { paddingVertical: t.spacing.sm, paddingHorizontal: t.spacing.xs },
     flexFill: { flex: 1 },
-    /** fillHeight week rows: share the leftover height, Apple-style hairlines. */
+    /**
+     * fillHeight week rows: share the leftover height with Apple Calendar's
+     * separator scheme — hairlines between week ROWS only, no column lines.
+     * Colour is c.border (NOT c.hairline): the rgba hairline token disappears
+     * against the dark card surface, leaving the tall iPad cells reading as
+     * floating numbers; the solid border token stays subtle in light mode and
+     * visibly structures the grid in dark mode.
+     */
     weekRowFill: {
       flex: 1,
       borderTopWidth: StyleSheet.hairlineWidth,
-      borderTopColor: c.hairline,
+      borderTopColor: c.border,
     },
 
     headerRow: {
@@ -646,6 +659,13 @@ const createStyles = (c: ListColorPalette) =>
      */
     col: { flex: 1, minWidth: 0 },
 
+    /**
+     * Shared horizontal ANCHOR invariant: weekday header letters and day
+     * numbers are BOTH centred within the same styles.col metric — the
+     * header label uses textAlign center, the day badge uses alignSelf
+     * center. Never anchor one without the other (a top-left number under a
+     * centred letter reads as misaligned floating digits on tall iPad cells).
+     */
     weekdayRow: { flexDirection: 'row', marginBottom: 2 },
     weekdayLabel: {
       textAlign: 'center',

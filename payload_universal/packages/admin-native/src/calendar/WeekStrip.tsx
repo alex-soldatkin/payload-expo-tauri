@@ -100,6 +100,12 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
 
   const firstDayOfWeek = useMemo(getFirstDayOfWeek, [])
 
+  // Visible-week window — derives EXCLUSIVELY from the controlled
+  // selectedDate (the week containing it, locale week start / Mon default).
+  // NEVER seed this from event data: selectedDate is screen-seeded with
+  // todayDateKey() per the CalendarViewProps contract, so entering week mode
+  // always opens on the selection's week (month→week keeps the selection;
+  // chevrons/swipes below only page the WINDOW, never the selection).
   const [visibleStart, setVisibleStart] = useState<string>(() =>
     weekStartKey(selectedDate, firstDayOfWeek),
   )
@@ -142,16 +148,23 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
 
   const inner = (
     <View style={[styles.inner, regular && styles.innerRegular]} {...panResponder.panHandlers}>
-      <View style={styles.headerRow}>
+      {/* Regular width: the header mirrors the month grid's header exactly —
+          centred md/700 title, 32pt chevron buttons with 20pt icons at the
+          band edges — so week mode reads as the same family of surface. */}
+      <View style={[styles.headerRow, regular && styles.headerRowRegular]}>
         <Pressable
           onPress={() => changeWeek(-1)}
           hitSlop={10}
-          style={({ pressed }) => [styles.chevronBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.chevronBtn,
+            regular && styles.chevronBtnRegular,
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Previous week"
         >
           {ChevronLeftIcon ? (
-            <ChevronLeftIcon size={18} color={colors.textMuted} />
+            <ChevronLeftIcon size={regular ? 20 : 18} color={colors.textMuted} />
           ) : (
             <Text style={styles.chevronGlyph}>{'‹'}</Text>
           )}
@@ -162,18 +175,26 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
         <Pressable
           onPress={() => changeWeek(1)}
           hitSlop={10}
-          style={({ pressed }) => [styles.chevronBtn, pressed && styles.pressed]}
+          style={({ pressed }) => [
+            styles.chevronBtn,
+            regular && styles.chevronBtnRegular,
+            pressed && styles.pressed,
+          ]}
           accessibilityRole="button"
           accessibilityLabel="Next week"
         >
           {ChevronRightIcon ? (
-            <ChevronRightIcon size={18} color={colors.textMuted} />
+            <ChevronRightIcon size={regular ? 20 : 18} color={colors.textMuted} />
           ) : (
             <Text style={styles.chevronGlyph}>{'›'}</Text>
           )}
         </Pressable>
       </View>
-      <View style={styles.pillsRow}>
+      {/* Day pills — EVERY pill is flex:1 + minWidth:0 inside the full-width
+          row, so the 7 pills always distribute evenly across the band (the
+          regular tier must never cluster at compact sizing with dead space —
+          same guard rationale as MonthGridFallback's styles.col). */}
+      <View style={[styles.pillsRow, regular && styles.pillsRowRegular]}>
         {weekKeys.map((key) => {
           const isSelected = key === selectedDate
           const isToday = key === todayKey
@@ -202,6 +223,9 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
               >
                 {weekdayLabelFor(key)}
               </Text>
+              {/* State language (shared with the month grid): SELECTED =
+                  filled primary pill; TODAY (unselected) = primary ring +
+                  primary bold number. */}
               <View
                 style={[
                   styles.pillBadge,
@@ -214,7 +238,7 @@ export const WeekStrip: React.FC<WeekStripProps> = ({
                   style={[
                     styles.pillDay,
                     regular && styles.pillDayRegular,
-                    isToday && !isSelected && { color: colors.text, fontWeight: '700' },
+                    isToday && !isSelected && { color: colors.primary, fontWeight: '700' },
                     isSelected && { color: colors.primaryText, fontWeight: '700' },
                   ]}
                 >
@@ -301,6 +325,8 @@ const createStyles = (c: ListColorPalette) =>
       paddingHorizontal: t.spacing.sm,
       gap: t.spacing.sm,
     },
+    /** regular: chevrons hug the band edges (innerRegular owns the inset). */
+    headerRowRegular: { paddingHorizontal: 0 },
     weekTitle: {
       flex: 1,
       textAlign: 'center',
@@ -308,6 +334,7 @@ const createStyles = (c: ListColorPalette) =>
       fontWeight: '700',
       color: c.text,
     },
+    /** regular: identical typography to the month grid's monthTitle. */
     weekTitleRegular: { fontSize: t.fontSize.md },
     chevronBtn: {
       width: 28,
@@ -316,18 +343,29 @@ const createStyles = (c: ListColorPalette) =>
       alignItems: 'center',
       justifyContent: 'center',
     },
+    /** regular: identical metrics to the month grid's chevronBtn. */
+    chevronBtnRegular: { width: 32, height: 32, borderRadius: 16 },
     chevronGlyph: { fontSize: 20, fontWeight: '600', color: c.textMuted, lineHeight: 22 },
     pressed: { opacity: 0.7 },
 
     pillsRow: { flexDirection: 'row', paddingBottom: 2 },
+    pillsRowRegular: { paddingBottom: t.spacing.xs, marginTop: 2 },
+    /**
+     * THE distribution guard: every pill is flex:1 + minWidth:0, so the 7
+     * pills share the row width exactly — at full-band regular width they
+     * spread edge to edge instead of clustering left at intrinsic size.
+     * Never give a pill an intrinsic width or a different flex value.
+     */
     pill: {
       flex: 1,
+      minWidth: 0,
       alignItems: 'center',
       paddingVertical: 4,
       borderRadius: 12,
       gap: 2,
     },
-    pillRegular: { paddingVertical: 6, gap: 3 },
+    /** regular: larger pills for the full-width iPad header band. */
+    pillRegular: { paddingVertical: t.spacing.sm, gap: t.spacing.xs },
     pillWeekday: {
       fontSize: t.fontSize.xs,
       fontWeight: '600',
@@ -343,9 +381,9 @@ const createStyles = (c: ListColorPalette) =>
       justifyContent: 'center',
       paddingHorizontal: 4,
     },
-    pillBadgeRegular: { minWidth: 36, height: 36, borderRadius: 18 },
+    pillBadgeRegular: { minWidth: 40, height: 40, borderRadius: 20 },
     pillDay: { fontSize: t.fontSize.sm, fontWeight: '500', color: c.text },
-    pillDayRegular: { fontSize: t.fontSize.md },
+    pillDayRegular: { fontSize: t.fontSize.lg },
 
     dotsRow: {
       flexDirection: 'row',

@@ -13,10 +13,12 @@ import {
   Pressable,
   StyleSheet,
   Text,
-  useColorScheme,
+  useWindowDimensions,
   View,
 } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
+
+import { useListColors } from './hooks/useListColors'
 
 // ---------------------------------------------------------------------------
 // Optional deps — loaded dynamically
@@ -177,6 +179,20 @@ let nextToastId = 0
 /** Maximum number of toasts visible at once — older ones are evicted. */
 const MAX_VISIBLE_TOASTS = 2
 
+/** Default auto-dismiss base duration (ms). */
+const BASE_DURATION = 3500
+/** Extra dwell time per character so long messages stay readable. */
+const PER_CHAR_MS = 40
+/** Hard cap on the auto-computed duration. */
+const MAX_AUTO_DURATION = 8000
+
+/**
+ * Auto-dismiss duration scaled by message length: base + 40ms/char, capped
+ * at 8s. Only used when the caller doesn't pass an explicit duration.
+ */
+const autoDuration = (message: string): number =>
+  Math.min(BASE_DURATION + message.length * PER_CHAR_MS, MAX_AUTO_DURATION)
+
 export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<Toast[]>([])
   const insets = useSafeAreaInsets()
@@ -192,7 +208,7 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         message,
         type: options?.type ?? 'info',
         icon: options?.icon,
-        duration: options?.duration ?? 3500,
+        duration: options?.duration ?? autoDuration(message),
       }
       // Stack up to MAX_VISIBLE_TOASTS — evict the oldest beyond that
       setToasts((prev) => [...prev, toast].slice(-MAX_VISIBLE_TOASTS))
@@ -228,8 +244,8 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
   toast,
   onDismiss,
 }) => {
-  const colorScheme = useColorScheme()
-  const isDark = colorScheme === 'dark'
+  const { dark: isDark } = useListColors()
+  const { width: windowWidth } = useWindowDimensions()
 
   const opacity = useRef(new Animated.Value(0)).current
   const scale = useRef(new Animated.Value(0.85)).current
@@ -328,11 +344,17 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
 
   const accentColor = ACCENT[toast.type]
 
-  // Adaptive colours
+  // Adaptive colours — translucent tokens tuned for the glass/blur tiers
+  // (the opaque useListColors palette would deaden the blur), with the
+  // dark flag sourced from useListColors for scheme consistency.
   const blurTint = isDark ? 'dark' : 'light'
   const solidBg = isDark ? 'rgba(30, 30, 30, 0.92)' : 'rgba(255, 255, 255, 0.92)'
   const borderColor = isDark ? 'rgba(255, 255, 255, 0.15)' : 'rgba(0, 0, 0, 0.08)'
   const textColor = isDark ? 'rgba(255, 255, 255, 0.92)' : 'rgba(0, 0, 0, 0.88)'
+
+  // Content-sized pill: width grows with the message up to 90% of the
+  // screen or 560pt (whichever is smaller); height follows the text.
+  const maxWidth = Math.min(windowWidth * 0.9, 560)
 
   return (
     <Animated.View
@@ -340,6 +362,7 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
         styles.pill,
         {
           borderColor,
+          maxWidth,
           opacity,
           transform: [{ translateY }, { scale }],
         },
@@ -365,8 +388,8 @@ const ToastItem: React.FC<{ toast: Toast; onDismiss: (id: number) => void }> = (
           <ToastIcon_ type={toast.type} icon={toast.icon} />
         </View>
 
-        {/* Text */}
-        <Text style={[styles.messageText, { color: textColor }]} numberOfLines={2}>
+        {/* Text — wraps freely up to 4 lines, then ellipsizes */}
+        <Text style={[styles.messageText, { color: textColor }]} numberOfLines={4}>
           {toast.message}
         </Text>
 
@@ -391,12 +414,12 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 
-  // Pill shape — auto-width, centred, very rounded
+  // Pill shape — sizes to its content (maxWidth applied inline from window
+  // width), centred, very rounded. RN clamps oversized radii on tall pills.
   pill: {
     borderRadius: 50,
     overflow: 'hidden',
     minWidth: 200,
-    maxWidth: '85%',
     borderWidth: StyleSheet.hairlineWidth,
     // Shadow
     shadowColor: '#000',

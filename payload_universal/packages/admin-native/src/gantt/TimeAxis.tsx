@@ -9,18 +9,30 @@
  * scroll with the content, and one viewport-wide GlassView is far cheaper
  * than a timeline-wide one).
  *
+ * MONTH LABELS are sticky-segment (the iOS section-header pattern, on the
+ * horizontal axis): every month segment renders its label, and the label of
+ * the month currently under the viewport's LEFT EDGE pins just right of the
+ * frozen title column while its segment is in view. The pinning is a pure
+ * native-driver transform — each label's translateX interpolates the
+ * chart's Animated scrollX over [segmentStart − stickyOffset, … + travel]
+ * (clamped), so scrolling never re-renders the axis. Alignment audit: month
+ * segments sit at startIndex*pxPerDay and day ticks are a flex row of
+ * pxPerDay-wide cells from the same window start — both derive every x from
+ * the identical (dayIndex × pxPerDay) basis, so band and ticks can never
+ * drift apart.
+ *
  * Day ticks render one View per window day; the window is edge-extended in
  * 60-day steps, so the cell count grows with deep scrolling — React.memo
  * keeps re-renders to actual window/density changes (the chart's per-frame
- * scroll work never touches axis props).
+ * scroll work never touches axis props; scrollX is a stable Animated ref).
  */
 import React, { useMemo } from 'react'
-import { StyleSheet, Text, View } from 'react-native'
+import { Animated, StyleSheet, Text, View } from 'react-native'
 
 import { useListColors } from '../hooks/useListColors'
 import type { ListColorPalette } from '../hooks/useListColors'
 import { dateKeyFromDayIndex, getFirstDayOfWeek, parseDateKey } from '../scheduling'
-import { GANTT_AXIS_HEIGHT } from './types'
+import { GANTT_AXIS_HEIGHT, GANTT_AXIS_TOP_PAD, GANTT_TITLE_COLUMN_WIDTH } from './types'
 
 export type TimeAxisProps = {
   /** Date key at x = 0 (the window's first day — the GanttScale epoch). */
@@ -30,6 +42,12 @@ export type TimeAxisProps = {
   pxPerDay: number
   /** Today's local date key — rendered as a primary-tint bubble. */
   todayKey: string
+  /**
+   * The horizontal scroll offset as a (native-driver) Animated value.
+   * Powers the sticky month labels; omit and labels stay at their month
+   * starts (static fallback).
+   */
+  scrollX?: Animated.Value
 }
 
 /** Month band height; day ticks take the rest of GANTT_AXIS_HEIGHT. */
@@ -40,6 +58,14 @@ const DAY_ROW_HEIGHT = GANTT_AXIS_HEIGHT - MONTH_BAND_HEIGHT
 const ALL_DAY_LABELS_MIN_PX = 16
 /** Month labels hide on segments narrower than this. */
 const MONTH_LABEL_MIN_WIDTH = 44
+/** Fixed sticky-label box ('SEP 2026' at 10pt caps fits comfortably). */
+const MONTH_LABEL_WIDTH = 96
+/**
+ * Where a pinned label rests: just right of the frozen title column (the
+ * column overlays the viewport's left 150pt, axis band included — pinning
+ * at the raw left edge would hide the label underneath it).
+ */
+const MONTH_LABEL_STICKY_OFFSET = GANTT_TITLE_COLUMN_WIDTH
 
 type AxisDay = {
   key: string
@@ -63,6 +89,7 @@ const TimeAxisInner: React.FC<TimeAxisProps> = ({
   totalDays,
   pxPerDay,
   todayKey,
+  scrollX,
 }) => {
   const { colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
@@ -98,21 +125,50 @@ const TimeAxisInner: React.FC<TimeAxisProps> = ({
   return (
     <View style={[styles.axis, { width: totalDays * pxPerDay }]} pointerEvents="none">
       <View style={styles.monthBand}>
-        {months.map((m) => (
-          <View
-            key={m.key}
-            style={[
-              styles.monthSeg,
-              { left: m.startIndex * pxPerDay, width: m.days * pxPerDay },
-            ]}
-          >
-            {m.days * pxPerDay >= MONTH_LABEL_MIN_WIDTH ? (
-              <Text style={styles.monthLabel} numberOfLines={1}>
-                {m.label}
-              </Text>
-            ) : null}
-          </View>
-        ))}
+        {months.map((m) => {
+          const segLeft = m.startIndex * pxPerDay
+          const segWidth = m.days * pxPerDay
+          if (segWidth < MONTH_LABEL_MIN_WIDTH) {
+            return (
+              <View key={m.key} style={[styles.monthSeg, { left: segLeft, width: segWidth }]} />
+            )
+          }
+          // Sticky travel: how far the label can slide within its segment
+          // before it must yield to the next month's label.
+          const travel = Math.max(segWidth - MONTH_LABEL_WIDTH, 0)
+          const labelText = (
+            <Text style={styles.monthLabel} numberOfLines={1}>
+              {m.label}
+            </Text>
+          )
+          return (
+            <View key={m.key} style={[styles.monthSeg, { left: segLeft, width: segWidth }]}>
+              {scrollX && travel > 0 ? (
+                <Animated.View
+                  style={{
+                    width: MONTH_LABEL_WIDTH,
+                    transform: [
+                      {
+                        translateX: scrollX.interpolate({
+                          inputRange: [
+                            segLeft - MONTH_LABEL_STICKY_OFFSET,
+                            segLeft - MONTH_LABEL_STICKY_OFFSET + travel,
+                          ],
+                          outputRange: [0, travel],
+                          extrapolate: 'clamp',
+                        }),
+                      },
+                    ],
+                  }}
+                >
+                  {labelText}
+                </Animated.View>
+              ) : (
+                labelText
+              )}
+            </View>
+          )
+        })}
       </View>
       <View style={styles.dayRow}>
         {days.map((day) => (
@@ -150,7 +206,8 @@ TimeAxis.displayName = 'TimeAxis'
 const createStyles = (c: ListColorPalette) =>
   StyleSheet.create({
     axis: {
-      height: GANTT_AXIS_HEIGHT,
+      height: GANTT_AXIS_TOP_PAD + GANTT_AXIS_HEIGHT,
+      paddingTop: GANTT_AXIS_TOP_PAD,
       borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.hairline,
     },
@@ -179,9 +236,9 @@ const createStyles = (c: ListColorPalette) =>
     dayText: { fontSize: 10, fontWeight: '500', color: c.textMuted },
     dayTextWeekend: { color: c.textPlaceholder },
     todayBubble: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
+      width: 22,
+      height: 22,
+      borderRadius: 11,
       alignItems: 'center',
       justifyContent: 'center',
       backgroundColor: c.primary,

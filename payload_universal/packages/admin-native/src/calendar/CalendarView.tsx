@@ -44,7 +44,7 @@
  *    (CalendarKit renders its own all-day row); the JS all-day glass-chip
  *    strip renders ONLY in the fallback tier so the two never duplicate.
  */
-import React, { useCallback, useEffect, useMemo, useState } from 'react'
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Pressable,
   ScrollView,
@@ -68,6 +68,7 @@ import { WeekStrip } from './WeekStrip'
 import {
   addDaysToKey,
   calendarEventDocId,
+  dayIndexFromKey,
   docsToCalendarEvents,
   eventOccursOnDate,
   formatLongDate,
@@ -94,11 +95,13 @@ let ChevronLeftIcon: React.ComponentType<{ size: number; color: string }> | null
 let ChevronRightIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let CheckIcon: React.ComponentType<{ size: number; color: string; strokeWidth?: number }> | null =
   null
+let CalendarOffIcon: React.ComponentType<{ size: number; color: string }> | null = null
 try {
   const lucide = require('lucide-react-native')
   ChevronLeftIcon = lucide.ChevronLeft ?? null
   ChevronRightIcon = lucide.ChevronRight ?? null
   CheckIcon = lucide.Check ?? null
+  CalendarOffIcon = lucide.CalendarOff ?? lucide.CalendarX2 ?? lucide.CalendarDays ?? null
 } catch {
   /* lucide-react-native not available */
 }
@@ -194,6 +197,36 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     [docById, onPressDoc],
   )
 
+  // ── selectedDate contract guard (week/day timeline) ────────────────────
+  // types.ts: selectedDate is screen-seeded with todayDateKey() and NEVER
+  // event-derived; every mode entry (segmented switch, preset apply, Today)
+  // must inherit the CURRENT selection. The native CalendarKit timeline is
+  // the ONLY surface that can PUSH a date into the selection without a user
+  // tap (didMoveTo → onChangeDate) — and a USER page swipe always lands on a
+  // day ADJACENT to the current selection (UIPageViewController emits one
+  // didMoveTo per completed single-page transition). Anything else — mount-
+  // time echoes from module builds whose internal DayViewState initialised
+  // before/without the `date` prop (observed: entering week mode jumped the
+  // selection to the first event's week, e.g. Products' Aug 2 release dates
+  // clobbering a June 13 selection) — is rejected here so week mode can
+  // never re-seed the selection from event data. The ref tracks the latest
+  // accepted key synchronously so fast multi-page swipes (emissions arriving
+  // before the prop round-trip) still chain ±1 moves correctly.
+  const selectedDateRef = useRef(selectedDate)
+  selectedDateRef.current = selectedDate
+  const handleNativeTimelineDate = useCallback(
+    (raw: string) => {
+      const next = normalizeDateKey(raw)
+      const current = selectedDateRef.current
+      if (next === current) return // controlled-prop echo — no-op
+      const distance = dayIndexFromKey(next, current)
+      if (distance === null || Math.abs(distance) !== 1) return // not a user swipe
+      selectedDateRef.current = next
+      onChangeSelectedDate(next)
+    },
+    [onChangeSelectedDate],
+  )
+
   // ── Native tier gate (screen-injected module; never imported here) ────
   const nativeAvailable = Boolean(nativeModule?.isNativeCalendarAvailable)
   const NativeMonth = nativeAvailable ? nativeModule!.NativeCalendarMonth : null
@@ -281,7 +314,10 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
             <Text style={styles.chipCheckGlyph}>{'✓'}</Text>
           )
         ) : (
-          <View style={[styles.chipDot, { backgroundColor: source.color }, styles.chipDotHidden]} />
+          // OFF affordance: outlined chip + FULL-strength colour dot (muted
+          // label carries the "off" state) — a dimmed dot was unreadable on
+          // the dark glass header.
+          <View style={[styles.chipDot, { backgroundColor: source.color }]} />
         )}
         <Text
           style={[styles.chipLabel, !visible && { color: colors.textPlaceholder }]}
@@ -385,7 +421,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
                 {dayRows.length > 0 ? (
                   dayRows
                 ) : (
-                  <Text style={styles.emptyText}>No events</Text>
+                  <EmptyDayState styles={styles} colors={colors} />
                 )}
               </ScrollView>
             </GlassSection>
@@ -409,7 +445,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           {dayRows.length > 0 ? (
             dayRows
           ) : (
-            <Text style={styles.emptyText}>No events</Text>
+            <EmptyDayState styles={styles} colors={colors} />
           )}
         </ScrollView>
       </View>
@@ -496,6 +532,8 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
   const timeline = NativeDay ? (
     // Native CalendarKit timeline — its horizontal swipe paging IS the
     // week mode's scrollable-days surface; allDay events pass through.
+    // onChangeDate goes through handleNativeTimelineDate, which only accepts
+    // adjacent-day user swipes (see the selectedDate contract guard above).
     <NativeDay
       events={events}
       date={selectedDate}
@@ -503,7 +541,7 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         handlePressEventId(e.nativeEvent.id)
       }
       onChangeDate={(e: { nativeEvent: { date: string } }) =>
-        onChangeSelectedDate(normalizeDateKey(e.nativeEvent.date))
+        handleNativeTimelineDate(e.nativeEvent.date)
       }
       style={styles.nativeDay}
     />
@@ -626,6 +664,45 @@ function AllDayChip({
     >
       {body}
     </Pressable>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// EmptyDayState — selected-day panel/list empty state (month mode). Registry
+// ContentUnavailableView (SwiftUI, iOS 17+) when available, else a muted
+// lucide CalendarOff + caption. Renders inside the day panel's glass card /
+// list so it inherits the surface — no chrome of its own beyond spacing.
+// ---------------------------------------------------------------------------
+
+const ContentUnavailable = nativeComponents.ContentUnavailableView
+
+function EmptyDayState({
+  styles,
+  colors,
+}: {
+  styles: ReturnType<typeof createStyles>
+  colors: ListColorPalette
+}) {
+  if (ContentUnavailable) {
+    return (
+      // Fixed-height box so the stretched Host has an explicit frame
+      // (mirrors DocumentList's EmptyState sizing pattern).
+      <View style={styles.emptyDayNativeBox}>
+        <NativeHost matchContents={false} style={styles.flexFill}>
+          <ContentUnavailable
+            title="No Events"
+            systemImage="calendar.badge.minus"
+            description="No events on this day"
+          />
+        </NativeHost>
+      </View>
+    )
+  }
+  return (
+    <View style={styles.emptyDay}>
+      {CalendarOffIcon ? <CalendarOffIcon size={28} color={colors.textMuted} /> : null}
+      <Text style={styles.emptyDayText}>No events on this day</Text>
+    </View>
   )
 }
 
@@ -755,7 +832,6 @@ const createStyles = (c: ListColorPalette) =>
     },
     chipPressed: { opacity: 0.7 },
     chipDot: { width: 8, height: 8, borderRadius: 4 },
-    chipDotHidden: { opacity: 0.35 },
     chipLabel: { fontSize: t.fontSize.xs, fontWeight: '600', color: c.text, maxWidth: 160 },
     /** Text fallback for the legend check when lucide is unavailable. */
     chipCheckGlyph: { fontSize: 11, fontWeight: '800', color: c.text, lineHeight: 12 },
@@ -817,12 +893,17 @@ const createStyles = (c: ListColorPalette) =>
       paddingBottom: t.spacing.xl,
       gap: t.spacing.sm,
     },
-    emptyText: {
-      fontSize: t.fontSize.sm,
-      color: c.textMuted,
-      textAlign: 'center',
-      paddingVertical: t.spacing.lg,
+    // ── Selected-day empty state (icon + caption / native tier) ──
+    flexFill: { flex: 1 },
+    emptyDayNativeBox: { height: 160 },
+    emptyDay: {
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: t.spacing.sm,
+      paddingTop: t.spacing.xl,
+      paddingBottom: t.spacing.lg,
     },
+    emptyDayText: { fontSize: t.fontSize.sm, color: c.textMuted, textAlign: 'center' },
 
     dateNav: {
       flexDirection: 'row',

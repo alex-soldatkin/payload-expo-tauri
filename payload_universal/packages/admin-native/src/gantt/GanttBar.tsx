@@ -58,6 +58,8 @@ import {
   GANTT_HANDLE_WIDTH,
   GANTT_POINT_SIZE,
   GANTT_STATIC_PRESS_MAX_DIST,
+  GANTT_TRAILING_LABEL_MAX_WIDTH,
+  GANTT_TRAILING_LABEL_MIN_SPACE,
 } from './types'
 import type { GanttBarSpec, GanttDragMode } from './types'
 
@@ -76,6 +78,15 @@ export type GanttBarProps = {
   gated?: boolean
   /** Regular width (iPad-class): render visible grips inside the handles. */
   showGrips?: boolean
+  /**
+   * Free horizontal run (px) between this bar's right edge and the next
+   * event in the SAME lane (or the timeline end) — computed by the row via
+   * a simple x-extent collision check. Bars that can't fit their title
+   * inside (point diamonds, sub-48pt slivers) render it to the RIGHT in
+   * this run when it is at least GANTT_TRAILING_LABEL_MIN_SPACE wide,
+   * ellipsized to the available width. Hidden mid-drag (it would lie).
+   */
+  trailingSpace?: number
   onPress: () => void
   onPreview?: () => void
   /** Fired ONCE per completed drag with the day-snapped next ISO range. */
@@ -113,6 +124,7 @@ export const GanttBar: React.FC<GanttBarProps> = ({
   readOnly,
   gated,
   showGrips,
+  trailingSpace,
   onPress,
   onPreview,
   onCommit,
@@ -314,6 +326,16 @@ export const GanttBar: React.FC<GanttBarProps> = ({
   // Narrow bars shrink their handles so a sliver of body stays tappable.
   const handleWidth = Math.max(8, Math.min(GANTT_HANDLE_WIDTH, liveWidth / 3))
 
+  // Trailing title (G5): bars without an internal title (diamonds, slivers)
+  // echo the doc title to the right when the lane run is free. Static only —
+  // hidden while a drag is live (the live tooltip owns that feedback).
+  const rootWidth = Math.max(liveWidth, GANTT_POINT_SIZE)
+  const showsInnerTitle = !bar.point && width >= GANTT_BAR_MIN_TITLE_WIDTH
+  const trailingRun = trailingSpace ?? 0
+  const showTrailingTitle =
+    !snap && !showsInnerTitle && trailingRun >= GANTT_TRAILING_LABEL_MIN_SPACE
+  const trailingWidth = Math.min(trailingRun - 12, GANTT_TRAILING_LABEL_MAX_WIDTH)
+
   return (
     <View
       {...bodyResponder.panHandlers}
@@ -405,6 +427,17 @@ export const GanttBar: React.FC<GanttBarProps> = ({
           </>
         ) : null}
       </Pressable>
+      {/* Trailing doc title in the free run right of the diamond/bar end. */}
+      {showTrailingTitle ? (
+        <View
+          pointerEvents="none"
+          style={[styles.trailingLabelWrap, { left: rootWidth + 6, width: trailingWidth }]}
+        >
+          <Text style={styles.trailingLabel} numberOfLines={1}>
+            {bar.event.title}
+          </Text>
+        </View>
+      ) : null}
       {/* Snapped-dates tooltip above the live bar. */}
       {snap ? (
         <View
@@ -510,6 +543,14 @@ const createStyles = (c: ListColorPalette) =>
       elevation: 6,
     },
     tooltipText: { fontSize: 11, fontWeight: '600', color: c.text },
+
+    trailingLabelWrap: {
+      position: 'absolute',
+      top: 0,
+      bottom: 0,
+      justifyContent: 'center',
+    },
+    trailingLabel: { fontSize: 12, fontWeight: '500', color: c.textMuted },
 
     dimmed: { opacity: 0.45 },
   })

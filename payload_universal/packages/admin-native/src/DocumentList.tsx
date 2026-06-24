@@ -44,6 +44,8 @@ import {
   buildTableColumns,
   DocumentListTableHeader,
   DocumentListTableRow,
+  summariseArrayValue,
+  titleishFromObject,
 } from './DocumentListTable'
 
 import type { ClientField, PaginatedDocs, SerializedSchemaMap } from './types'
@@ -726,10 +728,14 @@ export const DocumentList: React.FC<Props> = ({
   const formatFieldValue = (val: unknown): string => {
     if (val === null || val === undefined) return '—'
     if (typeof val === 'boolean') return val ? 'Yes' : 'No'
+    // Arrays (array/blocks fields, hasMany values) — compact summary,
+    // never a raw JSON dump
+    if (Array.isArray(val)) return summariseArrayValue(val)
     if (typeof val === 'object') {
-      // Relationship / upload (populated object) — show title/name/filename/email
-      const obj = val as Record<string, unknown>
-      return String(obj.title ?? obj.name ?? obj.filename ?? obj.email ?? obj.id ?? JSON.stringify(val))
+      // Relationship / upload (populated object) — title-ish display value;
+      // unrecognisable objects (e.g. rich-text trees) show an em dash
+      // instead of a JSON dump
+      return titleishFromObject(val as Record<string, unknown>) ?? '—'
     }
     const s = String(val)
     // Date-like strings — format nicely

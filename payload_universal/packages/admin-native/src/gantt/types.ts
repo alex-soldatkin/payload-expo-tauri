@@ -81,6 +81,19 @@ export type GanttChartProps = {
 /** Which part of a bar a drag is editing. */
 export type GanttDragMode = 'body' | 'left' | 'right'
 
+/**
+ * Imperative chart handle (React.forwardRef). Minimal by design — the only
+ * thing a screen toolbar needs is the "Today" recenter: scroll horizontally
+ * so today's column sits at the chart's anchor point (~25% of the viewport
+ * width from the LEFT edge, never under the frozen title column). The same
+ * anchor is used for the automatic initial positioning, so "Today" always
+ * restores the opening framing.
+ */
+export type GanttChartHandle = {
+  /** Recenter on today (defaults to an animated scroll). */
+  scrollToToday: (animated?: boolean) => void
+}
+
 // ---------------------------------------------------------------------------
 // Rendering constants
 // ---------------------------------------------------------------------------
@@ -94,18 +107,36 @@ export type GanttDragMode = 'body' | 'left' | 'right'
 export const GANTT_CHART_DEFAULT_PX_PER_DAY = 28
 /** Frozen title column width (absolute overlay on the left). */
 export const GANTT_TITLE_COLUMN_WIDTH = 150
-/** Sticky time-axis header height (month band + day ticks). */
-export const GANTT_AXIS_HEIGHT = 46
+/** Sticky time-axis header height (20pt month band + 30pt day ticks). */
+export const GANTT_AXIS_HEIGHT = 50
+/**
+ * Breathing room above the month band (chrome grid half-step) — the axis
+ * band would otherwise butt straight against the search bar / toolbar row.
+ * Painted as part of the viewport-fixed glass band; the title-column corner
+ * matches so the hairlines stay level.
+ */
+export const GANTT_AXIS_TOP_PAD = 8
 /** Bar height within a lane. */
 export const GANTT_BAR_HEIGHT = 24
 /** Vertical gap between lanes in a row. */
 export const GANTT_LANE_GAP = 4
 /** Vertical padding above/below a row's lanes. */
 export const GANTT_ROW_VERTICAL_PADDING = 7
-/** Row height for 0/1-lane rows. */
+/** Row height for 0/1-lane (non-point) rows. */
 export const GANTT_MIN_ROW_HEIGHT = GANTT_BAR_HEIGHT + GANTT_ROW_VERTICAL_PADDING * 2
 /** Point-event diamond size. */
 export const GANTT_POINT_SIZE = 16
+/**
+ * Lane unit for rows whose bars are ALL point diamonds — a 16pt diamond
+ * doesn't need a full 24pt bar lane, so point-only rows tighten to content
+ * (the diamond stays vertically centred; multi-source point rows shrink
+ * from ~66pt to ~54pt, single-lane ones from 38pt to 32pt).
+ */
+export const GANTT_POINT_LANE_HEIGHT = 18
+/** Trailing run (px) required before a diamond/bar-end title renders. */
+export const GANTT_TRAILING_LABEL_MIN_SPACE = 40
+/** Cap on a trailing title's width (px) — long runs don't need a banner. */
+export const GANTT_TRAILING_LABEL_MAX_WIDTH = 220
 /** Resize-handle hit-zone width (left/right ends of a bar). */
 export const GANTT_HANDLE_WIDTH = 20
 /** Bars at/above this width render their title text. */
@@ -164,7 +195,13 @@ export type GanttRowModel = {
   title: string
   bars: GanttBarSpec[]
   laneCount: number
-  /** Row track height in px (lanes + padding; min GANTT_MIN_ROW_HEIGHT). */
+  /**
+   * Vertical unit of one lane: GANTT_BAR_HEIGHT normally,
+   * GANTT_POINT_LANE_HEIGHT when every bar in the row is a point diamond
+   * (rows tighten to content; bars centre within the lane).
+   */
+  laneHeight: number
+  /** Row track height in px (lanes + padding; empty rows use the minimum). */
   height: number
 }
 
@@ -251,18 +288,26 @@ export const buildGanttRows = (
     seen.add(docId)
     const bars = packRowLanes(barsByDoc.get(docId) ?? [])
     const laneCount = bars.reduce((max, b) => Math.max(max, b.lane + 1), 0)
+    // Point-only rows tighten to the diamond lane unit; rows with at least
+    // one range bar keep the full bar lane (and the comfortable minimum).
+    const pointOnly = bars.length > 0 && bars.every((b) => b.point)
+    const laneHeight = pointOnly ? GANTT_POINT_LANE_HEIGHT : GANTT_BAR_HEIGHT
     const height =
-      laneCount <= 1
+      laneCount === 0
         ? GANTT_MIN_ROW_HEIGHT
-        : GANTT_ROW_VERTICAL_PADDING * 2 +
-          laneCount * GANTT_BAR_HEIGHT +
-          (laneCount - 1) * GANTT_LANE_GAP
+        : Math.max(
+            GANTT_ROW_VERTICAL_PADDING * 2 +
+              laneCount * laneHeight +
+              (laneCount - 1) * GANTT_LANE_GAP,
+            pointOnly ? 0 : GANTT_MIN_ROW_HEIGHT,
+          )
     rows.push({
       doc,
       docId,
       title: getDocumentTitle(doc, useAsTitle),
       bars,
       laneCount,
+      laneHeight,
       height,
     })
   }

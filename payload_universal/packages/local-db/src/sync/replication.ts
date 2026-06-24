@@ -13,6 +13,7 @@ import type { ReplicationOptions, RxCollection, WithDeleted } from 'rxdb'
 import { Subject, interval as rxInterval } from 'rxjs'
 import { map } from 'rxjs/operators'
 import type { PayloadDoc } from '../utils/schemaFromPayload'
+import { stripRxInternals } from '../utils/stripRxInternals'
 
 export type ReplicationConfig = {
   baseURL: string
@@ -172,7 +173,7 @@ export const startReplication = (
           const isNew = !row.assumedMasterState
 
           // Strip RxDB internal fields before sending to Payload REST API
-          const { _deleted, _rev, _meta, _attachments, _locallyModified, ...payloadBody } = doc as any
+          const payloadBody = stripRxInternals(doc as Record<string, unknown>)
 
           // When the document is a draft, append ?draft=true so Payload
           // skips required-field validation on the server side.

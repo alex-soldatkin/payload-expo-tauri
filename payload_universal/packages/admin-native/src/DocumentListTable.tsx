@@ -98,6 +98,20 @@ export const TABLE_TITLE_COLUMN_WIDTH = 176
 const HEADER_HEIGHT = 38
 
 /**
+ * Row vertical rhythm — content drives the height between a fixed floor
+ * (single-line rows) and a hard cap (the two-line long-text case). The cap
+ * is load-bearing, not cosmetic: rows live inside screen-level wrappers
+ * (SwipeToDeleteRow, the native preview trigger) and the previous unbounded
+ * row (with a `height: '100%'` track) let a stray tall measurement from the
+ * wrapper chain inflate a row to viewport scale, centering one line of text
+ * in a ~1000pt void. With min/max bounds the row can never exceed two-line
+ * height regardless of what an ancestor hands down. The enclosing FlatList
+ * uses no getItemLayout, so the 52–76pt dynamic heights are self-measured.
+ */
+export const TABLE_ROW_MIN_HEIGHT = 52
+export const TABLE_ROW_MAX_HEIGHT = 76
+
+/**
  * Type-aware fixed column widths (pt) — columns NEVER flex-squeeze; total
  * content width grows beyond the screen and scrolls horizontally instead.
  */
@@ -123,6 +137,128 @@ const MAX_COLUMN_WIDTH = 240
 
 export const getTableColumnWidth = (type: string): number =>
   Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, TYPE_COLUMN_WIDTHS[type] ?? 160))
+
+// ---------------------------------------------------------------------------
+// Cell content rules — every value renders ellipsized, never a raw dump
+// ---------------------------------------------------------------------------
+
+/**
+ * Long-text field types may wrap to two lines (excerpt + ellipsis); every
+ * other type renders a single ellipsized line.
+ */
+const LONG_TEXT_CELL_TYPES = new Set(['textarea', 'richText', 'json', 'code'])
+
+export const getCellLineLimit = (type: string): 1 | 2 =>
+  LONG_TEXT_CELL_TYPES.has(type) ? 2 : 1
+
+/**
+ * Cap cell strings well past two lines of glyphs — Text measurement cost
+ * scales with string length and a cell never shows more than this.
+ */
+const CELL_EXCERPT_MAX = 160
+
+const collapseWhitespace = (s: string): string => s.replace(/\s+/g, ' ').trim()
+
+const excerpt = (s: string): string => {
+  const flat = collapseWhitespace(s)
+  return flat.length > CELL_EXCERPT_MAX ? `${flat.slice(0, CELL_EXCERPT_MAX - 1)}…` : flat
+}
+
+/**
+ * Walk a Payload rich-text value (Lexical `{ root: { children } }` or Slate
+ * node arrays) collecting plain text. Bounded — stops once enough text for
+ * a two-line excerpt has been gathered.
+ */
+export const extractRichTextPlainText = (value: unknown): string => {
+  const parts: string[] = []
+  let length = 0
+  const walk = (node: unknown): void => {
+    if (length > CELL_EXCERPT_MAX || node == null) return
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child)
+      return
+    }
+    if (typeof node !== 'object') return
+    const obj = node as Record<string, unknown>
+    if (typeof obj.text === 'string' && obj.text.length > 0) {
+      parts.push(obj.text)
+      length += obj.text.length + 1
+    }
+    if (obj.root != null) walk(obj.root)
+    if (Array.isArray(obj.children)) walk(obj.children)
+  }
+  walk(value)
+  return excerpt(parts.join(' '))
+}
+
+const TITLEISH_KEYS = ['title', 'name', 'label', 'filename', 'email'] as const
+
+/**
+ * Title-ish display string for a populated relationship/upload object —
+ * mirrors getDocumentTitle's key priority, falling back to the id. Returns
+ * null when nothing displayable exists (callers show an em dash).
+ */
+export const titleishFromObject = (obj: Record<string, unknown>): string | null => {
+  for (const key of TITLEISH_KEYS) {
+    const v = obj[key]
+    if (typeof v === 'string' && v.trim().length > 0) return v
+    if (typeof v === 'number') return String(v)
+  }
+  return obj.id != null ? String(obj.id) : null
+}
+
+/**
+ * Compact summary for an array value (array/blocks fields, hasMany
+ * relationships/selects): scalar items join inline, object items render as
+ * an item count — NEVER a raw JSON dump.
+ */
+export const summariseArrayValue = (arr: unknown[]): string => {
+  if (arr.length === 0) return '—'
+  if (arr.every((v) => typeof v !== 'object' || v === null)) {
+    return excerpt(arr.map((v) => String(v)).join(', '))
+  }
+  return arr.length === 1 ? '1 item' : `${arr.length} items`
+}
+
+/**
+ * Type-aware cell formatter. `formatScalar` is DocumentList's existing
+ * value formatter (date strings, booleans) — this layer adds the
+ * field-type rules on top:
+ *  - richText → plain-text excerpt (Lexical/Slate walk), never the node tree
+ *  - json/code/textarea → whitespace-collapsed excerpt
+ *  - point → "lng, lat"
+ *  - arrays (array/blocks/hasMany) → compact summary ("3 items" / joined scalars)
+ *  - populated relationship/upload objects → title-ish extraction
+ */
+export const formatTableCellValue = (
+  value: unknown,
+  type: string,
+  formatScalar: (v: unknown) => string,
+): string => {
+  if (value == null || value === '') return '—'
+  if (Array.isArray(value)) {
+    if (type === 'point') return excerpt(value.map((v) => String(v)).join(', '))
+    return summariseArrayValue(value)
+  }
+  if (type === 'richText') {
+    if (typeof value === 'string') return excerpt(value)
+    const text = extractRichTextPlainText(value)
+    return text.length > 0 ? text : '—'
+  }
+  if (type === 'json') {
+    if (typeof value === 'string') return excerpt(value)
+    try {
+      return excerpt(JSON.stringify(value))
+    } catch {
+      return '—'
+    }
+  }
+  if (typeof value === 'object') {
+    const title = titleishFromObject(value as Record<string, unknown>)
+    return title != null ? excerpt(title) : '—'
+  }
+  return excerpt(formatScalar(value))
+}
 
 /** "updatedAt" → "Updated At" (fallback when the schema has no label). */
 const humaniseFieldName = (field: string): string =>
@@ -370,7 +506,11 @@ type TableRowProps = {
   showStatus: boolean
   /** Shared `Animated.multiply(scrollX, -1)` — native driver. */
   translateX: Animated.AnimatedInterpolation<number>
-  /** DocumentList's existing cell value formatter (dates, bools, rels…). */
+  /**
+   * DocumentList's scalar value formatter (date strings, booleans). The row
+   * layers the field-type cell rules on top via `formatTableCellValue`
+   * (rich-text excerpts, array summaries, title-ish object extraction).
+   */
   formatValue: (value: unknown) => string
   colors: ListColorPalette
   /**
@@ -438,8 +578,11 @@ export function DocumentListTableRow({
               key={col.field}
               style={[styles.cell, { width: col.width, borderRightColor: colors.hairline }]}
             >
-              <Text style={[styles.cellText, { color: colors.textMuted }]} numberOfLines={1}>
-                {formatValue(getByPath(doc, col.field))}
+              <Text
+                style={[styles.cellText, { color: colors.textMuted }]}
+                numberOfLines={getCellLineLimit(col.type)}
+              >
+                {formatTableCellValue(getByPath(doc, col.field), col.type, formatValue)}
               </Text>
             </View>
           ))}
@@ -482,7 +625,13 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'stretch',
-    minHeight: 48,
+    // Content-driven height, hard-bounded (see TABLE_ROW_MIN/MAX_HEIGHT):
+    // floor = single-line rhythm, cap = the two-line long-text case. The
+    // cap guarantees no ancestor measurement can ever inflate a row again;
+    // overflow hidden clips cleanly if the clamp engages.
+    minHeight: TABLE_ROW_MIN_HEIGHT,
+    maxHeight: TABLE_ROW_MAX_HEIGHT,
+    overflow: 'hidden',
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
   titleCell: {
@@ -505,10 +654,15 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     textTransform: 'capitalize',
   },
-  trackWindow: { flex: 1, overflow: 'hidden' },
-  track: { flexDirection: 'row', alignItems: 'stretch', height: '100%' },
+  // Row-direction window so the track stretches to the row's (bounded)
+  // height on the cross axis — NO percentage heights anywhere in the row
+  // tree (the old `height: '100%'` track was the elastic link that let a
+  // tall ancestor measurement blow rows up to viewport scale).
+  trackWindow: { flex: 1, flexDirection: 'row', overflow: 'hidden' },
+  track: { flexDirection: 'row', alignItems: 'stretch' },
   cell: {
     paddingHorizontal: 10,
+    paddingVertical: 8,
     justifyContent: 'center',
     borderRightWidth: StyleSheet.hairlineWidth,
   },

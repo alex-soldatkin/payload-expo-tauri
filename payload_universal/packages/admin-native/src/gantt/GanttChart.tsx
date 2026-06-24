@@ -7,14 +7,25 @@
  * optimistic UI (and failure spring-back) comes from the screen's
  * local-first write + re-render.
  *
- * STRUCTURE — one outer HORIZONTAL ScrollView hosting a timeline-wide
- * content column: [sticky TimeAxis header] above a [VERTICAL FlatList of
- * row tracks] sized to the full timeline width. The frozen TITLE COLUMN
- * (≈150pt, doc titles + chevron) is an absolute overlay on the LEFT whose
- * content translateY is driven by the FlatList's onScroll via
+ * STRUCTURE — one outer HORIZONTAL Animated.ScrollView hosting a
+ * timeline-wide content column: [sticky TimeAxis header] above a [VERTICAL
+ * FlatList of row tracks] sized to the full timeline width. The frozen
+ * TITLE COLUMN (≈150pt, doc titles + chevron) is an absolute overlay on the
+ * LEFT whose content translateY is driven by the FlatList's onScroll via
  * Animated.event (classic frozen-column sync — ONE list, no second
- * scrollable to keep in step). Liquid-glass band behind the header and
- * glass title column (guarded, bordered fallbacks); hairline row separators.
+ * scrollable to keep in step). The horizontal offset is ALSO mapped into a
+ * native Animated value (scrollX) that drives the TimeAxis's sticky month
+ * labels.
+ *
+ * GLASS IS BACKGROUND-ONLY (the DocumentListTable rule): the header band
+ * and the title column render a GlassView as an absolute-fill layer with
+ * the text/Pressable content as plain RN SIBLINGS above it — NEVER as
+ * GlassView children. GlassView re-parents children into its
+ * UIVisualEffectView.contentView on iOS 26 (see expo-glass-effect
+ * GlassView.swift mountChildComponentView); RN text inside that re-parented
+ * subtree failed to draw on device (the G1 invisible-titles bug: chevron
+ * SVGs survived, every <Text> vanished), so content stays in the normal RN
+ * hierarchy and only the material is glass.
  *
  * INFINITE BOTH AXES:
  *  - vertical: the FlatList windows rows natively (getItemLayout from the
@@ -43,7 +54,14 @@
  * Day-grid math comes from the shared ../scheduling GanttScale — nothing is
  * duplicated here.
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   Animated,
   FlatList,
@@ -82,18 +100,20 @@ import { TimeAxis } from './TimeAxis'
 import {
   buildGanttRows,
   GANTT_AXIS_HEIGHT,
+  GANTT_AXIS_TOP_PAD,
   GANTT_BAR_HEIGHT,
   GANTT_CHART_DEFAULT_PX_PER_DAY,
   GANTT_EXTEND_DAYS,
   GANTT_EXTEND_THRESHOLD_DAYS,
   GANTT_LANE_GAP,
   GANTT_MIN_ROW_HEIGHT,
+  GANTT_POINT_SIZE,
   GANTT_REGULAR_WIDTH,
   GANTT_ROW_VERTICAL_PADDING,
   GANTT_TITLE_COLUMN_WIDTH,
   initialGanttWindow,
 } from './types'
-import type { GanttChartProps, GanttRowModel } from './types'
+import type { GanttChartHandle, GanttChartProps, GanttRowModel } from './types'
 
 // Optional: GlassView for the header band + title column on iOS 26+
 let GlassView: React.ComponentType<any> | null = null
@@ -166,6 +186,39 @@ const GanttRowInner: React.FC<GanttRowProps> = ({
     },
     [onDragStateChange],
   )
+
+  // Trailing-title collision check (G5): per lane, the free run between a
+  // bar's right edge and the NEXT bar's left edge (or the timeline end).
+  // Pure x-extent math over the already lane-packed bars.
+  const trailingSpaceById = useMemo(() => {
+    const byLane = new Map<number, Array<{ id: string; startX: number; endX: number }>>()
+    for (const bar of row.bars) {
+      const x = scale.xFromDateKey(bar.startKey)
+      if (x === null) continue
+      // Rendered extent: point diamonds occupy at least GANTT_POINT_SIZE.
+      const endX = x + Math.max(bar.spanDays * pxPerDay, GANTT_POINT_SIZE)
+      const list = byLane.get(bar.lane)
+      const entry = { id: bar.event.id, startX: x, endX }
+      if (list) list.push(entry)
+      else byLane.set(bar.lane, [entry])
+    }
+    const out = new Map<string, number>()
+    for (const list of byLane.values()) {
+      list.sort((a, b) => a.startX - b.startX)
+      for (let i = 0; i < list.length; i += 1) {
+        const next = list[i + 1]
+        out.set(list[i].id, (next ? next.startX : timelineWidth) - list[i].endX)
+      }
+    }
+    return out
+  }, [row.bars, scale, pxPerDay, timelineWidth])
+
+  // Bars centre on their lane: lane unit comes from the row (tightened for
+  // point-only rows), while the bar root stays GANTT_BAR_HEIGHT tall — the
+  // (laneHeight − barHeight)/2 term keeps diamonds optically centred.
+  const laneUnit = row.laneHeight
+  const laneCenterOffset = (laneUnit - GANTT_BAR_HEIGHT) / 2
+
   return (
     <View
       style={{
@@ -184,12 +237,17 @@ const GanttRowInner: React.FC<GanttRowProps> = ({
             key={bar.event.id}
             bar={bar}
             x={x}
-            y={GANTT_ROW_VERTICAL_PADDING + bar.lane * (GANTT_BAR_HEIGHT + GANTT_LANE_GAP)}
+            y={
+              GANTT_ROW_VERTICAL_PADDING +
+              bar.lane * (laneUnit + GANTT_LANE_GAP) +
+              laneCenterOffset
+            }
             width={bar.spanDays * pxPerDay}
             pxPerDay={pxPerDay}
             readOnly={readOnly}
             gated={gated}
             showGrips={showGrips}
+            trailingSpace={trailingSpaceById.get(bar.event.id)}
             onPress={() => onPressDoc(bar.doc)}
             onPreview={onPreviewDoc ? () => onPreviewDoc(bar.doc) : undefined}
             onCommit={(next) => onCommitDates(bar.doc, bar.source, next)}
@@ -207,16 +265,19 @@ GanttRow.displayName = 'GanttRow'
 // Chart
 // ---------------------------------------------------------------------------
 
-export const GanttChart: React.FC<GanttChartProps> = ({
-  docs,
-  sources,
-  useAsTitle,
-  onPressBar,
-  onPreviewDoc,
-  onUpdateDates,
-  readOnlyDocIds,
-  pxPerDay,
-}) => {
+export const GanttChart = React.forwardRef<GanttChartHandle, GanttChartProps>((
+  {
+    docs,
+    sources,
+    useAsTitle,
+    onPressBar,
+    onPreviewDoc,
+    onUpdateDates,
+    readOnlyDocIds,
+    pxPerDay,
+  },
+  handleRef,
+) => {
   const { dark, colors } = useListColors()
   const styles = useMemo(() => createStyles(colors), [colors])
 
@@ -224,6 +285,8 @@ export const GanttChart: React.FC<GanttChartProps> = ({
     pxPerDay !== undefined && Number.isFinite(pxPerDay) && pxPerDay > 0
       ? pxPerDay
       : GANTT_CHART_DEFAULT_PX_PER_DAY
+  const pxRef = useRef(px)
+  pxRef.current = px
 
   const todayKey = todayDateKey()
 
@@ -313,17 +376,26 @@ export const GanttChart: React.FC<GanttChartProps> = ({
   }, [viewport.w, timelineWidth, px])
 
   // Initial position: today lands just right of the frozen title column.
+  // Recenter so today sits just past the frozen title column. Shared by the
+  // first-layout effect and the imperative `scrollToToday` (Today button).
+  const scrollToToday = useCallback(
+    (animated = true) => {
+      const todayX = scale.xFromDateKey(todayKey)
+      const target = Math.max(0, (todayX ?? 0) - GANTT_TITLE_COLUMN_WIDTH - px)
+      hScrollRef.current?.scrollTo({ x: target, animated })
+      scrollXRef.current = target
+    },
+    [scale, px, todayKey],
+  )
+
+  useImperativeHandle(handleRef, () => ({ scrollToToday }), [scrollToToday])
+
   const initialScrollDoneRef = useRef(false)
   useEffect(() => {
     if (viewport.h <= 0 || initialScrollDoneRef.current) return
     initialScrollDoneRef.current = true
-    const todayX = scale.xFromDateKey(todayKey)
-    const target = Math.max(0, (todayX ?? 0) - GANTT_TITLE_COLUMN_WIDTH - px)
-    requestAnimationFrame(() => {
-      hScrollRef.current?.scrollTo({ x: target, animated: false })
-      scrollXRef.current = target
-    })
-  }, [viewport.h, scale, px, todayKey])
+    requestAnimationFrame(() => scrollToToday(false))
+  }, [viewport.h, scrollToToday])
 
   // ── Horizontal edge extension ────────────────────────────────────────
   const handleHScroll = useCallback(
@@ -608,7 +680,9 @@ export const GanttChart: React.FC<GanttChartProps> = ({
       ) : null}
     </View>
   )
-}
+})
+
+GanttChart.displayName = 'GanttChart'
 
 // ---------------------------------------------------------------------------
 // Styles — dark-mode aware palette only (zero hardcoded light colours)

@@ -24,6 +24,7 @@ import type { AnyField, ClientHooksConfig, ValidationErrors } from '@payload-uni
 
 import { useLocalMutations } from './hooks'
 import { useClientValidatorConfig } from '../contexts/ClientValidatorContext'
+import { stripRxInternals } from '../utils/stripRxInternals'
 import type { PayloadLocalDB } from '../database'
 
 // ---------------------------------------------------------------------------
@@ -42,6 +43,17 @@ export type UseValidatedMutationsResult = {
   create: (data: Record<string, unknown>) => Promise<ValidatedMutationResult>
   /**
    * Update a document. Runs hooks + validation before writing.
+   *
+   * `data` may be a partial patch — validation runs against the patch merged
+   * over the full existing document, so single-field patches don't fail
+   * required checks on untouched fields. Pass `originalDoc` (the current doc)
+   * to skip the local-DB fetch; when omitted, the doc is read from RxDB.
+   *
+   * Merge semantics mirror the RxDB write (`incrementalPatch`): TOP-LEVEL
+   * keys only — each patch key replaces that key wholesale. Dot-path keys
+   * (e.g. `'a.b'`) are NOT expanded; callers patching nested fields must
+   * pre-merge the full root object into the patch (as the gantt screen does).
+   *
    * Returns `{ success: true }` or `{ success: false, errors }`.
    */
   update: (id: string, data: Record<string, unknown>, originalDoc?: Record<string, unknown>) => Promise<ValidatedMutationResult>
@@ -140,12 +152,29 @@ export function useValidatedMutations(
       setErrors({})
 
       try {
-        // 1. beforeValidate hooks
-        let processedData = await runBeforeValidateHooks(hooksConfig, slug, data, originalDoc, 'update')
+        // Resolve the full current document so partial patches validate
+        // against the complete doc. Callers that pass `originalDoc` skip the
+        // fetch; otherwise read the current state from the local DB.
+        let baseDoc: Record<string, unknown> | undefined = originalDoc
+        if (!baseDoc) {
+          const collection = localDB?.collections[slug]
+          const rxDoc = collection ? await collection.findOne(id).exec() : null
+          if (rxDoc) baseDoc = rxDoc.toMutableJSON() as Record<string, unknown>
+        }
+        // Strip RxDB internals (_rev/_meta/_attachments/_deleted/
+        // _locallyModified) — same as the replication push handler.
+        const existing = baseDoc ? stripRxInternals(baseDoc) : undefined
 
-        // 2. Validation
+        // 1. beforeValidate hooks — receive the raw patch + full original doc
+        let processedData = await runBeforeValidateHooks(hooksConfig, slug, data, existing, 'update')
+
+        // 2. Validation — runs against the patch merged over the full
+        //    existing doc. Top-level merge only, mirroring what the RxDB
+        //    incrementalPatch write will produce (each patch key replaces
+        //    that key wholesale; dot-path keys are not expanded).
         if (fields && fields.length > 0) {
-          const result = await runValidation(fields, processedData, slug, hooksConfig, 'update')
+          const docForValidation = existing ? { ...existing, ...processedData } : processedData
+          const result = await runValidation(fields, docForValidation, slug, hooksConfig, 'update')
           if (!result.valid) {
             setErrors(result.errors)
             return { success: false, errors: result.errors }
@@ -153,13 +182,14 @@ export function useValidatedMutations(
         }
 
         // 3. beforeChange hooks
-        processedData = await runBeforeChangeHooks(hooksConfig, slug, processedData, originalDoc, 'update')
+        processedData = await runBeforeChangeHooks(hooksConfig, slug, processedData, existing, 'update')
 
-        // 4. Write to local DB
+        // 4. Write to local DB — unchanged: only the patch keys are written
+        //    (incrementalPatch merges top-level keys into the stored doc).
         await rawUpdate(id, processedData)
 
-        // 5. afterChange hooks
-        runAfterChangeHooks(hooksConfig, slug, { ...processedData, id }, originalDoc, 'update').catch(() => {
+        // 5. afterChange hooks — receive the full merged document
+        runAfterChangeHooks(hooksConfig, slug, { ...existing, ...processedData, id }, existing, 'update').catch(() => {
           // afterChange hooks are best-effort
         })
 
@@ -170,7 +200,7 @@ export function useValidatedMutations(
         return { success: false, errors: { _form: message } }
       }
     },
-    [rawUpdate, fields, slug, hooksConfig],
+    [rawUpdate, fields, slug, hooksConfig, localDB],
   )
 
   return useMemo(
