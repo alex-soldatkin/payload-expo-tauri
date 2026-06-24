@@ -25,6 +25,8 @@ export {
   GANTT_HANDLE_WIDTH,
   GANTT_LANE_GAP,
   GANTT_MAX_AUTO_WINDOW_DAYS,
+  GANTT_MAX_PX_PER_DAY,
+  GANTT_MIN_PX_PER_DAY,
   GANTT_MIN_ROW_HEIGHT,
   GANTT_POINT_SIZE,
   GANTT_REGULAR_WIDTH,
@@ -38,6 +40,7 @@ export {
 } from './types'
 export type {
   GanttBarSpec,
+  GanttChartHandle,
   GanttChartProps,
   GanttDragMode,
   GanttRowModel,

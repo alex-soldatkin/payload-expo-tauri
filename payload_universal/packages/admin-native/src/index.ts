@@ -118,6 +118,8 @@ export {
   buildGanttRows,
   computeNextRange,
   GANTT_CHART_DEFAULT_PX_PER_DAY,
+  GANTT_MAX_PX_PER_DAY,
+  GANTT_MIN_PX_PER_DAY,
   GANTT_REGULAR_WIDTH,
   GANTT_TITLE_COLUMN_WIDTH,
   initialGanttWindow,
@@ -126,6 +128,7 @@ export {
 export type {
   GanttBarProps,
   GanttBarSpec,
+  GanttChartHandle,
   GanttChartProps,
   GanttDragMode,
   GanttRowModel,
@@ -237,6 +240,16 @@ export type { RelationshipFieldProps } from './fields/pickers'
 // components; the @payload-universal/ui native shim's useRowLabel reads it.
 export { RowLabelContext, useRowLabelContext } from './fields/structural'
 export type { RowLabelContextValue } from './fields/structural'
+
+// Segmented index picker (three-tier SwiftUI/JC/pill) — the calendar's
+// Month/Week/Day toolbar; reused by the gantt screen header's S/M/L zoom so
+// both scheduling views share the identical native segmented control.
+export { SegmentedIndexPicker } from './fields/structural/common'
+
+// hex → rgba(...) tint helper — kanban/gantt bar surfaces and the calendar
+// legend chips compose source colours through it (the screen's gantt legend
+// reuses it for visual parity with the calendar legend).
+export { hexToRgba } from './kanban/types'
 
 // Field components (for direct use or overriding)
 export {

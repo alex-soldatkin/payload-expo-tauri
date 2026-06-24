@@ -86,14 +86,27 @@ export type MonthGridFallbackProps = {
 const SWIPE_THRESHOLD = 40
 
 // ── Event-bar metrics (showEventBars density) ──────────────────────────────
-/** Day-number badge zone height at the top of a bars-mode cell. */
-const BAR_BADGE_AREA = 30
+/**
+ * Day-number badge zone height at the top of a bars-mode cell — the bars
+ * overlay's lane block is pinned DIRECTLY below this (Apple Calendar: number
+ * row at the top, bars stacked tight beneath, flexible empty space below).
+ * Tracks the real badge box: barsCell paddingTop (3) + dayBadge height (26) +
+ * a 3pt breathing gap = 32.
+ */
+const BAR_BADGE_AREA = 32
 const BAR_HEIGHT = 16
 const BAR_GAP = 2
 /** '+N more' overflow line height below the lanes. */
 const BAR_OVERFLOW_HEIGHT = 14
-const BARS_CELL_HEIGHT =
+/**
+ * Fixed height of the bar/overflow lane block (badge zone → last lane →
+ * overflow line). The overlay is pinned to this height at the TOP of the week
+ * row so the bars never float into the tall iPad cell's flexible bottom
+ * space — the empty space is BELOW the block, not above it.
+ */
+const BARS_LANE_BLOCK_HEIGHT =
   BAR_BADGE_AREA + MAX_MONTH_CELL_BARS * (BAR_HEIGHT + BAR_GAP) + BAR_OVERFLOW_HEIGHT
+const BARS_CELL_HEIGHT = BARS_LANE_BLOCK_HEIGHT
 
 // ---------------------------------------------------------------------------
 // Locale helpers (module-level — locale doesn't change while mounted)
@@ -444,7 +457,13 @@ export const MonthGridFallback: React.FC<MonthGridFallbackProps> = ({
         <View style={[styles.weekRow, fillHeight && styles.flexFill]}>
           {week.map(renderBarsCell)}
         </View>
-        <View style={StyleSheet.absoluteFill} pointerEvents="none">
+        {/* Bar/overflow lanes — pinned to the TOP of the week row at a fixed
+            height (NOT absoluteFill). In fillHeight the row flexes tall; an
+            absoluteFill overlay would let the fixed-top bars read as floating
+            mid-cell once the cell grew. Pinning the block to the top keeps the
+            bars stacked tight under the number row, with the flexible empty
+            space falling BELOW the block (Apple Calendar layout). */}
+        <View style={styles.barsOverlay} pointerEvents="none">
           {segments.map((seg) => {
             const color = seg.event.color ?? colors.primary
             return (
@@ -719,6 +738,22 @@ const createStyles = (c: ListColorPalette) =>
 
     // ── Bars density (showEventBars) ──
     barsWeekWrap: { position: 'relative' },
+    /**
+     * The bar/overflow lane block, pinned to the TOP of the week row at a
+     * fixed height (left/right/top: 0, height: BARS_LANE_BLOCK_HEIGHT). This
+     * is deliberately NOT StyleSheet.absoluteFill: in fillHeight the week row
+     * grows tall, and a bottom-anchored (absoluteFill) overlay made the
+     * fixed-top bars read as floating ~mid-cell with empty space ABOVE them.
+     * A top-pinned fixed-height block keeps the bars tight under the number
+     * row; the flexible empty space lands BELOW the block.
+     */
+    barsOverlay: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      height: BARS_LANE_BLOCK_HEIGHT,
+    },
     /** Day cell extras — column width comes ONLY from styles.col. */
     barsCell: {
       alignItems: 'stretch',

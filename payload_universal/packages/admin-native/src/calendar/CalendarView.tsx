@@ -90,6 +90,16 @@ try {
   /* expo-glass-effect not installed */
 }
 
+// Optional: LinearGradient for the legend scroller's right-edge fade hint
+// (signals more chips scroll off-screen). Falls back to a flat fade View when
+// expo-linear-gradient isn't installed — the chips never clip either way.
+let LinearGradient: React.ComponentType<any> | null = null
+try {
+  LinearGradient = require('expo-linear-gradient').LinearGradient ?? null
+} catch {
+  /* expo-linear-gradient not installed — flat fade fallback */
+}
+
 // Optional: lucide chevrons + legend check (pure RN SVG) with text fallbacks
 let ChevronLeftIcon: React.ComponentType<{ size: number; color: string }> | null = null
 let ChevronRightIcon: React.ComponentType<{ size: number; color: string }> | null = null
@@ -344,14 +354,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
           />
           {legendChips.length > 0 && <View style={styles.headerDivider} />}
           {legendChips.length > 0 && (
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
+            <LegendScroller
+              chips={legendChips}
+              fadeColor={colors.card}
               style={styles.legendScrollRegular}
               contentContainerStyle={styles.legendRowRegular}
-            >
-              {legendChips}
-            </ScrollView>
+            />
           )}
         </View>
       </GlassSection>
@@ -363,14 +371,12 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
         <TodayButton styles={styles} onPress={() => onChangeSelectedDate(todayDateKey())} />
       </View>
       {legendChips.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
+        <LegendScroller
+          chips={legendChips}
+          fadeColor={colors.background}
           style={styles.legendScroll}
           contentContainerStyle={styles.legendRow}
-        >
-          {legendChips}
-        </ScrollView>
+        />
       )}
     </>
   )
@@ -585,6 +591,78 @@ export const CalendarView: React.FC<CalendarViewProps> = ({
     </View>
   )
 }
+
+// ---------------------------------------------------------------------------
+// LegendScroller — horizontal source-legend chips with a right-edge fade hint.
+//
+// The chips already live in a horizontal ScrollView; the fade is the missing
+// affordance — with 3+ sources the row scrolls but the last chip looked
+// clipped at the screen edge ("Schedu…"). A right-edge gradient (or a flat
+// fade fallback) signals "more →" and is shown ONLY while content overflows
+// AND hasn't been scrolled to the end. Measurement only — no gesture beyond
+// the ScrollView itself. The fade colour matches the surface beneath so it
+// reads as the chips dissolving, not a stripe.
+// ---------------------------------------------------------------------------
+
+function LegendScroller({
+  chips,
+  fadeColor,
+  style,
+  contentContainerStyle,
+}: {
+  chips: React.ReactNode
+  /** Solid surface colour beneath the chips (header card / screen bg). */
+  fadeColor: string
+  style: StyleProp<ViewStyle>
+  contentContainerStyle: StyleProp<ViewStyle>
+}) {
+  const [viewportW, setViewportW] = useState(0)
+  const [contentW, setContentW] = useState(0)
+  const [offsetX, setOffsetX] = useState(0)
+  // Overflow + not yet scrolled to the very end ⇒ more chips hide right.
+  const atEnd = offsetX + viewportW >= contentW - 1
+  const showFade = contentW > viewportW + 1 && !atEnd
+
+  return (
+    // position:relative wrapper so the fade can pin to the scroller's right
+    // edge regardless of how far the content has scrolled.
+    <View style={[styles_legendFade.wrap, style]}>
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={contentContainerStyle}
+        scrollEventThrottle={16}
+        onLayout={(e) => setViewportW(e.nativeEvent.layout.width)}
+        onContentSizeChange={(w) => setContentW(w)}
+        onScroll={(e) => setOffsetX(e.nativeEvent.contentOffset.x)}
+      >
+        {chips}
+      </ScrollView>
+      {showFade ? (
+        LinearGradient ? (
+          <LinearGradient
+            pointerEvents="none"
+            colors={[hexToRgba(fadeColor, 0), fadeColor]}
+            start={{ x: 0, y: 0.5 }}
+            end={{ x: 1, y: 0.5 }}
+            style={styles_legendFade.fade}
+          />
+        ) : (
+          // Flat fade fallback — a soft right-edge wash when no gradient lib.
+          <View
+            pointerEvents="none"
+            style={[styles_legendFade.fade, { backgroundColor: hexToRgba(fadeColor, 0.7) }]}
+          />
+        )
+      ) : null}
+    </View>
+  )
+}
+
+const styles_legendFade = StyleSheet.create({
+  wrap: { position: 'relative' },
+  fade: { position: 'absolute', top: 0, bottom: 0, right: 0, width: 28 },
+})
 
 // ---------------------------------------------------------------------------
 // GlassSection — liquid glass container with a themed bordered fallback

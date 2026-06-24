@@ -74,8 +74,19 @@ export type GanttChartProps = {
    * Day column width in px. Default GANTT_CHART_DEFAULT_PX_PER_DAY (28 — a
    * phone-friendly density; the preset-level fallback constant
    * DEFAULT_GANTT_PX_PER_DAY in ../scheduling stays 48 for wide screens).
+   * This is a CONTROLLED prop — pinch-to-zoom commits the new value through
+   * `onPxPerDayChange`; the screen persists it and feeds it back here.
    */
   pxPerDay?: number
+  /**
+   * Pinch-to-zoom commit: fired ONCE per pinch gesture (on release) with the
+   * next clamped day-column width (GANTT_MIN_PX_PER_DAY … GANTT_MAX_PX_PER_DAY).
+   * The screen persists it (e.g. useGanttConfig.updateConfig({ pxPerDay })) and
+   * passes it back as `pxPerDay` — the S/M/L presets are shortcuts into the
+   * SAME continuous scale. Omit and the chart stays at its prop density (the
+   * pinch transform still previews but snaps back on release).
+   */
+  onPxPerDayChange?: (pxPerDay: number) => void
 }
 
 /** Which part of a bar a drag is editing. */
@@ -145,6 +156,15 @@ export const GANTT_BAR_MIN_TITLE_WIDTH = 48
 export const GANTT_REGULAR_WIDTH = 768
 /** Long-press duration (ms) before a bar-body drag/peek arms. */
 export const GANTT_BODY_HOLD_MS = 200
+
+/**
+ * Pinch-to-zoom day-column bounds (px). The S/M/L presets (16/28/44) are
+ * shortcuts INSIDE this continuous range — pinch can settle anywhere between.
+ * MIN keeps far-out months legible-by-shape; MAX caps the single-day blow-up
+ * before bars become unwieldy banners.
+ */
+export const GANTT_MIN_PX_PER_DAY = 8
+export const GANTT_MAX_PX_PER_DAY = 80
 /**
  * Max finger travel (pt) for an armed body hold to count as STATIC on release
  * (open preview) rather than a shift — the kanban press disambiguation.
