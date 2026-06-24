@@ -1,0 +1,12 @@
+# Keep the EAS build snapshot lean. ONLY list paths that are NOT part of the
+# pnpm workspace symlink graph the iOS build needs — payload-main and
+# payload_universal ARE workspace members (their packages are linked into
+# node_modules), so they must NOT be ignored.
+spacedrive-main/
+**/.next/
+**/target/
+**/.git/
+*.ipa
+build-*.tar.gz
+**/dist/
+**/.expo/

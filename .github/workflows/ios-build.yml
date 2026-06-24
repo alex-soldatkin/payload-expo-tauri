@@ -1,0 +1,122 @@
+name: iOS Build (EAS local)
+
+# Local EAS build on a GitHub-hosted macOS runner, publishing the signed
+# .ipa to a GitHub Release. We pivoted off Expo cloud builds (quota until
+# 2026-07-01) and the dev machine has no disk headroom for local builds.
+#
+# Signing: `eas build --local` still resolves credentials REMOTELY via
+# EXPO_TOKEN — the development distribution cert + ad-hoc provisioning
+# profile (already provisioned for the iPad UDID) are downloaded from EAS at
+# build time, so nothing certificate-related lives in the repo.
+#
+# Trigger: manual (workflow_dispatch, pick a profile) or push a v* tag.
+
+on:
+  workflow_dispatch:
+    inputs:
+      profile:
+        description: EAS build profile
+        type: choice
+        default: development
+        options: [development, preview, production]
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write          # create the Release + upload the .ipa
+
+concurrency:
+  group: ios-build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: macos-15      # ships Xcode 26.x (SDK 56 needs >= 26.4)
+    timeout-minutes: 120
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+      # CocoaPods/Ruby crash on non-UTF-8 locales (Ruby 4.x) — pin it.
+      LANG: en_US.UTF-8
+      LC_ALL: en_US.UTF-8
+      PROFILE: ${{ github.event.inputs.profile || 'development' }}
+
+    steps:
+      - name: Checkout (full — payload-main/payload_universal are in-repo workspace members)
+        uses: actions/checkout@v4
+
+      - name: Free disk space (the repo carries the full Payload monorepo)
+        run: |
+          sudo rm -rf /Library/Developer/CoreSimulator/Profiles/Runtimes/* || true
+          df -h /
+
+      - name: Select Xcode 26.x
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: '26'   # latest installed 26.x (>= 26.4 required)
+
+      - name: Setup Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.27.0
+
+      - name: Setup EAS CLI (+ EXPO_TOKEN auth)
+        uses: expo/expo-github-action@v8
+        with:
+          eas-version: latest
+          token: ${{ secrets.EXPO_TOKEN }}
+
+      - name: Verify EAS auth
+        run: eas whoami
+
+      - name: Install workspace dependencies
+        working-directory: test_app
+        run: pnpm install --frozen-lockfile
+
+      - name: EAS local build (.ipa)
+        id: build
+        working-directory: test_app/apps/mobile-expo
+        run: |
+          set -euo pipefail
+          OUT="$RUNNER_TEMP/payload-mobile-${PROFILE}-${{ github.run_number }}.ipa"
+          eas build \
+            --platform ios \
+            --profile "$PROFILE" \
+            --local \
+            --non-interactive \
+            --output "$OUT"
+          echo "ipa_path=$OUT" >> "$GITHUB_OUTPUT"
+          echo "ipa_name=$(basename "$OUT")" >> "$GITHUB_OUTPUT"
+
+      - name: Upload .ipa as workflow artifact (fallback)
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.build.outputs.ipa_name }}
+          path: ${{ steps.build.outputs.ipa_path }}
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Resolve release tag
+        id: tag
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            echo "tag=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=mobile-build-${{ github.run_number }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish .ipa to GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: iOS ${{ env.PROFILE }} build ${{ steps.tag.outputs.tag }}
+          body: |
+            EAS `${{ env.PROFILE }}` local build from `${{ github.sha }}`.
+            Install on the provisioned iPad (development distribution).
+          files: ${{ steps.build.outputs.ipa_path }}
+          prerelease: ${{ env.PROFILE != 'production' }}
+          fail_on_unmatched_files: true
