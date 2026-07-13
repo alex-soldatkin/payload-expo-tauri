@@ -187,7 +187,7 @@ export class UploadQueueManager {
           // (expo-file-system >= 54: legacy functions like deleteAsync live in
           // the '/legacy' entry — the main entry's stubs THROW at runtime.)
           try {
-            const FileSystem = await import('expo-file-system/legacy')
+            const FileSystem = await import(/* @vite-ignore */ 'expo-file-system/legacy')
             await FileSystem.deleteAsync(item.localUri, { idempotent: true })
           } catch {
             // Non-fatal
@@ -256,7 +256,7 @@ export class UploadQueueManager {
     if (rxDoc) {
       const item = rxDoc.toJSON() as PendingUploadItem
       try {
-        const FileSystem = await import('expo-file-system/legacy')
+        const FileSystem = await import(/* @vite-ignore */ 'expo-file-system/legacy')
         await FileSystem.deleteAsync(item.localUri, { idempotent: true })
       } catch { /* ignore */ }
       await rxDoc.remove()

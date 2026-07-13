@@ -8,6 +8,9 @@
  * Shows sync progress on splash screen and toasts for background updates.
  */
 import '../global.css'
+// Hermes lacks crypto.getRandomValues/subtle.digest, which RxDB needs.
+// Must run before any local-db / rxdb code loads.
+import '@payload-universal/local-db/polyfills/hermesCrypto'
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ActivityIndicator, Text, View, useColorScheme, useWindowDimensions } from 'react-native'
@@ -117,8 +120,8 @@ function ThemeVarsProvider({ children }: { children: React.ReactNode }) {
   )
 }
 
-const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
-const DEFAULT_WS_URL = __DEV__ ? 'ws://192.168.40.114:3001' : 'wss://your-server.com/ws'
+const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3050' : 'https://your-server.com'
+const DEFAULT_WS_URL = __DEV__ ? 'ws://192.168.40.114:3051' : 'wss://your-server.com/ws'
 
 // Persistent SQLite storage for RxDB (custom full implementation — no trial limits)
 const sqliteStorage = getRxStorageSQLite({

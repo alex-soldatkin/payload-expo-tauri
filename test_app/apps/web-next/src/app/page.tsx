@@ -87,7 +87,7 @@ export default function Page() {
           <span>Base URL (optional)</span>
           <input
             value={baseURL}
-            placeholder="http://localhost:3000"
+            placeholder="http://localhost:3050"
             onChange={(event) => setBaseURL(event.target.value)}
           />
         </label>

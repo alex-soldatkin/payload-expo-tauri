@@ -31,14 +31,14 @@
       <h1>Opening Payload Admin...</h1>
       <p>
         Redirecting to
-        <a href="http://localhost:3000/admin">http://localhost:3000/admin</a>.
+        <a href="http://localhost:3050/admin">http://localhost:3050/admin</a>.
       </p>
       <p>If the admin is not running yet, start the server and reload.</p>
     </main>
     <script>
       const params = new URLSearchParams(window.location.search)
       if (!params.has('noRedirect')) {
-        window.location.replace('http://localhost:3000/admin')
+        window.location.replace('http://localhost:3050/admin')
       }
     </script>
   </body>

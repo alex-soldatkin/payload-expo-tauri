@@ -12,14 +12,13 @@ import type { MangoQuery, RxCollection, RxDocument } from 'rxdb'
 import type { PayloadDoc } from '../utils/schemaFromPayload'
 import type { PayloadLocalDB } from '../database'
 
-import { getRandomBytes } from 'expo-crypto'
-
 /**
  * Generate a random 24-character hex string compatible with MongoDB ObjectIds.
- * Uses expo-crypto for cryptographically secure random bytes on all RN platforms.
+ * Uses WebCrypto — native on web/Electron; on Hermes it is provided by the
+ * hermesCrypto polyfill (imported by the Expo app entry before any local-db code).
  */
 function generateId(): string {
-  const bytes = getRandomBytes(12)
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(12))
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')
 }
 

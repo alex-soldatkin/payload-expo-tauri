@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "identifier": "com.payload.universal.desktop",
   "build": {
-    "devUrl": "http://127.0.0.1:3000/admin",
+    "devUrl": "http://127.0.0.1:3050/admin",
     "frontendDist": "../../web",
     "beforeDevCommand": "pnpm -C ../.. dev:server"
   },

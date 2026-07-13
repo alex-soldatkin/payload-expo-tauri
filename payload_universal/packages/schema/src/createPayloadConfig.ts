@@ -157,6 +157,10 @@ export const createRawConfig = (args: PayloadUniversalConfigArgs): Config => {
 
   const config: Config = {
     ...rest,
+    // Local-first desktop clients call the REST API from non-web origins
+    // (Electron file://, Vite dev server) — without CORS every browser-context
+    // fetch fails. Apps can narrow this by passing their own `cors`.
+    cors: rest.cors ?? '*',
     admin: {
       ...admin,
       importMap: {

@@ -1,0 +1,179 @@
+/* ---- Document list -------------------------------------------------------- */
+.doc-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  padding: 11px 18px;
+  color: var(--ink);
+}
+.doc-row:hover {
+  background: var(--surface-hover);
+}
+.doc-row .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+.doc-row .meta {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  flex: 0 0 auto;
+}
+.dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--dot);
+  flex: 0 0 auto;
+}
+.dot.placeholder {
+  background: transparent;
+}
+.empty {
+  padding: 40px 18px;
+  color: var(--ink-faint);
+  text-align: center;
+  font-size: 13px;
+}
+
+/* ---- Document editor ------------------------------------------------------ */
+.editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+.editor-meta {
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--line);
+  font-size: 11.5px;
+  color: var(--ink-muted);
+  display: flex;
+  gap: 18px;
+}
+.editor-meta code {
+  font-family: var(--mono);
+  color: var(--ink);
+}
+.editor-body {
+  flex: 1;
+  padding: 14px 18px;
+  min-height: 0;
+  display: flex;
+}
+.editor-body textarea {
+  flex: 1;
+  width: 100%;
+}
+.editor-actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 12px 18px;
+  border-top: 1px solid var(--line);
+}
+.editor-actions .spacer {
+  flex: 1;
+}
+.editor-error {
+  color: var(--danger);
+  font-size: 12px;
+}
+.editor-saved {
+  color: var(--ok);
+  font-size: 12px;
+}
+
+/* ---- Status bar ----------------------------------------------------------- */
+.statusbar {
+  flex: 0 0 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 0 12px;
+  border-top: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
+.statusbar .cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.statusbar .spacer {
+  flex: 1;
+}
+.statusbar button {
+  padding: 2px 8px;
+  font-size: 11px;
+}
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ink-faint);
+}
+.status-dot.online {
+  background: var(--ok);
+}
+.status-dot.offline {
+  background: var(--ink-faint);
+}
+.status-dot.syncing {
+  background: var(--accent);
+}
+.status-dot.error {
+  background: var(--danger);
+}
+
+/* ---- Settings ------------------------------------------------------------- */
+.settings {
+  max-width: 560px;
+  padding: 20px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.settings .row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings .row .k {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+.settings .row .v {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--ink);
+  word-break: break-all;
+}
+.settings .warn {
+  color: var(--dot);
+  font-size: 12px;
+  line-height: 1.5;
+}
+.settings-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.center-note {
+  padding: 40px;
+  color: var(--ink-muted);
+  text-align: center;
+}

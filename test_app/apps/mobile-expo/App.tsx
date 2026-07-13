@@ -33,7 +33,7 @@ const buildRootFields = (entries: Array<[string, any]>, slug: string) => {
 }
 
 export default function App() {
-  const [baseURL, setBaseURL] = useState('http://localhost:3000')
+  const [baseURL, setBaseURL] = useState('http://localhost:3050')
   const [language, setLanguage] = useState('')
   const [token, setToken] = useState('')
   const [schema, setSchema] = useState<any>(null)

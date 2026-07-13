@@ -6,7 +6,8 @@
   "types": "src/index.ts",
   "exports": {
     ".": "./src/index.ts",
-    "./storage": "./src/storage/index.ts"
+    "./storage": "./src/storage/index.ts",
+    "./polyfills/hermesCrypto": "./src/polyfills/hermesCrypto.ts"
   },
   "peerDependencies": {
     "react": ">=18.0.0",
@@ -19,5 +20,16 @@
   "dependencies": {
     "@payload-universal/admin-schema": "workspace:*",
     "@payload-universal/client-validators": "workspace:*"
+  },
+  "peerDependenciesMeta": {
+    "expo-crypto": {
+      "optional": true
+    },
+    "expo-file-system": {
+      "optional": true
+    },
+    "expo-sqlite": {
+      "optional": true
+    }
   }
 }

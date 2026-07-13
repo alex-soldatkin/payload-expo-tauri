@@ -1,6 +1,6 @@
 # Desktop Tauri Admin Shell
 
-This Tauri app opens the Payload admin running at `http://localhost:3000/admin`.
+This Tauri app opens the Payload admin running at `http://localhost:3050/admin`.
 
 ## Dev flow
 1. Start the Payload server from `apps/server`.

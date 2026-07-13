@@ -35,6 +35,10 @@ export { RxStorageSQLite, getRxStorageSQLite } from './rx-storage'
 // Re-export helpers the consumer will need
 export { getSQLiteBasicsExpoSQLiteAsync } from 'rxdb/plugins/storage-sqlite'
 
+// Electron renderer driver (SQL over IPC to the main process)
+export { getSQLiteBasicsElectronIPC } from './sqlite-basics-electron'
+export type { ElectronSqliteBridge } from './sqlite-basics-electron'
+
 // ------------------------------------------------------------------ types
 
 export type { SQLiteStorageSettings } from './types'

@@ -1,41 +1,4 @@
 /**
- * Polyfill globalThis.crypto for Hermes (React Native).
- * RxDB requires crypto.getRandomValues AND crypto.subtle.digest.
- * Hermes doesn't expose either. We polyfill both using expo-crypto.
- */
-import { getRandomValues as expoGetRandomValues, digest as expoDigest, CryptoDigestAlgorithm } from 'expo-crypto'
-
-const subtlePolyfill = {
-  async digest(algorithm: string, data: ArrayBuffer): Promise<ArrayBuffer> {
-    // Map Web Crypto algorithm names to expo-crypto
-    const algoMap: Record<string, CryptoDigestAlgorithm> = {
-      'SHA-1': CryptoDigestAlgorithm.SHA1,
-      'SHA-256': CryptoDigestAlgorithm.SHA256,
-      'SHA-384': CryptoDigestAlgorithm.SHA384,
-      'SHA-512': CryptoDigestAlgorithm.SHA512,
-    }
-    const algo = algoMap[algorithm as string] ?? CryptoDigestAlgorithm.SHA256
-    return expoDigest(algo, data)
-  },
-}
-
-if (typeof globalThis.crypto === 'undefined') {
-  ;(globalThis as any).crypto = {
-    getRandomValues: expoGetRandomValues,
-    subtle: subtlePolyfill,
-  }
-} else {
-  if (typeof globalThis.crypto.getRandomValues === 'undefined') {
-    ;(globalThis.crypto as any).getRandomValues = expoGetRandomValues
-  }
-  if (typeof globalThis.crypto.subtle === 'undefined') {
-    ;(globalThis.crypto as any).subtle = subtlePolyfill
-  } else if (typeof globalThis.crypto.subtle.digest === 'undefined') {
-    ;(globalThis.crypto.subtle as any).digest = subtlePolyfill.digest
-  }
-}
-
-/**
  * Creates and manages the RxDB database instance and its collections.
  *
  * The database is initialized from the Payload admin schema:
@@ -47,8 +10,10 @@ if (typeof globalThis.crypto === 'undefined') {
 import {
   addRxPlugin,
   createRxDatabase,
+  defaultConflictHandler,
   removeRxDatabase,
   type RxCollection,
+  type RxConflictHandler,
   type RxDatabase,
 } from 'rxdb'
 // The RxReplicationState class lives in the replication plugin, not the core entry.
@@ -165,13 +130,31 @@ export const createLocalDB = async ({
     collectionEntries.push({ slug, rxSchema: buildRxSchema(slug, fieldDefs) })
   }
 
+  // Conflict resolution: offline edits must never be silently dropped.
+  // RxDB's default handler resolves every conflict to the server state — but
+  // Payload assigns its own updatedAt on create/update, so the pushed state
+  // never matches the server echo and the next pull ALWAYS flags a "conflict".
+  // With the default handler that pull would clobber any offline edit made
+  // between push-ack and pull (proven data loss). When the local fork carries
+  // an unpushed edit (_locallyModified), the local version wins and gets
+  // re-pushed; otherwise fall back to server-wins.
+  const payloadConflictHandler: RxConflictHandler<PayloadDoc> = {
+    isEqual: defaultConflictHandler.isEqual as RxConflictHandler<PayloadDoc>['isEqual'],
+    resolve: async (input) => {
+      if ((input.newDocumentState as PayloadDoc & { _locallyModified?: boolean })._locallyModified) {
+        return input.newDocumentState
+      }
+      return input.realMasterState
+    },
+  }
+
   // Try to add all collections. On DB6 (schema conflict), wipe everything
   // and retry ONCE with a fresh database — no recursive call needed.
   let needsRetry = false
   for (const { slug, rxSchema } of collectionEntries) {
     try {
       const created = await db.addCollections({
-        [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true },
+        [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true, conflictHandler: payloadConflictHandler },
       })
       collections[slug] = created[slug]
     } catch (err: any) {
@@ -205,7 +188,7 @@ export const createLocalDB = async ({
     for (const { slug, rxSchema } of collectionEntries) {
       try {
         const created = await db.addCollections({
-          [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true },
+          [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true, conflictHandler: payloadConflictHandler },
         })
         collections[slug] = created[slug]
       } catch (retryErr) {

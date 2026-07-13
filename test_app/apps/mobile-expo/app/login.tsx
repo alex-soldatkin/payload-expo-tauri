@@ -36,7 +36,7 @@ try {
 }
 
 const BASE_URL_KEY = 'payload_base_url'
-const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3000' : 'https://your-server.com'
+const DEFAULT_BASE_URL = __DEV__ ? 'http://192.168.40.114:3050' : 'https://your-server.com'
 const INIT_DEBOUNCE_MS = 600
 
 type ScreenMode = 'login' | 'create-first-user'

@@ -199,11 +199,17 @@ export const startReplication = (
               if (!res.ok) {
                 const body = await res.json().catch(() => ({}))
                 if (res.status === 400 || res.status === 409) {
-                  const existing = await fetch(`${baseURL}/api/${slug}/${doc.id}`, {
+                  // Only treat as a conflict when the doc genuinely exists on
+                  // the server (r.ok). A 404 error body parsed as JSON here
+                  // used to be pushed back as a garbage "conflict" doc,
+                  // permanently corrupting the doc's replication state.
+                  const existing = await fetch(`${baseURL}/api/${slug}/${doc.id}?depth=0`, {
                     headers: buildHeaders(getToken()),
-                  }).then((r) => r.json()).catch(() => null)
-                  if (existing) conflicts.push({ ...existing, _deleted: false })
-                  continue
+                  }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
+                  if (existing) {
+                    conflicts.push({ ...existing, _deleted: false })
+                    continue
+                  }
                 }
                 throw new Error(body.errors?.[0]?.message || `Push create failed: ${res.status}`)
               }
@@ -213,7 +219,7 @@ export const startReplication = (
               if (assumed) {
                 const serverDoc = await fetch(`${baseURL}/api/${slug}/${doc.id}?depth=0`, {
                   headers: buildHeaders(getToken()),
-                }).then((r) => r.json()).catch(() => null)
+                }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
 
                 if (serverDoc && serverDoc.updatedAt !== assumed.updatedAt) {
                   // Server has a newer version — conflict, server wins
@@ -228,7 +234,21 @@ export const startReplication = (
                 headers: buildHeaders(getToken()),
                 body: JSON.stringify(payloadBody),
               })
-              if (!res.ok) {
+              if (res.status === 404) {
+                // The doc never made it to the server (e.g. its initial create
+                // was rejected) — fall back to create so the record isn't
+                // stranded locally forever.
+                const createURL = isDraft ? `${baseURL}/api/${slug}?draft=true` : `${baseURL}/api/${slug}`
+                const createRes = await fetch(createURL, {
+                  method: 'POST',
+                  headers: buildHeaders(getToken()),
+                  body: JSON.stringify(payloadBody),
+                })
+                if (!createRes.ok) {
+                  const body = await createRes.json().catch(() => ({}))
+                  throw new Error(body.errors?.[0]?.message || `Push create-after-404 failed: ${createRes.status}`)
+                }
+              } else if (!res.ok) {
                 const body = await res.json().catch(() => ({}))
                 throw new Error(body.errors?.[0]?.message || `Push update failed: ${res.status}`)
               }

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 
-const getPayloadURL = () => process.env.PAYLOAD_BASE_URL || 'http://localhost:3000'
+const getPayloadURL = () => process.env.PAYLOAD_BASE_URL || 'http://localhost:3050'
 
 export async function GET(request: Request) {
   const payloadURL = getPayloadURL()

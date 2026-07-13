@@ -65,5 +65,5 @@ export type {
 } from './hooks/validatedHooks'
 
 // SQLite storage (drop-in replacement for rxdb trial)
-export { getRxStorageSQLite, getSQLiteBasicsExpoSQLiteAsync } from './storage'
-export type { SQLiteStorageSettings } from './storage'
+export { getRxStorageSQLite, getSQLiteBasicsExpoSQLiteAsync, getSQLiteBasicsElectronIPC } from './storage'
+export type { SQLiteStorageSettings, ElectronSqliteBridge } from './storage'

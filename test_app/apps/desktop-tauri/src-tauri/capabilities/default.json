@@ -4,8 +4,8 @@
   "description": "Default permissions for Payload Universal Desktop",
   "remote": {
     "urls": [
-      "http://127.0.0.1:3000/*",
-      "http://localhost:3000/*"
+      "http://127.0.0.1:3050/*",
+      "http://localhost:3050/*"
     ]
   },
   "windows": ["main"],

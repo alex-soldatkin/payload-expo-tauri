@@ -7,6 +7,7 @@
     "dev:web": "pnpm --filter @payload-universal-test/web dev",
     "dev:web-next": "pnpm --filter @payload-universal-test/web-next dev",
     "dev:desktop": "pnpm --filter @payload-universal-test/desktop-tauri dev",
+    "dev:electron": "pnpm --filter @payload-universal-test/desktop-electron dev",
     "dev:mobile": "pnpm --filter @payload-universal-test/mobile-expo start",
     "dev:mobile:ios": "pnpm --filter @payload-universal-test/mobile-expo ios",
     "dev:mobile:android": "pnpm --filter @payload-universal-test/mobile-expo android",
@@ -41,7 +42,8 @@
       "rxdb",
       "@sentry/cli",
       "@firebase/util",
-      "mongodb-memory-server"
+      "mongodb-memory-server",
+      "electron"
     ]
   }
 }

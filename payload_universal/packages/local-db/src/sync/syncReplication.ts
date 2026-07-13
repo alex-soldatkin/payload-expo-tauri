@@ -85,14 +85,23 @@ export function startSyncReplication(config: SyncReplicationConfig): SyncReplica
       return
     }
 
-    // Fetch the full document
+    // Fetch the full document. draft=true so draft-enabled collections return
+    // the latest draft version — without it Payload serves the parent/published
+    // state, which for a draft-only doc is missing every drafted field and
+    // would clobber the local copy with a stale shell. Harmless for
+    // collections without versions.
     try {
-      const res = await fetch(`${baseURL}/api/${slug}/${id}?depth=0`, {
+      const res = await fetch(`${baseURL}/api/${slug}/${id}?depth=0&draft=true`, {
         headers: buildHeaders(getToken()),
       })
       if (!res.ok) return
       const serverDoc = await res.json()
       if (!serverDoc) return
+
+      // Re-check after the await: a local write may have landed while the
+      // fetch was in flight — local changes take precedence.
+      const freshLocal = await col.findOne(id).exec()
+      if (freshLocal && (freshLocal.toJSON(true) as any)._locallyModified) return
 
       await col.upsert({
         ...serverDoc,
