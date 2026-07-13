@@ -1,0 +1,150 @@
+/* Schema-driven form chrome. Same dark translucent language as the shell. */
+
+.form-layout {
+  display: flex;
+  gap: 20px;
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 20px;
+}
+.form-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.form-sidebar {
+  width: 260px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 12px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--line);
+  align-self: flex-start;
+}
+
+.field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-inline { flex-direction: row; align-items: center; gap: 8px; }
+.field-label { font-size: 12px; font-weight: 600; color: var(--ink-muted); }
+.field-label.inline { font-weight: 500; color: var(--ink); }
+.field-required { color: var(--danger, #e5484d); margin-left: 2px; }
+.field-flag { margin-left: 6px; font-size: 10px; opacity: 0.7; }
+.field-description { font-size: 11px; color: var(--ink-faint); }
+.field-error { font-size: 11px; color: var(--danger, #e5484d); }
+
+.input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
+
+/* Rows: width-split children side by side */
+.field-row { display: flex; gap: 12px; }
+.field-row > .field { flex: 1; }
+
+/* Collapsible + group containers */
+.field-group,
+.field-collapsible {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.field-group-title,
+.field-collapsible-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  cursor: default;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.field-collapsible-title { cursor: pointer; }
+
+/* Tabs */
+.field-tabs-bar { display: flex; gap: 4px; border-bottom: 1px solid var(--line); }
+.field-tabs-bar button {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
+  padding: 8px 12px;
+  color: var(--ink-muted);
+}
+.field-tabs-bar button.active { color: var(--ink); border-bottom-color: var(--accent, #7c5cff); }
+.field-tab-body { display: flex; flex-direction: column; gap: 14px; padding-top: 12px; }
+
+/* Array / blocks rows */
+.field-rows { display: flex; flex-direction: column; gap: 10px; }
+.field-row-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.field-row-head { display: flex; align-items: center; gap: 8px; }
+.field-row-head .title { font-size: 12px; font-weight: 600; flex: 1; }
+.field-row-head button { padding: 2px 8px; font-size: 11px; }
+.field-add-row { align-self: flex-start; }
+
+/* Chips (hasMany text/number/select) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, 0.18);
+  border: 1px solid rgba(124, 92, 255, 0.4);
+  font-size: 12px;
+}
+.chip button { background: none; border: none; padding: 0 2px; color: var(--ink-muted); }
+.chip.toggle { cursor: pointer; background: rgba(255, 255, 255, 0.05); border-color: var(--line); }
+.chip.toggle.on { background: rgba(124, 92, 255, 0.25); border-color: rgba(124, 92, 255, 0.6); }
+
+/* Relationship / upload pickers */
+.picker-value { display: flex; align-items: center; gap: 8px; }
+.picker-dropdown {
+  position: relative;
+}
+.picker-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(30, 30, 34, 0.97);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+}
+.picker-menu .option {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  background: none;
+  border: none;
+  border-radius: 0;
+}
+.picker-menu .option:hover { background: rgba(255, 255, 255, 0.06); }
+.upload-thumb { width: 36px; height: 28px; object-fit: cover; border-radius: 4px; }
+
+.doc-meta { font-size: 11px; color: var(--ink-faint); }
+.radio-group { display: flex; gap: 12px; flex-wrap: wrap; }
+.radio-group.vertical { flex-direction: column; gap: 6px; }
+.radio-group label { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+.point-pair { display: flex; gap: 10px; }
+.point-pair .input { width: 120px; }

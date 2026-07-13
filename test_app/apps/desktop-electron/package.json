@@ -14,6 +14,7 @@
     "@payload-universal/local-db": "workspace:*",
     "react": "19.2.3",
     "react-dom": "19.2.3",
+    "react-hook-form": "^7.72.1",
     "rxdb": "^16.21.1",
     "rxjs": "^7.8.1"
   },

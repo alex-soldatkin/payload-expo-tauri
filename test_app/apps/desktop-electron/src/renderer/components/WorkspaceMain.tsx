@@ -4,11 +4,12 @@ import { useEffect, useState } from 'react'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { Sidebar } from './Sidebar'
 import { DocumentList } from './DocumentList'
-import { DocumentEditor } from './DocumentEditor'
 import { SettingsScreen } from './SettingsScreen'
 import { StatusBar } from './StatusBar'
+import { DocumentForm } from '../form/DocumentForm'
 import { buildMenuTree } from '../lib/menuTree'
 import { firstCollectionSlug } from '../lib/collections'
+import { getRootFields } from '../lib/schemaFields'
 
 export type View =
   | { kind: 'list'; slug: string }
@@ -97,9 +98,14 @@ export function WorkspaceMain({
           />
         )}
         {view.kind === 'editor' && (
-          <DocumentEditor
+          <DocumentForm
             slug={view.slug}
             id={view.id}
+            serverURL={serverURL}
+            rootFields={getRootFields(schema, view.slug)}
+            hasDrafts={Boolean(
+              schema.menuModel.collections.find((c) => c.slug === view.slug)?.drafts,
+            )}
             onClose={() => openList(view.slug)}
             onDeleted={() => openList(view.slug)}
           />
