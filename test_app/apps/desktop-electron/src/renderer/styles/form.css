@@ -5,8 +5,18 @@
   gap: 20px;
   flex: 1;
   overflow-y: auto;
-  padding: 16px 20px;
+  padding: 16px 20px 48px;
 }
+.media-preview {
+  margin: 12px 20px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  display: flex;
+  justify-content: center;
+  background: rgba(0, 0, 0, 0.25);
+}
+.media-preview img { max-height: 240px; max-width: 100%; border-radius: 6px; object-fit: contain; }
 .form-main {
   flex: 1;
   min-width: 0;
@@ -29,7 +39,7 @@
 
 .field { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field-inline { flex-direction: row; align-items: center; gap: 8px; }
-.field-label { font-size: 12px; font-weight: 600; color: var(--ink-muted); }
+.field-label { font-size: 11px; font-weight: 650; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .field-label.inline { font-weight: 500; color: var(--ink); }
 .field-required { color: var(--danger, #e5484d); margin-left: 2px; }
 .field-flag { margin-left: 6px; font-size: 10px; opacity: 0.7; }

@@ -4,8 +4,8 @@
   color-scheme: dark;
 
   --ink: #ececee;
-  --ink-muted: #9a9aa2;
-  --ink-faint: #6d6d76;
+  --ink-muted: #b7b7bf;
+  --ink-faint: #8a8a94;
   --line: rgba(255, 255, 255, 0.09);
   --line-strong: rgba(255, 255, 255, 0.16);
   --surface: rgba(255, 255, 255, 0.04);
@@ -156,12 +156,28 @@ textarea {
   flex-direction: column;
   gap: 5px;
 }
-.field label {
+.card .field label {
   font-size: 11px;
   color: var(--ink-muted);
   text-transform: uppercase;
   letter-spacing: 0.04em;
 }
+button { white-space: nowrap; }
+/* Themed native selects — match .input, custom chevron */
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-color: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  color: var(--ink);
+  font-size: 13px;
+  padding: 7px 30px 7px 10px;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23b7b7bf' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+select:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); }
 .preset-row {
   display: flex;
   gap: 8px;

@@ -17,7 +17,11 @@ export function FieldShell({
   const { field, error } = props
   const label = labelForField(field)
   const description = resolveLabel(field.admin?.description)
-  const style = field.admin?.width ? { width: field.admin.width, flexGrow: 0 } : undefined
+  // In a .field-row the row sets `flex: 1` (basis 0) on children — a plain
+  // `width` loses to that basis and the field collapses. flexBasis wins.
+  const style = field.admin?.width
+    ? { flexBasis: field.admin.width, flexGrow: 0, flexShrink: 1, minWidth: 0 }
+    : undefined
 
   return (
     <div className={`field${inline ? ' field-inline' : ''}`} style={style}>

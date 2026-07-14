@@ -122,6 +122,16 @@ export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClo
           {Boolean(record._locallyModified) && <span className="dot" title="Locally modified" />}
         </div>
 
+        {typeof record.url === 'string' &&
+          String(record.mimeType ?? '').startsWith('image/') && (
+            <div className="media-preview">
+              <img
+                src={new URL(record.url, serverURL).toString()}
+                alt={String(record.alt ?? record.filename ?? '')}
+              />
+            </div>
+          )}
+
         <div className="form-layout">
           <div className="form-main">{mainFields.map((f) => renderField(f, ''))}</div>
           {sidebarFields.length > 0 && (
