@@ -1,6 +1,38 @@
 # Electron desktop client (2026-07-13)
 
-GitHub epic: alex-soldatkin/payload-expo-tauri#1 (sub-issues #2–#8).
+GitHub epics: alex-soldatkin/payload-expo-tauri#1 (shell + sync, sub-issues #2–#8)
+and #10 (schema-driven form, sub-issues #11–#17).
+
+## Schema-driven form (2026-07-14, commit 88d3e92)
+
+`src/renderer/form/` replaces the JSON-textarea editor with full SSOT field &
+layout coverage (all 22 Payload field types + tabs/rows/collapsibles/sidebar),
+mirroring admin-native's patterns in DOM:
+
+- Engine: react-hook-form (Controller-per-field), `FieldRenderer` type→component
+  dispatch with `{slug}.{fieldPath}` registry overrides, `paths.ts` (named
+  tabs/groups nest data; row/collapsible transparent; array/blocks at
+  `path.index.name`), `conditions.ts` — client-side registry re-implementing the
+  13 SSOT `admin.condition` fns (serialized schema only carries `hasCondition`
+  markers; keep in sync with the server config), fail-open like mobile.
+- Validation: `@payload-universal/client-validators` via `useValidatedMutations`;
+  errors keyed by path, cleared per-field on edit; full-object submit because
+  `incrementalPatch` merges top-level keys only.
+- Arrays/blocks use positional identity + a `generation` remount counter
+  (admin-native pattern); blocks discriminate on `blockType` and wrap rows in
+  `BlockScopeProvider` for block-scoped condition paths.
+- Rich text v1 = Lexical plain-text round-trip, node shape copied from
+  admin-native's `RichTextFieldFallback` (`\n` split; root/paragraph/text).
+- Relationship/upload/join editors read candidates from the local RxDB only —
+  never HTTP. Upload thumbnails resolve `sizes.thumbnail.url ?? url` against the
+  configured server URL.
+- Verified live over CDP: all 7 collections render; conditions toggle both ways
+  (events.requiresRegistration); named-tab nesting (pages.meta/settings); SEO
+  collapsibles + nested row; Add Hero block; save → pushed to server as draft.
+- Still open: #16 (DOM ports of the SSOT custom components — registry contract
+  in place with graceful fallbacks), #17 (localized-locale editing, timezone
+  dates, desktop upload; globals aren't synced by local-db so the form covers
+  collections only).
 
 ## Design principle
 

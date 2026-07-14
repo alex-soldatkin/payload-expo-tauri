@@ -22,6 +22,15 @@ sign in (seeded dev admin: `admin@example.com` / `payload-test-1234`). The
 WebSocket URL is derived automatically (`http://host:P` → `ws://host:P+1`,
 `https://host` → `wss://host/ws`) with an explicit override under Advanced.
 
+## Editing
+
+Documents open in a schema-driven form with full SSOT coverage: all 22 Payload
+field types (chips for hasMany, all five date picker appearances, polymorphic
+relationships, media picker, blocks/arrays with reordering, Lexical plain-text
+rich text) plus tabs/rows/collapsibles/sidebar layout, conditional fields, and
+client-side validation. Unknown field types stay editable through a JSON
+fallback. See `src/renderer/form/` and memory-bank/015.
+
 ## Where data lives
 
 - SQLite: `~/Library/Application Support/Payload Universal Desktop/payload-local/`

@@ -9,6 +9,7 @@ import {
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { WorkspaceMain } from './WorkspaceMain'
 import { deriveWsURL, serverSlug } from '../lib/settings'
+import '../form/custom/registerSSOT'
 
 type Props = {
   schema: AdminSchema
