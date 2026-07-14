@@ -10,7 +10,7 @@ import {
 } from '@payload-universal/local-db'
 import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
-import { formatUpdatedAt } from '../lib/doc'
+import { docTitle, formatUpdatedAt } from '../lib/doc'
 
 /** Keys never shown or written by the form. */
 const INTERNAL_KEYS = new Set(['id', 'createdAt', 'updatedAt'])
@@ -33,9 +33,11 @@ type Props = {
   hasDrafts: boolean
   onClose: () => void
   onDeleted: () => void
+  /** Reports the doc's display title (tab labels). */
+  onTitle?: (title: string) => void
 }
 
-export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClose, onDeleted }: Props) {
+export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClose, onDeleted, onTitle }: Props) {
   const localDB = useLocalDB()
   const { doc, loading } = useLocalDocument(localDB, slug, id)
   const { update, remove, errors, clearFieldError } = useValidatedMutations(
@@ -60,6 +62,10 @@ export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClo
     reset(editableValues(doc as Record<string, unknown>))
     seededFor.current = id
   }, [doc, id, formState.isDirty, reset])
+
+  useEffect(() => {
+    if (doc) onTitle?.(docTitle(doc as Record<string, unknown>))
+  }, [doc, onTitle])
 
   const { mainFields, sidebarFields } = useMemo(() => {
     const main: SchemaField[] = []

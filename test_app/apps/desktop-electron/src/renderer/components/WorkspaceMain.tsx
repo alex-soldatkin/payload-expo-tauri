@@ -1,20 +1,28 @@
-// The workspace view router: sidebar + main pane (list / editor / settings) +
-// status bar. Rendered inside LocalDBProvider so all local-db hooks work.
-import { useEffect, useState } from 'react'
+// The workspace shell: sidebar + VS Code-style tab strip + per-tab content +
+// status bar. Tabs are the navigation model — sidebar clicks open list tabs
+// (preview: reused until promoted), document opens become editor tabs, and the
+// layout survives restarts via a settings.json snapshot.
+import { useCallback, useEffect, useReducer, useRef } from 'react'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { Sidebar } from './Sidebar'
 import { DocumentList } from './DocumentList'
 import { SettingsScreen } from './SettingsScreen'
 import { StatusBar } from './StatusBar'
 import { DocumentForm } from '../form/DocumentForm'
+import '../form/custom/registerSSOT'
 import { buildMenuTree } from '../lib/menuTree'
-import { firstCollectionSlug } from '../lib/collections'
+import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
-
-export type View =
-  | { kind: 'list'; slug: string }
-  | { kind: 'editor'; slug: string; id: string }
-  | { kind: 'settings' }
+import { TabStrip } from '../workspace/TabStrip'
+import {
+  hydrateWorkspace,
+  initialWorkspace,
+  serializeWorkspace,
+  workspaceReducer,
+  type Tab,
+  type WorkspaceSnapshot,
+} from '../workspace/state'
+import { useWorkspaceKeys } from '../workspace/useWorkspaceKeys'
 
 type Props = {
   schema: AdminSchema
@@ -25,51 +33,83 @@ type Props = {
   onChangeServer: () => void
 }
 
-export function WorkspaceMain({
-  schema,
-  serverURL,
-  wsURLOverride,
-  email,
-  onLogout,
-  onChangeServer,
-}: Props) {
-  const [view, setView] = useState<View>(() => {
+export function WorkspaceMain({ schema, serverURL, wsURLOverride, email, onLogout, onChangeServer }: Props) {
+  const [state, dispatch] = useReducer(workspaceReducer, null, () => {
     const first = firstCollectionSlug(schema)
-    return first ? { kind: 'list', slug: first } : { kind: 'settings' }
+    const meta = schema.menuModel.collections.find((c) => c.slug === first)
+    return initialWorkspace({
+      kind: first ? 'list' : 'settings',
+      slug: first ?? undefined,
+      title: meta ? collectionLabel(meta) : 'Settings',
+    })
   })
+  useWorkspaceKeys(state, dispatch)
 
-  const openList = (slug: string) => setView({ kind: 'list', slug })
-  const openEditor = (slug: string, id: string) => setView({ kind: 'editor', slug, id })
-  const openSettings = () => setView({ kind: 'settings' })
+  // ---- Restore + persist the tab layout ------------------------------------
+  const hydrated = useRef(false)
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const settings = await window.payloadDesktop.getSettings()
+        const snap = settings.workspace as WorkspaceSnapshot | undefined
+        if (!cancelled && snap && !hydrated.current) {
+          const restored = hydrateWorkspace(snap)
+          if (restored) dispatch({ type: 'hydrate', state: restored })
+        }
+      } catch { /* fresh session */ }
+      hydrated.current = true
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [])
+  useEffect(() => {
+    if (!hydrated.current) return
+    const t = setTimeout(() => {
+      window.payloadDesktop.setSettings({ workspace: serializeWorkspace(state) }).catch(() => {})
+    }, 400)
+    return () => clearTimeout(t)
+  }, [state])
 
-  const activeSlug = view.kind === 'settings' ? null : view.slug
+  // ---- Open helpers ---------------------------------------------------------
+  const openList = useCallback(
+    (slug: string, mode: 'preview' | 'permanent' = 'preview') => {
+      const meta = schema.menuModel.collections.find((c) => c.slug === slug)
+      dispatch({
+        type: 'open',
+        target: { kind: 'list', slug, title: meta ? collectionLabel(meta) : slug },
+        mode,
+      })
+    },
+    [schema],
+  )
+  const openEditor = useCallback((slug: string, docId: string) => {
+    dispatch({ type: 'open', target: { kind: 'editor', slug, docId, title: '…' }, mode: 'permanent' })
+  }, [])
+  const openSettings = useCallback(() => {
+    dispatch({ type: 'open', target: { kind: 'settings', title: 'Settings' }, mode: 'permanent' })
+  }, [])
 
-  // ---- Native menu: publish tree + handle actions -------------------------
+  // ---- Native menu ----------------------------------------------------------
   useEffect(() => {
     window.payloadDesktop.setMenu(buildMenuTree(schema))
   }, [schema])
-
   useEffect(() => {
     const dispose = window.payloadDesktop.onMenuAction((action) => {
-      if (action === 'reload') {
-        window.location.reload()
-        return
-      }
-      if (action === 'open-web-admin') {
-        window.payloadDesktop.openWebAdmin()
-        return
-      }
-      if (action === 'settings') {
-        openSettings()
-        return
-      }
+      if (action === 'reload') return window.location.reload()
+      if (action === 'open-web-admin') return window.payloadDesktop.openWebAdmin()
+      if (action === 'settings') return openSettings()
       const [verb, slug] = action.split(':')
       if (!slug) return
-      if (verb === 'open' || verb === 'global') openList(slug)
-      else if (verb === 'new') openList(slug) // list view hosts "New document"
+      if (verb === 'open' || verb === 'global' || verb === 'new') openList(slug, 'permanent')
     })
     return dispose
-  }, [])
+  }, [openList, openSettings])
+
+  const group = state.groups[state.activeGroupId]
+  const activeTab: Tab | undefined = group.activeTabId ? state.tabs[group.activeTabId] : undefined
+  const activeSlug = activeTab?.kind !== 'settings' ? activeTab?.slug ?? null : null
 
   return (
     <div className="workspace">
@@ -84,41 +124,57 @@ export function WorkspaceMain({
       <div className="workspace-body">
         <Sidebar
           schema={schema}
-          activeSlug={activeSlug}
-          settingsActive={view.kind === 'settings'}
-          onSelect={openList}
+          activeSlug={activeTab?.kind === 'list' ? activeTab.slug ?? null : activeSlug}
+          settingsActive={activeTab?.kind === 'settings'}
+          onSelect={(slug) => openList(slug)}
           onOpenSettings={openSettings}
         />
 
-        {view.kind === 'list' && (
-          <DocumentList
-            schema={schema}
-            slug={view.slug}
-            onOpen={(id) => openEditor(view.slug, id)}
+        <div className="tab-area">
+          <TabStrip
+            group={group}
+            tabs={state.tabs}
+            onActivate={(id) => dispatch({ type: 'activate', tabId: id })}
+            onClose={(id) => dispatch({ type: 'close', tabId: id })}
+            onReorder={(from, to) => dispatch({ type: 'reorder', groupId: group.id, from, to })}
+            onPromote={(id) => dispatch({ type: 'promote', tabId: id })}
+            onPin={(id, pinned) => dispatch({ type: 'pin', tabId: id, pinned })}
           />
-        )}
-        {view.kind === 'editor' && (
-          <DocumentForm
-            slug={view.slug}
-            id={view.id}
-            serverURL={serverURL}
-            rootFields={getRootFields(schema, view.slug)}
-            hasDrafts={Boolean(
-              schema.menuModel.collections.find((c) => c.slug === view.slug)?.drafts,
-            )}
-            onClose={() => openList(view.slug)}
-            onDeleted={() => openList(view.slug)}
-          />
-        )}
-        {view.kind === 'settings' && (
-          <SettingsScreen
-            serverURL={serverURL}
-            wsURLOverride={wsURLOverride}
-            email={email}
-            onLogout={onLogout}
-            onChangeServer={onChangeServer}
-          />
-        )}
+
+          {!activeTab && <div className="empty">No open tabs — pick a collection.</div>}
+          {activeTab?.kind === 'list' && activeTab.slug && (
+            <DocumentList
+              key={activeTab.id}
+              schema={schema}
+              slug={activeTab.slug}
+              onOpen={(id) => openEditor(activeTab.slug!, id)}
+            />
+          )}
+          {activeTab?.kind === 'editor' && activeTab.slug && activeTab.docId && (
+            <DocumentForm
+              key={activeTab.id}
+              slug={activeTab.slug}
+              id={activeTab.docId}
+              serverURL={serverURL}
+              rootFields={getRootFields(schema, activeTab.slug)}
+              hasDrafts={Boolean(
+                schema.menuModel.collections.find((c) => c.slug === activeTab.slug)?.drafts,
+              )}
+              onClose={() => dispatch({ type: 'close', tabId: activeTab.id })}
+              onDeleted={() => dispatch({ type: 'close', tabId: activeTab.id })}
+              onTitle={(title) => dispatch({ type: 'retitle', tabId: activeTab.id, title })}
+            />
+          )}
+          {activeTab?.kind === 'settings' && (
+            <SettingsScreen
+              serverURL={serverURL}
+              wsURLOverride={wsURLOverride}
+              email={email}
+              onLogout={onLogout}
+              onChangeServer={onChangeServer}
+            />
+          )}
+        </div>
       </div>
 
       <StatusBar activeSlug={activeSlug} onOpenSettings={openSettings} />

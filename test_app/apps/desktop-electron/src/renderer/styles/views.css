@@ -177,3 +177,189 @@
   color: var(--ink-muted);
   text-align: center;
 }
+
+/* ---- List engine (issue #20) ---------------------------------------------- */
+.main-header .list-count {
+  color: var(--ink-faint);
+  font-size: 11.5px;
+  flex: 0 0 auto;
+}
+
+.list-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--line);
+}
+.list-toolbar .spacer {
+  flex: 1;
+}
+.list-toolbar .list-search {
+  width: 220px;
+  padding: 6px 10px;
+  font-size: 12.5px;
+}
+.list-toolbar select {
+  padding: 6px 28px 6px 10px;
+  font-size: 12px;
+}
+.list-toolbar .icon-btn {
+  width: 30px;
+  padding: 5px 0;
+  text-align: center;
+  font-size: 14px;
+  line-height: 1;
+}
+.list-config-wrap {
+  position: relative;
+}
+
+/* Column config popover — reuses .picker-menu from form.css */
+.picker-menu.column-config {
+  left: auto;
+  right: 0;
+  width: 260px;
+  padding: 4px 0;
+}
+.column-config-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px 6px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-faint);
+}
+.column-config-row {
+  gap: 8px;
+}
+.column-config-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+.column-config-row .type-badge {
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 5px;
+}
+.column-config-move {
+  display: flex;
+  gap: 2px;
+}
+.column-config-move .mini {
+  padding: 1px 6px;
+  font-size: 11px;
+  line-height: 1.2;
+}
+.column-config-sep {
+  height: 1px;
+  margin: 4px 0;
+  background: var(--line);
+}
+
+/* Grid table */
+.list-table {
+  display: grid;
+  align-content: start;
+  width: 100%;
+  font-size: 12.5px;
+}
+.list-head-cell {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 9px 12px;
+  background: rgba(30, 30, 34, 0.96);
+  border-bottom: 1px solid var(--line-strong);
+  border-radius: 0;
+  color: var(--ink-muted);
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  text-align: left;
+}
+.list-head-cell.sortable {
+  cursor: pointer;
+}
+.list-head-cell.sortable:hover {
+  color: var(--ink);
+  background: rgba(40, 40, 46, 0.96);
+}
+.list-head-cell:disabled {
+  opacity: 1;
+  cursor: default;
+}
+.list-head-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sort-indicator {
+  color: var(--accent);
+  font-size: 9px;
+}
+
+.list-row {
+  display: grid;
+  grid-column: 1 / -1;
+  grid-template-columns: subgrid;
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  color: var(--ink);
+  cursor: pointer;
+}
+.list-row:hover {
+  background: var(--surface-hover);
+}
+.list-row-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 0 10px 8px;
+}
+.list-cell {
+  padding: 10px 12px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.list-cell.title {
+  font-weight: 500;
+}
+.list-badge {
+  display: inline-block;
+  padding: 1px 7px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  font-size: 11px;
+  color: var(--ink-muted);
+}
+
+.list-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 8px 14px;
+  border-top: 1px solid var(--line);
+}
+.list-pager-info {
+  font-size: 11.5px;
+  color: var(--ink-muted);
+}
