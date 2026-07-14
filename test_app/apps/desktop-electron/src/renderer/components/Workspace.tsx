@@ -57,6 +57,7 @@ export function Workspace({
       <WorkspaceMain
         schema={schema}
         serverURL={serverURL}
+        token={token}
         wsURLOverride={wsURLOverride}
         email={email}
         onLogout={onLogout}

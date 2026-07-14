@@ -27,13 +27,14 @@ import { useWorkspaceKeys } from '../workspace/useWorkspaceKeys'
 type Props = {
   schema: AdminSchema
   serverURL: string
+  token: string
   wsURLOverride?: string
   email?: string
   onLogout: () => void
   onChangeServer: () => void
 }
 
-export function WorkspaceMain({ schema, serverURL, wsURLOverride, email, onLogout, onChangeServer }: Props) {
+export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, onLogout, onChangeServer }: Props) {
   const [state, dispatch] = useReducer(workspaceReducer, null, () => {
     const first = firstCollectionSlug(schema)
     const meta = schema.menuModel.collections.find((c) => c.slug === first)
@@ -156,6 +157,7 @@ export function WorkspaceMain({ schema, serverURL, wsURLOverride, email, onLogou
               slug={activeTab.slug}
               id={activeTab.docId}
               serverURL={serverURL}
+              token={token}
               rootFields={getRootFields(schema, activeTab.slug)}
               hasDrafts={Boolean(
                 schema.menuModel.collections.find((c) => c.slug === activeTab.slug)?.drafts,

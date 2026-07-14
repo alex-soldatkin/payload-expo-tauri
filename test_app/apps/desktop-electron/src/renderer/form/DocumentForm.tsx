@@ -10,6 +10,7 @@ import {
 } from '@payload-universal/local-db'
 import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
+import { VersionsPanel } from './versions/VersionsPanel'
 import { docTitle, formatUpdatedAt } from '../lib/doc'
 
 /** Keys never shown or written by the form. */
@@ -29,6 +30,7 @@ type Props = {
   slug: string
   id: string
   serverURL: string
+  token: string
   rootFields: SchemaField[]
   hasDrafts: boolean
   onClose: () => void
@@ -37,7 +39,7 @@ type Props = {
   onTitle?: (title: string) => void
 }
 
-export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClose, onDeleted, onTitle }: Props) {
+export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle }: Props) {
   const localDB = useLocalDB()
   const { doc, loading } = useLocalDocument(localDB, slug, id)
   const { update, remove, errors, clearFieldError } = useValidatedMutations(
@@ -53,6 +55,7 @@ export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClo
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
+  const [showVersions, setShowVersions] = useState(false)
   const seededFor = useRef<string | null>(null)
 
   // Seed/reseed from the live doc — but never clobber unsaved edits.
@@ -125,8 +128,25 @@ export function DocumentForm({ slug, id, serverURL, rootFields, hasDrafts, onClo
             id <code>{String(record.id ?? id)}</code> · updated {formatUpdatedAt(record.updatedAt)}
           </span>
           <div className="spacer" />
+          {hasDrafts && (
+            <button className="no-drag" onClick={() => setShowVersions((v) => !v)}>
+              Versions
+            </button>
+          )}
           {Boolean(record._locallyModified) && <span className="dot" title="Locally modified" />}
         </div>
+
+        {showVersions && (
+          <VersionsPanel
+            slug={slug}
+            docId={id}
+            serverURL={serverURL}
+            token={token}
+            currentDoc={record}
+            onClose={() => setShowVersions(false)}
+            onRestored={() => setShowVersions(false)}
+          />
+        )}
 
         {typeof record.url === 'string' &&
           String(record.mimeType ?? '').startsWith('image/') && (
