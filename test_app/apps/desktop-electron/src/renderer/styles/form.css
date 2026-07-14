@@ -102,6 +102,18 @@
 .field-row-head { display: flex; align-items: center; gap: 8px; }
 .field-row-head .title { font-size: 12px; font-weight: 600; flex: 1; }
 .field-row-head button { padding: 2px 8px; font-size: 11px; }
+.field-row-card.dragging { opacity: 0.6; }
+.row-drag-handle {
+  cursor: grab;
+  color: var(--muted, #8a8a99);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: -2px;
+  user-select: none;
+  touch-action: none;
+}
+.row-drag-handle:hover { color: var(--ink); }
+.row-drag-handle:active { cursor: grabbing; }
 .field-add-row { align-self: flex-start; }
 
 /* Chips (hasMany text/number/select) */

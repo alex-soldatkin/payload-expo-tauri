@@ -6,7 +6,21 @@
 // and `generation` is bumped on every structural mutation so shifted rows fully
 // remount. Without this, uncontrolled inputs would show stale values for the
 // row that moved into a given index (mirrors admin-native's array field).
-import { useState } from 'react'
+//
+// Drag reorder: dnd-kit (mirrors workspace/TabStrip). Sortable ids are the
+// per-row `${index}:${gen}` keys; on dragEnd we split off the leading index to
+// map active/over back to array indexes and reuse moveRow.
+import { type ReactNode, useState } from 'react'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { FieldComponentProps, SchemaField } from '../types'
 import { labelForField, resolveLabel } from '../labels'
 import { getFieldSlots, type RowLabelProps } from '../registry'
@@ -23,6 +37,9 @@ export function ArrayField(props: FieldComponentProps) {
 
   const [generation, setGeneration] = useState(0)
   const bump = () => setGeneration((g) => g + 1)
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const rowIds = rows.map((_, index) => `${index}:${generation}`)
 
   const title = labelForField(field)
   const description = resolveLabel(field.admin?.description)
@@ -59,6 +76,15 @@ export function ArrayField(props: FieldComponentProps) {
     commit(next)
   }
 
+  // Sortable ids carry the row index before ':'; map both ends back to indexes.
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const from = Number(String(active.id).split(':')[0])
+    const to = Number(String(over.id).split(':')[0])
+    if (Number.isInteger(from) && Number.isInteger(to)) moveRow(from, to)
+  }
+
   const RowLabel = getFieldSlots(slug, normalizeIndexes(path))?.RowLabel
   const rowTitle = (row: Row, i: number): string => {
     const firstText = subFields.find(
@@ -74,42 +100,88 @@ export function ArrayField(props: FieldComponentProps) {
       {description && <div className="field-description">{description}</div>}
       {error && <div className="field-error">{error}</div>}
 
-      <div className="field-rows">
-        {rows.map((row, index) => (
-          <div key={`${index}:${generation}`} className="field-row-card">
-            <div className="field-row-head">
-              <span className="title">
-                {RowLabel ? (
-                  <RowLabel {...({ data: row, index } satisfies RowLabelProps)} />
-                ) : (
-                  rowTitle(row, index)
-                )}
-              </span>
-              <button type="button" disabled={index === 0} onClick={() => moveRow(index, index - 1)}>
-                ↑
-              </button>
-              <button
-                type="button"
-                disabled={index === rows.length - 1}
-                onClick={() => moveRow(index, index + 1)}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+          <div className="field-rows">
+            {rows.map((row, index) => (
+              <SortableRowCard
+                key={rowIds[index]}
+                id={rowIds[index]}
+                head={
+                  <>
+                    <span className="title">
+                      {RowLabel ? (
+                        <RowLabel {...({ data: row, index } satisfies RowLabelProps)} />
+                      ) : (
+                        rowTitle(row, index)
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={index === 0}
+                      onClick={() => moveRow(index, index - 1)}
+                    >
+                      ↑
+                    </button>
+                    <button
+                      type="button"
+                      disabled={index === rows.length - 1}
+                      onClick={() => moveRow(index, index + 1)}
+                    >
+                      ↓
+                    </button>
+                    <button type="button" disabled={atMax} onClick={() => duplicateRow(index)}>
+                      Duplicate
+                    </button>
+                    <button type="button" disabled={!canRemove} onClick={() => removeRow(index)}>
+                      Remove
+                    </button>
+                  </>
+                }
               >
-                ↓
-              </button>
-              <button type="button" disabled={atMax} onClick={() => duplicateRow(index)}>
-                Duplicate
-              </button>
-              <button type="button" disabled={!canRemove} onClick={() => removeRow(index)}>
-                Remove
-              </button>
-            </div>
-            {subFields.map((sub) => renderField(sub, `${path}.${index}`))}
+                {subFields.map((sub) => renderField(sub, `${path}.${index}`))}
+              </SortableRowCard>
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       <button type="button" className="field-add-row" disabled={atMax} onClick={addRow}>
         Add {singular}
       </button>
+    </div>
+  )
+}
+
+// Sortable card: a left drag handle carries the sortable listeners (not the whole
+// card — cards hold inputs, so dragging must not steal text selection/clicks).
+// `head` fills .field-row-head after the handle; `children` is the card body.
+export function SortableRowCard({
+  id,
+  head,
+  children,
+}: {
+  id: string
+  head: ReactNode
+  children?: ReactNode
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  })
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={['field-row-card', isDragging ? 'dragging' : ''].filter(Boolean).join(' ')}
+    >
+      <div className="field-row-head">
+        <span className="row-drag-handle" title="Drag to reorder" {...attributes} {...listeners}>
+          ⋮⋮
+        </span>
+        {head}
+      </div>
+      {children}
     </div>
   )
 }

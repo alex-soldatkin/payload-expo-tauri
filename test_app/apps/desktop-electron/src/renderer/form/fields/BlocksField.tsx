@@ -6,10 +6,24 @@
 // Each row's fields resolve from its blockType. They're wrapped in
 // BlockScopeProvider so nested conditions can resolve `{path}.{blockType}.{name}`.
 // Unknown blockTypes render a warning card that keeps the data and offers remove.
+//
+// Drag reorder mirrors ArrayField: dnd-kit with the row's `${index}:${gen}` key
+// as the sortable id (SortableRowCard supplies the left drag handle). On dragEnd
+// the leading index of active/over ids maps back to array indexes for moveRow.
 import { useState } from 'react'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import type { FieldComponentProps, SchemaBlock } from '../types'
 import { labelForField, resolveLabel } from '../labels'
 import { BlockScopeProvider } from '../FieldRenderer'
+import { SortableRowCard } from './ArrayField'
 import { useFieldValue } from './shared'
 
 type BlockRow = { blockType: string; blockName?: string; [k: string]: unknown }
@@ -22,6 +36,9 @@ export function BlocksField(props: FieldComponentProps) {
 
   const [generation, setGeneration] = useState(0)
   const bump = () => setGeneration((g) => g + 1)
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+  const rowIds = rows.map((_, index) => `${index}:${generation}`)
 
   const title = labelForField(field)
   const description = resolveLabel(field.admin?.description)
@@ -57,6 +74,15 @@ export function BlocksField(props: FieldComponentProps) {
     commit(next)
   }
 
+  // Sortable ids carry the row index before ':'; map both ends back to indexes.
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e
+    if (!over || active.id === over.id) return
+    const from = Number(String(active.id).split(':')[0])
+    const to = Number(String(over.id).split(':')[0])
+    if (Number.isInteger(from) && Number.isInteger(to)) moveRow(from, to)
+  }
+
   const blockDef = (slug: string) => blocks.find((b) => b.slug === slug)
 
   const rowControls = (index: number) => (
@@ -86,39 +112,57 @@ export function BlocksField(props: FieldComponentProps) {
       {description && <div className="field-description">{description}</div>}
       {error && <div className="field-error">{error}</div>}
 
-      <div className="field-rows">
-        {rows.map((row, index) => {
-          const def = blockDef(row.blockType)
-          if (!def) {
-            return (
-              <div key={`${index}:${generation}`} className="field-row-card">
-                <div className="field-row-head">
-                  <span className="title">Unknown block: {row.blockType}</span>
-                  <button type="button" disabled={!canRemove} onClick={() => removeRow(index)}>
-                    Remove
-                  </button>
-                </div>
-                <div className="field-error">
-                  This block type is not defined in the schema. Its data is preserved.
-                </div>
-              </div>
-            )
-          }
-          const singular = resolveLabel(def.labels?.singular, def.slug)
-          const head = row.blockName ? `${singular} — ${row.blockName}` : singular
-          return (
-            <div key={`${index}:${generation}`} className="field-row-card">
-              <div className="field-row-head">
-                <span className="title">{head}</span>
-                {rowControls(index)}
-              </div>
-              <BlockScopeProvider value={row.blockType}>
-                {def.fields.map((sub) => renderField(sub, `${path}.${index}`))}
-              </BlockScopeProvider>
-            </div>
-          )
-        })}
-      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+          <div className="field-rows">
+            {rows.map((row, index) => {
+              const def = blockDef(row.blockType)
+              if (!def) {
+                return (
+                  <SortableRowCard
+                    key={rowIds[index]}
+                    id={rowIds[index]}
+                    head={
+                      <>
+                        <span className="title">Unknown block: {row.blockType}</span>
+                        <button
+                          type="button"
+                          disabled={!canRemove}
+                          onClick={() => removeRow(index)}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    }
+                  >
+                    <div className="field-error">
+                      This block type is not defined in the schema. Its data is preserved.
+                    </div>
+                  </SortableRowCard>
+                )
+              }
+              const singular = resolveLabel(def.labels?.singular, def.slug)
+              const head = row.blockName ? `${singular} — ${row.blockName}` : singular
+              return (
+                <SortableRowCard
+                  key={rowIds[index]}
+                  id={rowIds[index]}
+                  head={
+                    <>
+                      <span className="title">{head}</span>
+                      {rowControls(index)}
+                    </>
+                  }
+                >
+                  <BlockScopeProvider value={row.blockType}>
+                    {def.fields.map((sub) => renderField(sub, `${path}.${index}`))}
+                  </BlockScopeProvider>
+                </SortableRowCard>
+              )
+            })}
+          </div>
+        </SortableContext>
+      </DndContext>
 
       <div className="field-row" style={{ flexWrap: 'wrap' }}>
         {blocks.map((block) => (
