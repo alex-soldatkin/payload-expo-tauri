@@ -1,3 +1,4 @@
+import { longPressHandlers } from '../../lib/longPress'
 // The grid table: sticky header with click-to-sort, one row per doc. A leading
 // checkbox column drives row selection (header checkbox = select-all-on-page);
 // the second cell of every row carries the locally-modified dot marker.
@@ -11,6 +12,8 @@ type Props = {
   sortDir: 'asc' | 'desc'
   onSort: (key: string) => void
   onOpen: (id: string) => void
+  onPeek?: (id: string) => void
+  onDocMenu?: (id: string, x: number, y: number) => void
   /** Selected doc ids; presence enables the checkbox column. */
   selectedIds: Set<string>
   onToggleOne: (id: string) => void
@@ -25,6 +28,8 @@ export function ListTable({
   sortDir,
   onSort,
   onOpen,
+  onPeek,
+  onDocMenu,
   selectedIds,
   onToggleOne,
   onToggleAll,
@@ -71,6 +76,12 @@ export function ListTable({
             className={`list-row${selected ? ' selected' : ''}`}
             role="button"
             tabIndex={0}
+            {...(onPeek ? longPressHandlers(() => onPeek(id)) : {})}
+            onContextMenu={(e) => {
+              if (!onDocMenu) return
+              e.preventDefault()
+              onDocMenu(id, e.clientX, e.clientY)
+            }}
             onClick={() => onOpen(id)}
             onKeyDown={(e) => {
               if (e.key === 'Enter' || e.key === ' ') {

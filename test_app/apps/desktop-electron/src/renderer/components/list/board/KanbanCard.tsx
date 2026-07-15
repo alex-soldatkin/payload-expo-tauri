@@ -1,3 +1,4 @@
+import { longPressHandlers } from '../../../lib/longPress'
 // A single board card: draggable via dnd-kit useDraggable (id = doc.id).
 // Shows docTitle + updatedAt + the locally-modified dot (same convention as
 // ListTable rows). A plain click opens the doc — the PointerSensor's 6px
@@ -10,9 +11,11 @@ type Props = {
   doc: Record<string, unknown>
   useAsTitle?: string
   onOpen: (id: string) => void
+  onPeek?: (id: string) => void
+  onDocMenu?: (id: string, x: number, y: number) => void
 }
 
-export function KanbanCard({ doc, useAsTitle, onOpen }: Props) {
+export function KanbanCard({ doc, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
   const id = String(doc.id ?? '')
   const modified = Boolean(doc._locallyModified)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
@@ -26,6 +29,12 @@ export function KanbanCard({ doc, useAsTitle, onOpen }: Props) {
       {...listeners}
       role="button"
       tabIndex={0}
+      {...(onPeek ? longPressHandlers(() => onPeek(id)) : {})}
+      onContextMenu={(e) => {
+        if (!onDocMenu) return
+        e.preventDefault()
+        onDocMenu(id, e.clientX, e.clientY)
+      }}
       onClick={() => onOpen(id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

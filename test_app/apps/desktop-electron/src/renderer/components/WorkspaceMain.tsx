@@ -15,6 +15,8 @@ import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
 import { GlobalForm } from './globals/GlobalForm'
+import { DocPeekProvider } from './preview/DocPeek'
+import { DocContextMenuProvider } from './preview/DocContextMenu'
 import { useQuickSelect } from '../workspace/useQuickSelect'
 import { useNavHistory } from '../workspace/useNavHistory'
 import {
@@ -170,6 +172,8 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const activeSlug = activeTab?.kind !== 'settings' ? activeTab?.slug ?? null : null
 
   return (
+    <DocPeekProvider onOpenEditor={openEditor}>
+    <DocContextMenuProvider schema={schema} serverURL={serverURL} onOpenEditor={openEditor}>
     <div className="workspace">
       <div className="titlebar">
         <span>Payload Universal</span>
@@ -271,5 +275,7 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
 
       <StatusBar activeSlug={activeSlug} onOpenSettings={openSettings} />
     </div>
+    </DocContextMenuProvider>
+    </DocPeekProvider>
   )
 }

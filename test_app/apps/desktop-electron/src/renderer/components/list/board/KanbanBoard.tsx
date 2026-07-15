@@ -24,11 +24,13 @@ type Props = {
   docs: Record<string, unknown>[]
   useAsTitle?: string
   onOpen: (id: string) => void
+  onPeek?: (id: string) => void
+  onDocMenu?: (id: string, x: number, y: number) => void
 }
 
 type Column = { value: string | null; label: string }
 
-export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen }: Props) {
+export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
   const localDB = useLocalDB()
   const { update } = useLocalMutations(localDB, slug)
   const fieldName = field.name ?? ''
@@ -90,6 +92,8 @@ export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen }: Props) {
             docs={grouped.get(col.value) ?? []}
             useAsTitle={useAsTitle}
             onOpen={onOpen}
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
           />
         ))}
       </div>

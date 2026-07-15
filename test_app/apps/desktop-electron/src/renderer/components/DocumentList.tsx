@@ -2,6 +2,8 @@
 // backed by the local RxDB (issue #20). Orchestrates the toolbar + table and
 // persists per-collection column/sort/pageSize prefs via the desktop bridge.
 import { useEffect, useMemo, useState } from 'react'
+import { useDocPeek } from './preview/DocPeek'
+import { useDocMenu } from './preview/DocContextMenu'
 import { useLocalCollection, useLocalDB, useLocalMutations } from '@payload-universal/local-db'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { collectionLabel } from '../lib/collections'
@@ -42,6 +44,10 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
   const localDB = useLocalDB()
   const { create, update: updateDoc, remove: removeDoc } = useLocalMutations(localDB, slug)
   const { config, ready, update } = useListConfig(slug)
+  const { openPeek } = useDocPeek()
+  const onPeek = (id: string) => openPeek(slug, id)
+  const { openDocMenu } = useDocMenu()
+  const onDocMenu = (id: string, x: number, y: number) => openDocMenu(slug, id, x, y)
 
   const meta = schema.menuModel.collections.find((c) => c.slug === slug)
   const label = meta ? collectionLabel(meta) : slug
@@ -319,6 +325,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             docs={visible as Record<string, unknown>[]}
             useAsTitle={meta?.useAsTitle}
             onOpen={onOpen}
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
           />
         ) : viewMode === 'calendar' && calendarField?.name ? (
           <CalendarView
@@ -326,6 +334,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             docs={visible as Record<string, unknown>[]}
             useAsTitle={meta?.useAsTitle}
             onOpen={onOpen}
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
           />
         ) : visible.length === 0 ? (
           <div className="empty">
@@ -339,6 +349,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             sortDir={sortDesc ? 'desc' : 'asc'}
             onSort={onSort}
             onOpen={onOpen}
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleOne={toggleOne}
             onToggleAll={toggleAll}

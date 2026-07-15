@@ -14,9 +14,11 @@ type Props = {
   docs: Record<string, unknown>[]
   useAsTitle?: string
   onOpen: (id: string) => void
+  onPeek?: (id: string) => void
+  onDocMenu?: (id: string, x: number, y: number) => void
 }
 
-export function KanbanColumn({ value, label, docs, useAsTitle, onOpen }: Props) {
+export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${value ?? NO_VALUE}` })
 
   return (
@@ -28,6 +30,8 @@ export function KanbanColumn({ value, label, docs, useAsTitle, onOpen }: Props) 
       <div className="board-col-body" ref={setNodeRef}>
         {docs.map((doc) => (
           <KanbanCard
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
             key={String(doc.id ?? '')}
             doc={doc}
             useAsTitle={useAsTitle}

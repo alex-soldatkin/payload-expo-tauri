@@ -5,6 +5,7 @@
 // reports how many are undated). Month navigation is component-only state; the
 // chosen field is persisted by the parent (mirrors the board's field picker).
 import { useMemo, useState } from 'react'
+import { longPressHandlers } from '../../../lib/longPress'
 import { docTitle } from '../../../lib/doc'
 import {
   cursorFromKey,
@@ -25,9 +26,11 @@ type Props = {
   docs: Record<string, unknown>[]
   useAsTitle?: string
   onOpen: (id: string) => void
+  onPeek?: (id: string) => void
+  onDocMenu?: (id: string, x: number, y: number) => void
 }
 
-export function CalendarView({ fieldName, docs, useAsTitle, onOpen }: Props) {
+export function CalendarView({ fieldName, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
   const [cursor, setCursor] = useState<MonthCursor>(() => cursorFromKey(todayKey()))
 
   // Bucket docs by their local day key for the chosen field; count undated.
@@ -100,6 +103,12 @@ export function CalendarView({ fieldName, docs, useAsTitle, onOpen }: Props) {
                     type="button"
                     className="cal-chip"
                     title={docTitle(doc, useAsTitle)}
+                    {...(onPeek ? longPressHandlers(() => onPeek(id)) : {})}
+                    onContextMenu={(e) => {
+                      if (!onDocMenu) return
+                      e.preventDefault()
+                      onDocMenu(id, e.clientX, e.clientY)
+                    }}
                     onClick={() => onOpen(id)}
                   >
                     {docTitle(doc, useAsTitle)}
