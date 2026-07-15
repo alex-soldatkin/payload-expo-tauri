@@ -8,6 +8,8 @@ import {
 } from '@payload-universal/local-db'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { WorkspaceMain } from './WorkspaceMain'
+import { ToastProvider } from './toast/ToastProvider'
+import { SyncToastBridge } from './toast/SyncToastBridge'
 import { deriveWsURL, serverSlug } from '../lib/settings'
 import '../form/custom/registerSSOT'
 
@@ -54,6 +56,8 @@ export function Workspace({
       wsURL={wsURL}
       storage={storage}
     >
+      <ToastProvider>
+      <SyncToastBridge />
       <WorkspaceMain
         schema={schema}
         serverURL={serverURL}
@@ -63,6 +67,7 @@ export function Workspace({
         onLogout={onLogout}
         onChangeServer={onChangeServer}
       />
+      </ToastProvider>
     </LocalDBProvider>
   )
 }

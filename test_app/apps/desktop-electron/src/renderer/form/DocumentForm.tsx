@@ -11,10 +11,17 @@ import {
 import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
 import { VersionsPanel } from './versions/VersionsPanel'
+import { DocMenu } from './DocMenu'
+import { useAutosave } from './useAutosave'
 import { docTitle, formatUpdatedAt } from '../lib/doc'
 
 /** Keys never shown or written by the form. */
 const INTERNAL_KEYS = new Set(['id', 'createdAt', 'updatedAt'])
+
+/** Compact HH:MM for the "Autosaved 14:32" status label. */
+function formatAutosaveTime(d: Date): string {
+  return d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit', hour12: false })
+}
 
 function editableValues(doc: Record<string, unknown>): Record<string, unknown> {
   const out: Record<string, unknown> = {}
@@ -37,12 +44,16 @@ type Props = {
   onDeleted: () => void
   /** Reports the doc's display title (tab labels). */
   onTitle?: (title: string) => void
+  /** Called after a successful Duplicate with the new doc's id. */
+  onDuplicated?: (newId: string) => void
+  /** Reports the form's dirty state (feeds the workspace dirty-tab guard). */
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle }: Props) {
+export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle, onDuplicated, onDirtyChange }: Props) {
   const localDB = useLocalDB()
   const { doc, loading } = useLocalDocument(localDB, slug, id)
-  const { update, remove, errors, clearFieldError } = useValidatedMutations(
+  const { create, update, remove, errors, clearFieldError } = useValidatedMutations(
     localDB,
     slug,
     rootFields as never[],
@@ -113,6 +124,56 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
     }
   }
 
+  // Duplicate: clone the editable subset, suffix a title-ish field with
+  // ' (Copy)', force draft status when the collection supports drafts, and
+  // create a fresh doc via the validated create mutation.
+  const duplicate = async () => {
+    if (!doc) return
+    setBusy(true)
+    setSubmitError(null)
+    try {
+      const clone = editableValues(doc as Record<string, unknown>)
+      for (const key of ['title', 'name']) {
+        if (typeof clone[key] === 'string') {
+          clone[key] = `${clone[key] as string} (Copy)`
+          break
+        }
+      }
+      clone._status = hasDrafts ? 'draft' : clone._status
+      const result = await create(clone)
+      if (result.success && result.id) {
+        onDuplicated?.(result.id)
+      } else if (!result.success) {
+        const first = Object.entries(result.errors)[0]
+        setSubmitError(first ? `${first[0]}: ${first[1]}` : 'Duplicate failed.')
+      }
+    } catch (err) {
+      setSubmitError(err instanceof Error ? err.message : 'Duplicate failed.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Autosave — mirrors mobile gating: only when the collection has drafts, the
+  // doc is not published, and the form is dirty. Saves keep the current
+  // _status (no forced 'draft'/'published').
+  const autosave = useAutosave({
+    enabled: hasDrafts,
+    isDirty: formState.isDirty,
+    getValues,
+    currentStatus: (doc as Record<string, unknown> | undefined)?._status,
+    save: async (values) => {
+      const result = await update(id, values, doc as Record<string, unknown>)
+      if (result.success) reset(getValues(), { keepValues: true })
+      return result.success
+    },
+  })
+
+  // Feed the workspace dirty-tab guard (guard itself lives elsewhere).
+  useEffect(() => {
+    onDirtyChange?.(formState.isDirty)
+  }, [formState.isDirty, onDirtyChange])
+
   const record = (doc ?? {}) as Record<string, unknown>
   const engine = { slug, serverURL, docId: id, control, getValues, setValue, errors, onEdit: clearFieldError }
 
@@ -133,6 +194,13 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
               Versions
             </button>
           )}
+          <DocMenu
+            disabled={busy}
+            items={[
+              { label: 'Duplicate', onSelect: () => void duplicate() },
+              { label: 'Delete', danger: true, onSelect: () => void del() },
+            ]}
+          />
           {Boolean(record._locallyModified) && <span className="dot" title="Locally modified" />}
         </div>
 
@@ -180,8 +248,18 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
           )}
           {submitError && <span className="editor-error">{submitError}</span>}
           {saved && !submitError && <span className="editor-saved">Saved locally</span>}
+          {hasDrafts && autosave.state === 'saving' && (
+            <span className="doc-meta">Autosaving…</span>
+          )}
+          {hasDrafts && autosave.state === 'saved' && autosave.lastSavedAt && (
+            <span className="doc-meta">
+              Autosaved {formatAutosaveTime(autosave.lastSavedAt)}
+            </span>
+          )}
+          {hasDrafts && autosave.state === 'error' && (
+            <span className="editor-error">Autosave failed</span>
+          )}
           <div className="spacer" />
-          <button className="danger" onClick={del} disabled={busy}>Delete</button>
         </div>
       </div>
     </FormEngineProvider>

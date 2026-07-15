@@ -105,6 +105,7 @@ function TabItem({
     >
       {tab.pinned && <span className="tab-pin">◆</span>}
       <span className="tab-title">{tab.title}</span>
+      {tab.dirty && <span className="tab-dirty" title="Unsaved changes" />}
       {!tab.pinned && (
         <button
           type="button"

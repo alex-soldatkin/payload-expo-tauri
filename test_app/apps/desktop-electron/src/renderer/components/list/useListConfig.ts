@@ -11,6 +11,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FilterGroups, FilterPreset } from './filters/types'
 
+export type ListViewMode = 'table' | 'board'
+
 export type ListConfigEntry = {
   columns?: string[]
   sort?: string
@@ -19,6 +21,10 @@ export type ListConfigEntry = {
   activeFilters?: FilterGroups
   /** Named filter presets saved locally for this collection. */
   presets?: FilterPreset[]
+  /** Table (default) vs. property-driven Kanban board (issue #25). */
+  viewMode?: ListViewMode
+  /** Field name backing the board's columns (a board-eligible select/radio). */
+  boardField?: string
 }
 
 type ListConfigMap = Record<string, ListConfigEntry>

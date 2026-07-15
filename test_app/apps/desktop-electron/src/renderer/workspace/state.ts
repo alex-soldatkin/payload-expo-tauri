@@ -19,6 +19,8 @@ export type Tab = {
   pinned: boolean
   /** Preview tabs (single-click, italic) are reused by the next preview open. */
   preview: boolean
+  /** Unsaved edits in this tab's editor (drives the dot + close guard). */
+  dirty?: boolean
 }
 
 export type Group = {
@@ -83,6 +85,7 @@ export type Action =
   | { type: 'pin'; tabId: TabId; pinned: boolean }
   | { type: 'promote'; tabId: TabId } // preview → permanent
   | { type: 'retitle'; tabId: TabId; title: string }
+  | { type: 'setDirty'; tabId: TabId; dirty: boolean }
   | { type: 'mruNext' } // Ctrl+Tab: activate the next-most-recent tab
   | { type: 'hydrate'; state: WorkspaceState }
   // Splits (vscode editor groups)
@@ -218,6 +221,15 @@ export function workspaceReducer(state: WorkspaceState, action: Action): Workspa
       const tab = state.tabs[action.tabId]
       if (!tab || tab.title === action.title) return state
       return { ...state, tabs: { ...state.tabs, [tab.id]: { ...tab, title: action.title } } }
+    }
+    case 'setDirty': {
+      const tab = state.tabs[action.tabId]
+      if (!tab || Boolean(tab.dirty) === action.dirty) return state
+      // Editing promotes a preview tab (vscode behavior).
+      return {
+        ...state,
+        tabs: { ...state.tabs, [tab.id]: { ...tab, dirty: action.dirty, preview: tab.preview && !action.dirty } },
+      }
     }
     case 'hydrate':
       return action.state

@@ -35,7 +35,7 @@ type Props = {
 }
 
 export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, onLogout, onChangeServer }: Props) {
-  const [state, dispatch] = useReducer(workspaceReducer, null, () => {
+  const [state, rawDispatch] = useReducer(workspaceReducer, null, () => {
     const first = firstCollectionSlug(schema)
     const meta = schema.menuModel.collections.find((c) => c.slug === first)
     return initialWorkspace({
@@ -44,6 +44,22 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
       title: meta ? collectionLabel(meta) : 'Settings',
     })
   })
+  // Close guard: closing a tab with unsaved edits asks first (covers strip ×,
+  // middle-click, and Cmd+W — every close flows through this dispatch).
+  const dispatch = useCallback(
+    (action: Parameters<typeof rawDispatch>[0]) => {
+      if (action.type === 'close') {
+        const tab = stateRef.current.tabs[action.tabId]
+        if (tab?.dirty && !window.confirm(`"${tab.title}" has unsaved changes. Close anyway?`)) {
+          return
+        }
+      }
+      rawDispatch(action)
+    },
+    [],
+  )
+  const stateRef = useRef(state)
+  stateRef.current = state
   useWorkspaceKeys(state, dispatch)
 
   // ---- Restore + persist the tab layout ------------------------------------
@@ -161,6 +177,8 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                     onClose={() => dispatch({ type: 'close', tabId: tab.id })}
                     onDeleted={() => dispatch({ type: 'close', tabId: tab.id })}
                     onTitle={(title) => dispatch({ type: 'retitle', tabId: tab.id, title })}
+                    onDirtyChange={(dirty) => dispatch({ type: 'setDirty', tabId: tab.id, dirty })}
+                    onDuplicated={(newId) => tab.slug && openEditor(tab.slug, newId)}
                   />
                 )
               }

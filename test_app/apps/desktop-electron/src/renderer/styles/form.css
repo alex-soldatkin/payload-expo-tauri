@@ -327,3 +327,19 @@
 
 /* Versions panel anchors to the form pane */
 .main { position: relative; }
+
+/* Document overflow (⋯) menu — reuses .picker-menu popover styling */
+.doc-menu { position: relative; }
+.doc-menu-trigger {
+  padding: 2px 8px;
+  line-height: 1;
+  font-size: 16px;
+}
+.doc-menu-popover {
+  left: auto;
+  right: 0;
+  min-width: 160px;
+}
+.doc-menu-popover .option { font-size: 12px; }
+.doc-menu-popover .option.danger { color: var(--danger); }
+.doc-menu-popover .option.danger:hover { background: rgba(255, 107, 107, 0.14); }

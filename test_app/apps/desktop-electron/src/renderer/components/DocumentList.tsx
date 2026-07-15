@@ -21,6 +21,9 @@ import { buildSelector, matchesGroups } from './list/filters/toSelector'
 import { FilterControls } from './list/filters/FilterControls'
 import { FilterChips } from './list/filters/FilterChips'
 import type { FilterGroups } from './list/filters/types'
+import { eligibleBoardFields } from './list/board/eligibility'
+import { KanbanBoard } from './list/board/KanbanBoard'
+import { labelForField } from '../form/labels'
 
 type Props = {
   schema: AdminSchema
@@ -86,6 +89,16 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
     [columns, displayable],
   )
 
+  // ---- board (Kanban) ----------------------------------------------------
+  // Top-level select/radio fields that can drive a board; empty → no Kanban.
+  const boardFields = useMemo(() => eligibleBoardFields(getRootFields(schema, slug)), [schema, slug])
+  const canBoard = boardFields.length > 0
+  const viewMode = canBoard ? (config.viewMode ?? 'table') : 'table'
+  // Persisted board field, falling back to the first eligible one when the
+  // stored name no longer exists (mirrors the mobile config fallback).
+  const boardField =
+    boardFields.find((f) => f.name === config.boardField) ?? boardFields[0]
+
   // ---- toolbar handlers ---------------------------------------------------
   const onSort = (key: string) => {
     if (sortField !== key) update({ sort: `-${key}` }) // new column → desc first
@@ -140,6 +153,37 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
           {totalDocs} {totalDocs === 1 ? 'item' : 'items'}
         </span>
         {totalDocs > pageSize && <span className="list-count">Page {page}</span>}
+        {canBoard && (
+          <div className="view-switch">
+            <button
+              type="button"
+              className={`chip toggle${viewMode === 'table' ? ' on' : ''}`}
+              onClick={() => update({ viewMode: 'table' })}
+            >
+              Table
+            </button>
+            <button
+              type="button"
+              className={`chip toggle${viewMode === 'board' ? ' on' : ''}`}
+              onClick={() => update({ viewMode: 'board' })}
+            >
+              Board
+            </button>
+          </div>
+        )}
+        {viewMode === 'board' && boardField && boardFields.length > 1 && (
+          <select
+            className="board-field-picker"
+            value={boardField.name}
+            onChange={(e) => update({ boardField: e.target.value })}
+          >
+            {boardFields.map((f) => (
+              <option key={f.name} value={f.name}>
+                {labelForField(f)}
+              </option>
+            ))}
+          </select>
+        )}
       </div>
 
       <ListToolbar
@@ -179,6 +223,14 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
       <div className="main-scroll">
         {!localDB || !ready || loading ? (
           <div className="empty">Loading…</div>
+        ) : viewMode === 'board' && boardField ? (
+          <KanbanBoard
+            slug={slug}
+            field={boardField}
+            docs={visible as Record<string, unknown>[]}
+            useAsTitle={meta?.useAsTitle}
+            onOpen={onOpen}
+          />
         ) : visible.length === 0 ? (
           <div className="empty">
             {search ? 'No matches on this page.' : 'No documents yet. Create one to get started.'}

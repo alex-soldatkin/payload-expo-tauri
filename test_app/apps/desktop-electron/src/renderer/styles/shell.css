@@ -181,3 +181,35 @@
 .drop-region.region-up { top: 0; left: 20%; right: 20%; height: 20%; }
 .drop-region.region-down { bottom: 0; left: 20%; right: 20%; height: 20%; }
 .drop-region.over { background: rgba(124, 92, 255, 0.18); outline: 1px solid rgba(124, 92, 255, 0.5); }
+
+.tab-dirty {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #7c5cff);
+  flex-shrink: 0;
+}
+.tab:hover .tab-dirty { display: none; }
+
+/* ---- Toasts ----------------------------------------------------------------- */
+.toast-stack {
+  position: fixed;
+  right: 16px;
+  bottom: 40px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  align-items: flex-end;
+}
+.toast {
+  padding: 8px 14px;
+  border-radius: 8px;
+  font-size: 12.5px;
+  background: rgba(30, 30, 34, 0.95);
+  border: 1px solid var(--line);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  cursor: pointer;
+}
+.toast.success { border-color: rgba(99, 214, 138, 0.5); }
+.toast.error { border-color: var(--danger, #e5484d); }
