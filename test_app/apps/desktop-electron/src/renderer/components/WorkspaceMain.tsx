@@ -16,6 +16,7 @@ import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
 import { GlobalForm } from './globals/GlobalForm'
 import { useQuickSelect } from '../workspace/useQuickSelect'
+import { useNavHistory } from '../workspace/useNavHistory'
 import {
   hydrateWorkspace,
   initialWorkspace,
@@ -64,6 +65,7 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   stateRef.current = state
   useWorkspaceKeys(state, dispatch)
   const quickSelect = useQuickSelect(state, dispatch)
+  useNavHistory(state, dispatch)
 
   // ---- Collapsible sidebar (VS Code: Cmd+B, hamburger, titlebar toggler) ----
   const [sidebarVisible, setSidebarVisible] = useState(true)
