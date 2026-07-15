@@ -4,6 +4,8 @@
 // so reorder/move/MRU are cheap array edits. MRU is kept SEPARATE from the
 // visual tab order (vscode behavior: Ctrl+Tab walks recency, the strip stays
 // spatially stable).
+import { leafOrder, removeLeaf, resizeBranch, splitLeaf } from './layout'
+
 export type TabId = string
 export type GroupId = string
 
@@ -83,6 +85,35 @@ export type Action =
   | { type: 'retitle'; tabId: TabId; title: string }
   | { type: 'mruNext' } // Ctrl+Tab: activate the next-most-recent tab
   | { type: 'hydrate'; state: WorkspaceState }
+  // Splits (vscode editor groups)
+  | { type: 'splitWithTab'; tabId: TabId; targetGroupId: GroupId; dir: import('./layout').SplitDirection }
+  | { type: 'moveTabToGroup'; tabId: TabId; targetGroupId: GroupId }
+  | { type: 'focusGroupAt'; index: number } // Cmd+1..9, visual order
+  | { type: 'resize'; branchPath: number[]; sizes: number[] }
+
+/**
+ * Pull a tab out of its group without recording it as closed. If the group
+ * empties and other groups remain, the group and its leaf are removed.
+ */
+function extractTab(state: WorkspaceState, tabId: TabId): WorkspaceState | null {
+  const group = Object.values(state.groups).find((g) => g.tabIds.includes(tabId))
+  if (!group) return null
+  const tabIds = group.tabIds.filter((t) => t !== tabId)
+  const nextActive =
+    group.activeTabId === tabId
+      ? state.mru.find((t) => t !== tabId && tabIds.includes(t)) ?? tabIds[tabIds.length - 1] ?? null
+      : group.activeTabId
+  let groups = { ...state.groups, [group.id]: { ...group, tabIds, activeTabId: nextActive } }
+  let layout = state.layout
+  let activeGroupId = state.activeGroupId
+  if (tabIds.length === 0 && Object.keys(groups).length > 1) {
+    const { [group.id]: _gone, ...rest } = groups
+    groups = rest
+    layout = removeLeaf(layout, group.id) ?? layout
+    if (activeGroupId === group.id) activeGroupId = leafOrder(layout)[0]
+  }
+  return { ...state, groups, layout, activeGroupId }
+}
 
 export function workspaceReducer(state: WorkspaceState, action: Action): WorkspaceState {
   switch (action.type) {
@@ -135,25 +166,17 @@ export function workspaceReducer(state: WorkspaceState, action: Action): Workspa
       }
     }
     case 'close': {
-      const group = Object.values(state.groups).find((g) => g.tabIds.includes(action.tabId))
       const tab = state.tabs[action.tabId]
-      if (!group || !tab) return state
-      const tabIds = group.tabIds.filter((t) => t !== action.tabId)
-      const mru = state.mru.filter((t) => t !== action.tabId)
-      const { [action.tabId]: _closed, ...tabs } = state.tabs
-      // Next active: most recent still in this group, else last tab, else none.
-      const nextActive =
-        group.activeTabId === action.tabId
-          ? mru.find((t) => tabIds.includes(t)) ?? tabIds[tabIds.length - 1] ?? null
-          : group.activeTabId
+      const pulled = extractTab(state, action.tabId)
+      if (!tab || !pulled) return state
+      const { [action.tabId]: _closed, ...tabs } = pulled.tabs
       return {
-        ...state,
+        ...pulled,
         tabs,
-        groups: { ...state.groups, [group.id]: { ...group, tabIds, activeTabId: nextActive } },
-        mru,
+        mru: pulled.mru.filter((t) => t !== action.tabId),
         recentlyClosed: [
           { kind: tab.kind, slug: tab.slug, docId: tab.docId, title: tab.title },
-          ...state.recentlyClosed,
+          ...pulled.recentlyClosed,
         ].slice(0, 20),
       }
     }
@@ -198,6 +221,54 @@ export function workspaceReducer(state: WorkspaceState, action: Action): Workspa
     }
     case 'hydrate':
       return action.state
+    case 'splitWithTab': {
+      const source = Object.values(state.groups).find((g) => g.tabIds.includes(action.tabId))
+      if (!source) return state
+      // Splitting a group with its own only tab is a no-op.
+      if (source.id === action.targetGroupId && source.tabIds.length === 1) return state
+      const pulled = extractTab(state, action.tabId)
+      if (!pulled) return state
+      const newGroup: Group = { id: newId('grp'), tabIds: [action.tabId], activeTabId: action.tabId }
+      return {
+        ...pulled,
+        groups: { ...pulled.groups, [newGroup.id]: newGroup },
+        layout: splitLeaf(pulled.layout, action.targetGroupId, newGroup.id, action.dir),
+        activeGroupId: newGroup.id,
+        mru: touchMru(pulled.mru, action.tabId),
+      }
+    }
+    case 'moveTabToGroup': {
+      const source = Object.values(state.groups).find((g) => g.tabIds.includes(action.tabId))
+      const target = state.groups[action.targetGroupId]
+      if (!source || !target || source.id === target.id) return state
+      const pulled = extractTab(state, action.tabId)
+      if (!pulled) return state
+      const freshTarget = pulled.groups[action.targetGroupId]
+      if (!freshTarget) return state
+      const tabIds = pinnedFirst([...freshTarget.tabIds, action.tabId], pulled.tabs)
+      return {
+        ...pulled,
+        groups: {
+          ...pulled.groups,
+          [freshTarget.id]: { ...freshTarget, tabIds, activeTabId: action.tabId },
+        },
+        activeGroupId: freshTarget.id,
+        mru: touchMru(pulled.mru, action.tabId),
+      }
+    }
+    case 'focusGroupAt': {
+      const order = leafOrder(state.layout)
+      const groupId = order[action.index]
+      if (!groupId || groupId === state.activeGroupId) return state
+      const group = state.groups[groupId]
+      return {
+        ...state,
+        activeGroupId: groupId,
+        mru: group?.activeTabId ? touchMru(state.mru, group.activeTabId) : state.mru,
+      }
+    }
+    case 'resize':
+      return { ...state, layout: resizeBranch(state.layout, action.branchPath, action.sizes) }
     case 'mruNext': {
       const group = state.groups[state.activeGroupId]
       if (!group || group.tabIds.length < 2) return state

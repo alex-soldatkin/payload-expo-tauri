@@ -16,6 +16,11 @@ import {
   ensureTitle,
   matchesQuery,
 } from './list/columns'
+import { filterableFields } from './list/filters/filterFields'
+import { buildSelector, matchesGroups } from './list/filters/toSelector'
+import { FilterControls } from './list/filters/FilterControls'
+import { FilterChips } from './list/filters/FilterChips'
+import type { FilterGroups } from './list/filters/types'
 
 type Props = {
   schema: AdminSchema
@@ -46,17 +51,35 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
   const sortDesc = sort.startsWith('-')
   const sortField = sortDesc ? sort.slice(1) : sort
 
+  // ---- filters -----------------------------------------------------------
+  const filterFields = useMemo(
+    () => filterableFields(displayable, Boolean(meta?.drafts)),
+    [displayable, meta?.drafts],
+  )
+  const groups: FilterGroups = config.activeFilters ?? []
+  const presets = config.presets ?? []
+  // Pushdown selector for RxDB (contains excluded — applied client-side below).
+  const { selector, containsGroups, hasContains } = useMemo(() => buildSelector(groups), [groups])
+
   const { docs, loading, totalDocs, refetch, page, setPage, hasNextPage } = useLocalCollection(
     localDB,
     slug,
-    { sort, limit: pageSize },
+    { sort, limit: pageSize, where: selector },
   )
 
   const [search, setSearch] = useState('')
-  const visible = useMemo(
-    () => docs.filter((d) => matchesQuery(d as Record<string, unknown>, search, meta?.useAsTitle)),
-    [docs, search, meta?.useAsTitle],
-  )
+  const visible = useMemo(() => {
+    let rows = docs as Record<string, unknown>[]
+    // Client-side residue: apply `contains` groups (SQL can't express $regex),
+    // and re-check the full group model so the visible page stays correct even
+    // when the local-db hook can't push OR-groups down to SQL.
+    if (groups.length > 0) {
+      rows = rows.filter((d) => matchesGroups(d, groups))
+    } else if (hasContains) {
+      rows = rows.filter((d) => matchesGroups(d, containsGroups))
+    }
+    return rows.filter((d) => matchesQuery(d, search, meta?.useAsTitle))
+  }, [docs, groups, hasContains, containsGroups, search, meta?.useAsTitle])
 
   const columnDefs = useMemo(
     () => columns.map((key) => metaOrFieldColumn(key, displayable)),
@@ -81,6 +104,21 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
     ;[next[i], next[j]] = [next[j], next[i]]
     update({ columns: next })
   }
+
+  // ---- filter handlers ---------------------------------------------------
+  const setGroups = (next: FilterGroups) =>
+    update({ activeFilters: next.filter((g) => g.length > 0) })
+  const removeRule = (gi: number, ri: number) => {
+    const next = groups.map((g) => g.slice())
+    next[gi].splice(ri, 1)
+    setGroups(next.filter((g) => g.length > 0))
+  }
+  const savePreset = (name: string) => {
+    const rest = presets.filter((p) => p.name !== name)
+    update({ presets: [...rest, { name, groups }] })
+  }
+  const deletePreset = (name: string) =>
+    update({ presets: presets.filter((p) => p.name !== name) })
 
   const createNew = async () => {
     if (!localDB) return
@@ -119,6 +157,24 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
         onCreate={createNew}
         canCreate={Boolean(localDB)}
       />
+
+      <div className="list-filter-bar">
+        <FilterControls
+          fields={filterFields}
+          groups={groups}
+          onChange={setGroups}
+          presets={presets}
+          onApplyPreset={setGroups}
+          onSavePreset={savePreset}
+          onDeletePreset={deletePreset}
+        />
+        <FilterChips
+          fields={filterFields}
+          groups={groups}
+          onRemove={removeRule}
+          onClear={() => setGroups([])}
+        />
+      </div>
 
       <div className="main-scroll">
         {!localDB || !ready || loading ? (

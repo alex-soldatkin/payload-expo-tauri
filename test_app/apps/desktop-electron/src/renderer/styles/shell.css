@@ -158,3 +158,26 @@
 }
 .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
 .tab-close:hover { background: rgba(255, 255, 255, 0.12); color: var(--ink); }
+
+/* ---- Split editor groups ---------------------------------------------------- */
+.group-view { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+.group-view.focused .tab-strip { background: rgba(0, 0, 0, 0.2); }
+.group-content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.group-content > .main { flex: 1; min-height: 0; }
+.split-handle {
+  background: var(--line);
+  transition: background 0.15s;
+}
+.split-handle[data-panel-group-direction='horizontal'] { width: 3px; cursor: col-resize; }
+.split-handle[data-panel-group-direction='vertical'] { height: 3px; cursor: row-resize; }
+.split-handle:hover, .split-handle[data-resize-handle-active] { background: var(--accent, #7c5cff); }
+
+/* Five-region drop overlay (vscode editorDropTarget) */
+.drop-overlay { position: absolute; inset: 0; z-index: 50; pointer-events: none; }
+.drop-region { position: absolute; pointer-events: auto; }
+.drop-region.region-center { inset: 20%; }
+.drop-region.region-left { top: 0; bottom: 0; left: 0; width: 20%; }
+.drop-region.region-right { top: 0; bottom: 0; right: 0; width: 20%; }
+.drop-region.region-up { top: 0; left: 20%; right: 20%; height: 20%; }
+.drop-region.region-down { bottom: 0; left: 20%; right: 20%; height: 20%; }
+.drop-region.over { background: rgba(124, 92, 255, 0.18); outline: 1px solid rgba(124, 92, 255, 0.5); }

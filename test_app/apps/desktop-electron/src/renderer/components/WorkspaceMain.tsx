@@ -13,7 +13,7 @@ import '../form/custom/registerSSOT'
 import { buildMenuTree } from '../lib/menuTree'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
-import { TabStrip } from '../workspace/TabStrip'
+import { SplitLayout } from '../workspace/SplitLayout'
 import {
   hydrateWorkspace,
   initialWorkspace,
@@ -132,50 +132,52 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
         />
 
         <div className="tab-area">
-          <TabStrip
-            group={group}
-            tabs={state.tabs}
-            onActivate={(id) => dispatch({ type: 'activate', tabId: id })}
-            onClose={(id) => dispatch({ type: 'close', tabId: id })}
-            onReorder={(from, to) => dispatch({ type: 'reorder', groupId: group.id, from, to })}
-            onPromote={(id) => dispatch({ type: 'promote', tabId: id })}
-            onPin={(id, pinned) => dispatch({ type: 'pin', tabId: id, pinned })}
+          <SplitLayout
+            state={state}
+            dispatch={dispatch}
+            renderContent={(tab) => {
+              if (tab.kind === 'list' && tab.slug) {
+                return (
+                  <DocumentList
+                    key={tab.id}
+                    schema={schema}
+                    slug={tab.slug}
+                    onOpen={(id) => openEditor(tab.slug!, id)}
+                  />
+                )
+              }
+              if (tab.kind === 'editor' && tab.slug && tab.docId) {
+                return (
+                  <DocumentForm
+                    key={tab.id}
+                    slug={tab.slug}
+                    id={tab.docId}
+                    serverURL={serverURL}
+                    token={token}
+                    rootFields={getRootFields(schema, tab.slug)}
+                    hasDrafts={Boolean(
+                      schema.menuModel.collections.find((c) => c.slug === tab.slug)?.drafts,
+                    )}
+                    onClose={() => dispatch({ type: 'close', tabId: tab.id })}
+                    onDeleted={() => dispatch({ type: 'close', tabId: tab.id })}
+                    onTitle={(title) => dispatch({ type: 'retitle', tabId: tab.id, title })}
+                  />
+                )
+              }
+              if (tab.kind === 'settings') {
+                return (
+                  <SettingsScreen
+                    serverURL={serverURL}
+                    wsURLOverride={wsURLOverride}
+                    email={email}
+                    onLogout={onLogout}
+                    onChangeServer={onChangeServer}
+                  />
+                )
+              }
+              return <div className="empty">Unknown tab.</div>
+            }}
           />
-
-          {!activeTab && <div className="empty">No open tabs — pick a collection.</div>}
-          {activeTab?.kind === 'list' && activeTab.slug && (
-            <DocumentList
-              key={activeTab.id}
-              schema={schema}
-              slug={activeTab.slug}
-              onOpen={(id) => openEditor(activeTab.slug!, id)}
-            />
-          )}
-          {activeTab?.kind === 'editor' && activeTab.slug && activeTab.docId && (
-            <DocumentForm
-              key={activeTab.id}
-              slug={activeTab.slug}
-              id={activeTab.docId}
-              serverURL={serverURL}
-              token={token}
-              rootFields={getRootFields(schema, activeTab.slug)}
-              hasDrafts={Boolean(
-                schema.menuModel.collections.find((c) => c.slug === activeTab.slug)?.drafts,
-              )}
-              onClose={() => dispatch({ type: 'close', tabId: activeTab.id })}
-              onDeleted={() => dispatch({ type: 'close', tabId: activeTab.id })}
-              onTitle={(title) => dispatch({ type: 'retitle', tabId: activeTab.id, title })}
-            />
-          )}
-          {activeTab?.kind === 'settings' && (
-            <SettingsScreen
-              serverURL={serverURL}
-              wsURLOverride={wsURLOverride}
-              email={email}
-              onLogout={onLogout}
-              onChangeServer={onChangeServer}
-            />
-          )}
         </div>
       </div>
 

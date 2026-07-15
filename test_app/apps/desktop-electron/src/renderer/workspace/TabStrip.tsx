@@ -4,14 +4,6 @@
 // tab kept in view.
 import { useEffect, useRef } from 'react'
 import {
-  DndContext,
-  PointerSensor,
-  closestCenter,
-  useSensor,
-  useSensors,
-  type DragEndEvent,
-} from '@dnd-kit/core'
-import {
   SortableContext,
   horizontalListSortingStrategy,
   useSortable,
@@ -24,14 +16,13 @@ type Props = {
   tabs: Record<TabId, Tab>
   onActivate: (tabId: TabId) => void
   onClose: (tabId: TabId) => void
-  onReorder: (from: number, to: number) => void
   onPromote: (tabId: TabId) => void
   onPin: (tabId: TabId, pinned: boolean) => void
 }
 
-export function TabStrip({ group, tabs, onActivate, onClose, onReorder, onPromote, onPin }: Props) {
-  // 4px activation distance: clicks stay clicks, drags need intent.
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+// Drag context lives in SplitLayout (drags cross groups); this strip only
+// declares the sortable items.
+export function TabStrip({ group, tabs, onActivate, onClose, onPromote, onPin }: Props) {
   const stripRef = useRef<HTMLDivElement>(null)
 
   // Keep the active tab visible on change (vscode reveal behavior).
@@ -40,18 +31,9 @@ export function TabStrip({ group, tabs, onActivate, onClose, onReorder, onPromot
     el?.scrollIntoView({ inline: 'nearest', block: 'nearest' })
   }, [group.activeTabId])
 
-  const onDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e
-    if (!over || active.id === over.id) return
-    const from = group.tabIds.indexOf(String(active.id))
-    const to = group.tabIds.indexOf(String(over.id))
-    if (from !== -1 && to !== -1) onReorder(from, to)
-  }
-
   return (
     <div className="tab-strip" ref={stripRef}>
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-        <SortableContext items={group.tabIds} strategy={horizontalListSortingStrategy}>
+      <SortableContext items={group.tabIds} strategy={horizontalListSortingStrategy}>
           {group.tabIds.map((id) => {
             const tab = tabs[id]
             if (!tab) return null
@@ -67,8 +49,7 @@ export function TabStrip({ group, tabs, onActivate, onClose, onReorder, onPromot
               />
             )
           })}
-        </SortableContext>
-      </DndContext>
+      </SortableContext>
     </div>
   )
 }

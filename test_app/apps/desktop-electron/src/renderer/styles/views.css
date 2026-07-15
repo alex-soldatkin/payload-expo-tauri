@@ -363,3 +363,172 @@
   font-size: 11.5px;
   color: var(--ink-muted);
 }
+
+/* -------------------------------------------------------------------------
+   Filter engine (issue #20 remainder): funnel button, builder/preset
+   popovers, and the active-filter chip bar. Reuses .picker-menu / .chip.
+   ------------------------------------------------------------------------- */
+.list-filter-bar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.filter-btn {
+  position: relative;
+}
+.filter-btn.on {
+  color: var(--accent, #7c5cff);
+  border-color: rgba(124, 92, 255, 0.6);
+}
+.filter-badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: rgba(124, 92, 255, 0.9);
+  color: #fff;
+  font-size: 9.5px;
+  line-height: 15px;
+  text-align: center;
+}
+
+/* Builder + presets popovers */
+.picker-menu.filter-builder,
+.picker-menu.filter-presets {
+  left: 0;
+  right: auto;
+  width: 340px;
+  max-height: 420px;
+  padding: 4px 0;
+}
+.picker-menu.filter-presets {
+  width: 260px;
+}
+.filter-empty {
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--ink-faint);
+}
+
+.filter-group {
+  margin: 4px 10px;
+  padding: 6px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.filter-or-divider {
+  margin: 6px 12px 2px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.filter-rule {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.filter-and {
+  font-size: 10px;
+  color: var(--ink-faint);
+  padding-right: 2px;
+}
+.filter-rule .filter-field,
+.filter-rule .filter-op,
+.filter-rule .filter-value {
+  padding: 4px 6px;
+  font-size: 12px;
+  min-width: 0;
+}
+.filter-rule .filter-field {
+  flex: 1 1 90px;
+}
+.filter-rule .filter-op {
+  flex: 1 1 80px;
+}
+.filter-rule .filter-value {
+  flex: 1 1 80px;
+}
+.filter-remove {
+  padding: 1px 6px;
+  font-size: 13px;
+  line-height: 1.1;
+  flex: 0 0 auto;
+}
+.filter-add {
+  display: inline-block;
+  margin: 2px 0 0 2px;
+  font-size: 12px;
+}
+.filter-builder-foot {
+  padding: 4px 12px 8px;
+}
+
+.filter-preset-row {
+  gap: 6px;
+}
+.filter-preset-name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-align: left;
+  background: none;
+  border: none;
+  font-size: 12.5px;
+  color: inherit;
+  cursor: pointer;
+}
+.filter-preset-name:hover {
+  text-decoration: underline;
+}
+.filter-preset-save {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  padding: 4px 12px 8px;
+}
+.filter-preset-save .filter-value {
+  flex: 1;
+  padding: 4px 6px;
+  font-size: 12px;
+}
+
+/* Active-filter chip bar */
+.filter-chips {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-chip-group {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.filter-chip-or {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+}
+.filter-chip-and {
+  font-size: 10px;
+  color: var(--ink-faint);
+}
+.filter-chip-text {
+  white-space: nowrap;
+}
+.filter-chips-clear {
+  font-size: 11.5px;
+}

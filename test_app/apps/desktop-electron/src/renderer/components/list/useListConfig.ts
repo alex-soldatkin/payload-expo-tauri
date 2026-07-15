@@ -1,14 +1,24 @@
-// Per-collection list preferences (columns / sort / page size) persisted to
-// settings.json via the desktop bridge under a single `listConfig` key:
-//   listConfig: Record<slug, { columns?: string[]; sort?: string; pageSize?: number }>
+// Per-collection list preferences (columns / sort / page size / filters)
+// persisted to settings.json via the desktop bridge under a single `listConfig`
+// key:
+//   listConfig: Record<slug, {
+//     columns?; sort?; pageSize?;
+//     activeFilters?: FilterRule[][];        // OR-groups, re-applied on mount
+//     presets?: { name; groups: FilterRule[][] }[];  // named local presets
+//   }>
 // Read once on mount (async, race-guarded); write-through shallow-merges the
 // whole listConfig object back so unrelated slugs are preserved.
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { FilterGroups, FilterPreset } from './filters/types'
 
 export type ListConfigEntry = {
   columns?: string[]
   sort?: string
   pageSize?: number
+  /** Active OR-group filters, re-applied when the collection re-opens. */
+  activeFilters?: FilterGroups
+  /** Named filter presets saved locally for this collection. */
+  presets?: FilterPreset[]
 }
 
 type ListConfigMap = Record<string, ListConfigEntry>
