@@ -20,6 +20,7 @@ import { DocContextMenuProvider } from './preview/DocContextMenu'
 import { ActionStepsProvider } from './preview/ActionSteps'
 import { useQuickSelect } from '../workspace/useQuickSelect'
 import { useNavHistory } from '../workspace/useNavHistory'
+import { CommandPalette } from '../workspace/CommandPalette'
 import {
   hydrateWorkspace,
   initialWorkspace,
@@ -276,6 +277,13 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
       </div>
 
       <StatusBar activeSlug={activeSlug} onOpenSettings={openSettings} />
+      <CommandPalette
+        schema={schema}
+        onOpenList={(slug) => openList(slug, 'permanent')}
+        onOpenEditor={openEditor}
+        onOpenSettings={openSettings}
+        onToggleSidebar={toggleSidebar}
+      />
     </div>
     </DocContextMenuProvider>
     </DocPeekProvider>
