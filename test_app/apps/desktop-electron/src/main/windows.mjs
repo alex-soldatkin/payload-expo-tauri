@@ -12,7 +12,7 @@ const macChrome =
     ? {
         vibrancy: 'sidebar',
         titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 20, y: 20 },
+        trafficLightPosition: { x: 20, y: 12 },
         transparent: true,
         backgroundColor: '#00000000',
       }

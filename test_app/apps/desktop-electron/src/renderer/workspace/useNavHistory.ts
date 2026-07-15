@@ -5,14 +5,34 @@
 // existing tabs (preview or permanent) are reused/activated by the reducer's
 // same-target matching, and targets whose tab has been closed simply reopen —
 // browser-like. Traversal-induced changes are suppressed from re-recording.
-import { useEffect, useRef } from 'react'
+//
+// Returns {goBack, goForward} so other inputs (trackpad swipe — useSwipeNav)
+// drive the same history. Every traversal plays a directional slide on the
+// focused pane's content, browser-style.
+import { useEffect, useMemo, useRef } from 'react'
 import type { Action, Tab, WorkspaceState } from './state'
 
 type Target = Pick<Tab, 'kind' | 'slug' | 'docId' | 'title'>
 
 const keyOf = (t: Target) => `${t.kind}|${t.slug ?? ''}|${t.docId ?? ''}`
 
-export function useNavHistory(state: WorkspaceState, dispatch: (a: Action) => void): void {
+/** Directional slide on the focused pane content (animation only). */
+export function playNavSlide(dir: 'back' | 'forward'): void {
+  const el =
+    document.querySelector('.group-view.focused .group-content') ??
+    document.querySelector('.group-content')
+  if (!el) return
+  el.classList.remove('nav-slide-back', 'nav-slide-forward')
+  // Restart the animation even when the same class re-applies.
+  void (el as HTMLElement).offsetWidth
+  el.classList.add(dir === 'back' ? 'nav-slide-back' : 'nav-slide-forward')
+  window.setTimeout(() => el.classList.remove('nav-slide-back', 'nav-slide-forward'), 300)
+}
+
+export function useNavHistory(
+  state: WorkspaceState,
+  dispatch: (a: Action) => void,
+): { goBack: () => void; goForward: () => void } {
   const back = useRef<Target[]>([])
   const forward = useRef<Target[]>([])
   const current = useRef<Target | null>(null)
@@ -44,7 +64,7 @@ export function useNavHistory(state: WorkspaceState, dispatch: (a: Action) => vo
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeKey])
 
-  useEffect(() => {
+  const api = useMemo(() => {
     const go = (dir: 'back' | 'forward') => {
       const [from, to] = dir === 'back' ? [back.current, forward.current] : [forward.current, back.current]
       const target = from.pop()
@@ -53,17 +73,25 @@ export function useNavHistory(state: WorkspaceState, dispatch: (a: Action) => vo
       suppress.current = true
       dispatch({ type: 'open', target, mode: 'preview' })
     }
+    return { goBack: () => go('back'), goForward: () => go('forward') }
+  }, [dispatch])
+
+  useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
       if (e.key === '[') {
         e.preventDefault()
-        go('back')
+        playNavSlide('back')
+        api.goBack()
       } else if (e.key === ']') {
         e.preventDefault()
-        go('forward')
+        playNavSlide('forward')
+        api.goForward()
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [dispatch])
+  }, [api])
+
+  return api
 }

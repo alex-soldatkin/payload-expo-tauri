@@ -11,6 +11,7 @@ import { StatusBar } from './StatusBar'
 import { DocumentForm } from '../form/DocumentForm'
 import '../form/custom/registerSSOT'
 import { buildMenuTree } from '../lib/menuTree'
+import { useLocalDB, useLocalMutations } from '@payload-universal/local-db'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
@@ -20,6 +21,7 @@ import { DocContextMenuProvider } from './preview/DocContextMenu'
 import { ActionStepsProvider } from './preview/ActionSteps'
 import { useQuickSelect } from '../workspace/useQuickSelect'
 import { useNavHistory } from '../workspace/useNavHistory'
+import { useSwipeNav } from '../workspace/useSwipeNav'
 import { CommandPalette } from '../workspace/CommandPalette'
 import {
   hydrateWorkspace,
@@ -69,7 +71,9 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   stateRef.current = state
   useWorkspaceKeys(state, dispatch)
   const quickSelect = useQuickSelect(state, dispatch)
-  useNavHistory(state, dispatch)
+  const nav = useNavHistory(state, dispatch)
+  // Trackpad two-finger horizontal swipe = back/forward (same history).
+  useSwipeNav(nav.goBack, nav.goForward)
 
   // ---- Collapsible sidebar (VS Code: Cmd+B, hamburger, titlebar toggler) ----
   const [sidebarVisible, setSidebarVisible] = useState(true)
@@ -173,30 +177,73 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const activeTab: Tab | undefined = group.activeTabId ? state.tabs[group.activeTabId] : undefined
   const activeSlug = activeTab?.kind !== 'settings' ? activeTab?.slug ?? null : null
 
+  // ---- Cmd/Ctrl+N: new document in the active collection --------------------
+  // Works from a list OR editor tab (globals/settings have no 'new'). Mirrors
+  // DocumentList's New-document button: create via local-first mutations
+  // (draft-status when the collection has drafts), open the editor.
+  const localDB = useLocalDB()
+  const createSlug =
+    activeTab?.kind === 'list' || activeTab?.kind === 'editor' ? activeTab.slug ?? null : null
+  const { create } = useLocalMutations(localDB, createSlug ?? '')
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.metaKey || e.ctrlKey) || e.shiftKey || e.altKey) return
+      if (e.key.toLowerCase() !== 'n') return
+      if (!createSlug || !localDB) return
+      e.preventDefault()
+      void (async () => {
+        try {
+          const drafts = schema.menuModel.collections.find((c) => c.slug === createSlug)?.drafts
+          const id = await create(drafts ? { _status: 'draft' } : {})
+          openEditor(createSlug, id)
+        } catch (err) {
+          console.error('Failed to create document:', err)
+        }
+      })()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [createSlug, localDB, create, schema, openEditor])
+
   return (
     <ActionStepsProvider>
     <DocPeekProvider onOpenEditor={openEditor}>
     <DocContextMenuProvider schema={schema} serverURL={serverURL} onOpenEditor={openEditor}>
     <div className="workspace">
       <div className="titlebar">
-        <span>Payload Universal</span>
-        <span className="no-drag" style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
-          {serverURL}
-        </span>
-        <div className="spacer" />
-        <button
-          className="icon-btn no-drag"
-          onClick={toggleSidebar}
-          title={sidebarVisible ? 'Hide sidebar (Cmd+B)' : 'Show sidebar (Cmd+B)'}
-        >
-          ▤
-        </button>
+        <div className={`titlebar-left${sidebarVisible ? ' with-sidebar' : ''}`}>
+          <button
+            className="icon-btn panel-toggle no-drag"
+            onClick={toggleSidebar}
+            title={sidebarVisible ? 'Hide sidebar (Cmd+B)' : 'Show sidebar (Cmd+B)'}
+            aria-label={sidebarVisible ? 'Hide sidebar' : 'Show sidebar'}
+          >
+            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+              <rect
+                x="1.5"
+                y="2.5"
+                width="13"
+                height="11"
+                rx="2"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.3"
+              />
+              <rect x="1.5" y="2.5" width="4.5" height="11" rx="0" fill="currentColor" opacity="0.9" />
+            </svg>
+          </button>
+        </div>
+        <div className="titlebar-main">
+          <span>Payload Universal</span>
+          <span className="no-drag" style={{ color: 'var(--ink-faint)', fontWeight: 400 }}>
+            {serverURL}
+          </span>
+        </div>
       </div>
 
       <div className="workspace-body">
         {sidebarVisible && (
         <Sidebar
-          onCollapse={toggleSidebar}
           schema={schema}
           activeSlug={activeTab?.kind === 'list' ? activeTab.slug ?? null : activeSlug}
           settingsActive={activeTab?.kind === 'settings'}

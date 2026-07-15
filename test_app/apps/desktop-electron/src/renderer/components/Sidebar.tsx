@@ -4,8 +4,6 @@ import type { AdminSchema } from '@payload-universal/admin-schema'
 import { collectionLabel, globalLabel, groupGlobals, groupCollections } from '../lib/collections'
 
 type Props = {
-  /** Collapse the sidebar (hamburger, VS Code style). */
-  onCollapse?: () => void
   /** Open a global's editor tab. */
   onSelectGlobal?: (slug: string) => void
   activeGlobalSlug?: string | null
@@ -16,19 +14,11 @@ type Props = {
   settingsActive: boolean
 }
 
-export function Sidebar({ onCollapse, onSelectGlobal, activeGlobalSlug, schema, activeSlug, onSelect, onOpenSettings, settingsActive }: Props) {
+export function Sidebar({ onSelectGlobal, activeGlobalSlug, schema, activeSlug, onSelect, onOpenSettings, settingsActive }: Props) {
   const groups = groupCollections(schema)
 
   return (
     <nav className="sidebar">
-      {onCollapse && (
-        <div className="sidebar-head">
-          <div className="spacer" />
-          <button className="icon-btn" onClick={onCollapse} title="Hide sidebar (Cmd+B)">
-            ☰
-          </button>
-        </div>
-      )}
       <div className="sidebar-scroll">
         {groups.length === 0 && <div className="empty">No collections</div>}
         {groups.map((g) => (

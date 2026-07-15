@@ -25,6 +25,7 @@ import { FilterChips } from './list/filters/FilterChips'
 import type { FilterGroups } from './list/filters/types'
 import { eligibleBoardFields } from './list/board/eligibility'
 import { KanbanBoard } from './list/board/KanbanBoard'
+import { cardFieldCols } from './list/CardFields'
 import { eligibleDateFields } from './list/calendar/eligibility'
 import { CalendarView } from './list/calendar/CalendarView'
 import { eligibleGanttDateFields } from './list/gantt/eligibility'
@@ -101,6 +102,11 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
     () => columns.map((key) => metaOrFieldColumn(key, displayable)),
     [columns, displayable],
   )
+  // The configured columns repeated on board cards / calendar chips / gantt
+  // bars (gear-icon flow) — minus the title (already the headline), the meta
+  // timestamp (cards show it), and whatever field the view itself visualizes.
+  const cardColsFor = (exclude: Array<string | undefined>) =>
+    cardFieldCols(columnDefs, [titleKey, 'updatedAt', ...exclude])
 
   // ---- row selection + bulk actions --------------------------------------
   // Selection lives here (the list owns it); cleared whenever the collection or
@@ -218,6 +224,19 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
       console.error('Failed to create document:', err)
     }
   }
+
+  // Esc clears the multi-selection (in every view) — unless a peek card or
+  // action-step modal is open, which own Esc for dismissal.
+  useEffect(() => {
+    if (selectedIds.size === 0) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return
+      if (document.querySelector('.peek-overlay')) return
+      clearSelection()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedIds, clearSelection])
 
   const totalPages = Math.max(1, Math.ceil(totalDocs / pageSize))
 
@@ -385,6 +404,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleSelect={toggleOne}
+            cardCols={cardColsFor([boardField.name])}
           />
         ) : viewMode === 'calendar' && calendarField?.name ? (
           <CalendarView
@@ -396,6 +416,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleSelect={toggleOne}
+            cardCols={cardColsFor([calendarField.name])}
+            update={updateDoc}
           />
         ) : viewMode === 'gantt' && ganttStartField?.name && ganttEndField?.name ? (
           <GanttView
@@ -408,6 +430,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleSelect={toggleOne}
+            cardCols={cardColsFor([ganttStartField.name, ganttEndField.name])}
             update={updateDoc}
           />
         ) : visible.length === 0 ? (

@@ -5,6 +5,7 @@
 import { useDroppable } from '@dnd-kit/core'
 import { StatusBadge } from '../../badges/StatusBadge'
 import { KanbanCard } from './KanbanCard'
+import type { DisplayField } from '../columns'
 
 export const NO_VALUE = '__none__'
 
@@ -19,9 +20,15 @@ type Props = {
   onDocMenu?: (id: string, x: number, y: number) => void
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
+  suppressClickRef?: React.MutableRefObject<boolean>
+  /** Ids being carried by the current drag (multi-select drags carry many). */
+  draggingIds?: string[]
+  /** Ids that just landed in a new column — animated into place briefly. */
+  placedIds?: Set<string>
+  cardCols?: DisplayField[]
 }
 
-export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect }: Props) {
+export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect, suppressClickRef, draggingIds, placedIds, cardCols }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${value ?? NO_VALUE}` })
 
   return (
@@ -45,6 +52,10 @@ export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, o
             onDocMenu={onDocMenu}
             selected={selectedIds?.has(String(doc.id ?? ''))}
             onToggleSelect={onToggleSelect}
+            suppressClickRef={suppressClickRef}
+            carried={draggingIds?.includes(String(doc.id ?? ''))}
+            placed={placedIds?.has(String(doc.id ?? ''))}
+            cardCols={cardCols}
             key={String(doc.id ?? '')}
             doc={doc}
             useAsTitle={useAsTitle}

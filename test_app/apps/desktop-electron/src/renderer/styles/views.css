@@ -723,24 +723,79 @@
   color: var(--accent);
   font-weight: 700;
 }
-/* Full-width chip (like .chip / board-card-title) — ellipsised, click → open. */
+/* Chip = a small block card sized by content, constrained to the day-cell
+   width (never widens the cell) and growing DOWNWARD. Title line then stacked
+   compact field lines; every line ellipsises. */
 .cal-chip {
-  display: block;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  box-sizing: border-box;
   width: 100%;
+  min-width: 0;
+  max-width: 100%;
   text-align: left;
   font-size: 11px;
   line-height: 1.3;
-  padding: 2px 5px;
+  padding: 3px 6px;
   border-radius: 4px;
   border: 1px solid var(--line);
   background: var(--surface-hover);
   color: var(--ink);
   cursor: pointer;
   overflow: hidden;
+  user-select: none;
+}
+.cal-chip:hover {
+  background: var(--surface);
+}
+.cal-chip-title {
+  font-weight: 600;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.cal-chip:hover {
+/* The stacked field lines under the title — keep them tight inside a chip. */
+.cal-chip .card-fields {
+  margin: 0;
+  gap: 1px;
+  min-width: 0;
+  max-width: 100%;
+}
+.cal-chip .card-field {
+  font-size: 10px;
+  min-width: 0;
+  max-width: 100%;
+}
+.cal-chip .card-field-value {
+  min-width: 0;
+}
+/* Dense cells (more chips than the visible cap) shrink chip paddings. */
+.cal-cell.dense .cal-chip {
+  padding: 2px 5px;
+  gap: 0;
+}
+.cal-cell.dense .cal-chip .card-field {
+  font-size: 9px;
+}
+/* Day cell tints while a chip is dragged over it (mirrors .board-col.over). */
+.cal-cell.over {
+  background: rgba(124, 92, 255, 0.16);
+  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.45);
+}
+/* The in-cell chip dims while its DragOverlay preview moves. */
+.cal-chip.dragging {
+  opacity: 0.4;
+}
+/* DragOverlay preview: a floating chip pinned to a sensible width so it reads
+   the same as in a cell but is free of the cell's overflow clip. */
+.cal-chip.overlay {
+  width: 200px;
+  max-width: 200px;
+  cursor: grabbing;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.28);
   background: var(--surface);
 }
 .cal-overflow {
@@ -1010,4 +1065,152 @@
   overflow: hidden;
   text-overflow: ellipsis;
   pointer-events: none;
+}
+
+/* The drag preview lives in a body-level DragOverlay portal, so it can't be
+   clipped by column overflow. Solid panel background (not the translucent
+   surface) so underlying columns don't bleed through while it moves. */
+.board-card.overlay {
+  width: 216px;
+  background: var(--panel-bg);
+  border-color: var(--line-strong);
+  box-shadow: 0 8px 24px var(--shadow);
+  cursor: grabbing;
+}
+
+/* Gantt edge-resize handles — appear on bar hover; each drags only its own
+   date. Wider hit area than the visible grip line for easy grabbing. */
+.gantt-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: ew-resize;
+  opacity: 0;
+  transition: opacity 0.1s ease;
+}
+.gantt-handle::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--accent, #7c5cff);
+}
+.gantt-handle.left { left: -3px; }
+.gantt-handle.left::after { left: 3px; }
+.gantt-handle.right { right: -3px; }
+.gantt-handle.right::after { right: 3px; }
+.gantt-bar:hover .gantt-handle,
+.gantt-bar.dragging .gantt-handle {
+  opacity: 1;
+}
+
+/* Multi-card drag: carried source cards gather (shrink toward a ghost) while
+   the overlay shows a fanned deck; dropped cards pop into their new column. */
+.board-card.gathering {
+  transform: scale(0.94);
+  opacity: 0.35;
+  transition: transform 0.18s ease, opacity 0.18s ease;
+}
+.board-card-stack {
+  position: relative;
+  width: 216px;
+}
+.board-card-stack .board-card.overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 216px;
+}
+/* Fan the deck: front card upright, the two behind peek out with a tilt. */
+.board-card-stack .stacked-0 { z-index: 3; }
+.board-card-stack .stacked-1 { z-index: 2; transform: translate(5px, 6px) rotate(2deg); opacity: 0.9; }
+.board-card-stack .stacked-2 { z-index: 1; transform: translate(10px, 12px) rotate(4deg); opacity: 0.75; }
+.board-stack-count {
+  position: absolute;
+  z-index: 4;
+  top: -8px;
+  right: -8px;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  background: var(--accent, #7c5cff);
+  color: var(--accent-ink, #fff);
+  box-shadow: 0 2px 8px var(--shadow);
+}
+@keyframes board-card-place {
+  0% { transform: scale(0.92); opacity: 0.2; }
+  60% { transform: scale(1.03); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.board-card.placed {
+  animation: board-card-place 0.3s ease;
+}
+
+/* Extra configured fields on cards/chips/bars (gear-icon column flow). */
+.card-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 2px 0;
+}
+.card-field {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  min-width: 0;
+}
+.card-field-label {
+  color: var(--ink-faint);
+  flex: 0 0 auto;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.card-field .card-field-value {
+  color: var(--ink-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+/* Inline variant: values only, dot-separated, for one-line chips/bars. */
+.card-fields.inline {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 0;
+  margin: 0;
+  min-width: 0;
+}
+.card-fields.inline .card-field-value {
+  color: var(--ink-faint);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.card-fields.inline .card-field-value::before {
+  content: '·';
+  margin: 0 4px;
+}
+.cal-chip .card-fields.inline {
+  overflow: hidden;
+}
+
+/* Keyboard hint in the selection bar. */
+.selection-hint {
+  font-size: 11px;
+  color: var(--ink-faint);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 1px 6px;
 }

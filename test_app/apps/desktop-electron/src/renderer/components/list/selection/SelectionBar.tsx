@@ -98,6 +98,7 @@ export function SelectionBar({
       <button type="button" className="link selection-clear" onClick={onClear} disabled={busy}>
         Clear
       </button>
+      <span className="selection-hint">Esc clears</span>
       <div className="selection-actions">
         {actions.map((meta) => {
           const registered = Boolean(resolveHandler(slug, 'list', meta.key))

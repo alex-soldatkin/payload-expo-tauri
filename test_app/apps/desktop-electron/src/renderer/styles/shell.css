@@ -9,18 +9,51 @@
   flex: 0 0 38px;
   -webkit-app-region: drag;
   display: flex;
-  align-items: center;
-  padding: 0 12px 0 80px;
-  gap: 10px;
+  align-items: stretch;
   border-bottom: 1px solid var(--line);
   font-size: 12.5px;
   font-weight: 600;
+}
+/* Sidebar-width segment holding the panel toggle. Its right border continues
+   the sidebar/main divider up through the titlebar. Left padding (80px) clears
+   the macOS traffic lights (trafficLightPosition x:20 in windows.mjs). When the
+   sidebar is collapsed the segment drops its fixed width + divider cleanly. */
+.titlebar-left {
+  display: flex;
+  align-items: center;
+  padding-left: 80px;
+  padding-right: 8px;
+}
+.titlebar-left.with-sidebar {
+  width: 220px;
+  box-sizing: border-box;
+  border-right: 1px solid var(--line);
+}
+.titlebar-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px;
 }
 .titlebar .spacer {
   flex: 1;
 }
 .titlebar .no-drag {
   -webkit-app-region: no-drag;
+}
+.titlebar .panel-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 6px;
+  color: var(--ink-muted);
+}
+.titlebar .panel-toggle:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
 }
 .workspace-body {
   flex: 1;
@@ -160,7 +193,7 @@
 .tab-close:hover { background: var(--surface-active); color: var(--ink); }
 
 /* ---- Split editor groups ---------------------------------------------------- */
-.group-view { display: flex; flex-direction: column; height: 100%; min-width: 0; }
+.group-view { display: flex; flex-direction: column; height: 100%; min-width: 0; overflow: hidden; /* swipe-nav translate stays inside the pane */ }
 .group-view.focused .tab-strip { background: var(--tabstrip-focused-bg); }
 .group-content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .group-content > .main { flex: 1; min-height: 0; }
@@ -395,3 +428,16 @@
   font-size: 11px;
   color: var(--ink-faint);
 }
+
+/* Back/forward slide — played on the focused pane's content whenever nav
+   history traverses (Cmd+[/], trackpad swipe). Browser-like directional cue. */
+@keyframes nav-slide-back {
+  from { transform: translateX(-28px); opacity: 0.35; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes nav-slide-forward {
+  from { transform: translateX(28px); opacity: 0.35; }
+  to { transform: translateX(0); opacity: 1; }
+}
+.group-content.nav-slide-back { animation: nav-slide-back 0.22s ease-out; }
+.group-content.nav-slide-forward { animation: nav-slide-forward 0.22s ease-out; }

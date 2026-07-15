@@ -4,19 +4,23 @@
 // docs are the SAME filtered `visible` array the table renders; no fetching
 // here. Dragging a card into a different column writes that field via the
 // local-first mutation (undefined for the 'No value' column).
-import { useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import {
   DndContext,
+  DragOverlay,
   PointerSensor,
   pointerWithin,
   useSensor,
   useSensors,
   type DragEndEvent,
+  type DragStartEvent,
 } from '@dnd-kit/core'
 import { useLocalDB, useLocalMutations } from '@payload-universal/local-db'
 import type { SchemaField } from '../../../form/types'
 import { optionValue, resolveOptionLabel } from '../../../form/labels'
 import { KanbanColumn, NO_VALUE } from './KanbanColumn'
+import { KanbanCardBody } from './KanbanCard'
+import type { DisplayField } from '../columns'
 
 type Props = {
   slug: string
@@ -28,11 +32,13 @@ type Props = {
   onDocMenu?: (id: string, x: number, y: number) => void
   selectedIds?: Set<string>
   onToggleSelect?: (id: string) => void
+  /** Configured extra columns (gear icon flow) repeated on each card. */
+  cardCols?: DisplayField[]
 }
 
 type Column = { value: string | null; label: string }
 
-export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect }: Props) {
+export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect, cardCols }: Props) {
   const localDB = useLocalDB()
   const { update } = useLocalMutations(localDB, slug)
   const fieldName = field.name ?? ''
@@ -65,26 +71,65 @@ export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onD
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
   )
 
+  // The docs under drag — rendered as a DragOverlay so the moving preview
+  // escapes the column's overflow clipping (in-column cards stay dimmed).
+  // Dragging a card that is part of the current multi-selection carries the
+  // WHOLE selection: source cards 'gather' (shrink/fade), the overlay shows a
+  // stacked deck with a count, and the drop moves every carried card.
+  const [dragIds, setDragIds] = useState<string[]>([])
+  const dragDocs = useMemo(
+    () => dragIds.map((id) => docs.find((d) => String(d.id ?? '') === id)).filter(Boolean) as Record<string, unknown>[],
+    [dragIds, docs],
+  )
+  // Ids that just landed in a new column — briefly animated into place.
+  const [placedIds, setPlacedIds] = useState<Set<string>>(new Set())
+  const placedTimer = useRef<number | null>(null)
+  // Browsers fire a click on the source card after a completed drag; cards
+  // check-and-clear this so a drop doesn't also toggle selection.
+  const suppressClickRef = useRef(false)
+
+  const onDragStart = (e: DragStartEvent) => {
+    const id = String(e.active.id)
+    setDragIds(selectedIds?.has(id) && selectedIds.size > 1 ? [...selectedIds] : [id])
+  }
+
   const onDragEnd = (e: DragEndEvent) => {
-    const { active, over } = e
+    const carried = dragIds
+    setDragIds([])
+    suppressClickRef.current = true
+    const { over } = e
     if (!over) return
-    const id = String(active.id)
     const overId = String(over.id)
     if (!overId.startsWith('col:')) return
     const raw = overId.slice('col:'.length)
     const target = raw === NO_VALUE ? null : raw
-    const doc = docs.find((d) => String(d.id ?? '') === id)
-    if (!doc) return
-    const current = typeof doc[fieldName] === 'string' ? (doc[fieldName] as string) : null
-    if (current === target) return // dropped on its own column — no-op
-    // 'No value' clears the field; otherwise set the option value.
-    void update(id, { [fieldName]: target ?? undefined }).catch((err) => {
-      console.error('Failed to move card:', err)
-    })
+    const moved: string[] = []
+    for (const id of carried) {
+      const doc = docs.find((d) => String(d.id ?? '') === id)
+      if (!doc) continue
+      const current = typeof doc[fieldName] === 'string' ? (doc[fieldName] as string) : null
+      if (current === target) continue // already in the target column — no-op
+      moved.push(id)
+      // 'No value' clears the field; otherwise set the option value.
+      void update(id, { [fieldName]: target ?? undefined }).catch((err) => {
+        console.error('Failed to move card:', err)
+      })
+    }
+    if (moved.length > 0) {
+      setPlacedIds(new Set(moved))
+      if (placedTimer.current !== null) window.clearTimeout(placedTimer.current)
+      placedTimer.current = window.setTimeout(() => setPlacedIds(new Set()), 450)
+    }
   }
 
   return (
-    <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragEnd={onDragEnd}>
+    <DndContext
+      sensors={sensors}
+      collisionDetection={pointerWithin}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+      onDragCancel={() => setDragIds([])}
+    >
       <div className="board">
         {columns.map((col) => (
           <KanbanColumn
@@ -98,9 +143,32 @@ export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onD
             onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleSelect={onToggleSelect}
+            suppressClickRef={suppressClickRef}
+            draggingIds={dragIds}
+            placedIds={placedIds}
+            cardCols={cardCols}
           />
         ))}
       </div>
+      <DragOverlay dropAnimation={null}>
+        {dragDocs.length > 0 ? (
+          <div className="board-card-stack">
+            {/* Up to three cards fan out beneath the front one; a count pill
+                tops the deck when more are carried than shown. */}
+            {dragDocs.slice(0, 3).map((doc, i) => (
+              <div
+                key={String(doc.id ?? i)}
+                className={`board-card overlay stacked-${i}`}
+              >
+                <KanbanCardBody doc={doc} useAsTitle={useAsTitle} cardCols={cardCols} />
+              </div>
+            ))}
+            {dragDocs.length > 1 && (
+              <span className="board-stack-count">{dragDocs.length}</span>
+            )}
+          </div>
+        ) : null}
+      </DragOverlay>
     </DndContext>
   )
 }

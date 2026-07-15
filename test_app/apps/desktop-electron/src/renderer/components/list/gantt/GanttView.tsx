@@ -13,6 +13,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { longPressHandlers } from '../../../lib/longPress'
 import { docTitle } from '../../../lib/doc'
+import { CardFields } from '../CardFields'
+import type { DisplayField } from '../columns'
 import {
   DAY_WIDTH,
   addDays,
@@ -42,6 +44,8 @@ type Props = {
   onToggleSelect?: (id: string) => void
   /** Local-first mutation to persist a dragged bar's new start/end dates. */
   update: (id: string, patch: Record<string, unknown>) => Promise<unknown>
+  /** Configured extra columns (gear icon flow) shown after bar titles. */
+  cardCols?: DisplayField[]
 }
 
 /**
@@ -84,6 +88,7 @@ export function GanttView({
   selectedIds,
   onToggleSelect,
   update,
+  cardCols,
 }: Props) {
   // Split docs into scheduled (both dates) and unscheduled (missing either).
   const { scheduled, unscheduled } = useMemo(() => {
@@ -129,24 +134,47 @@ export function GanttView({
     el.scrollLeft = Math.max(0, anchorX - el.clientWidth / 4)
   }, [domain, nowX, scheduled, startField])
 
-  // Live drag delta (whole days) keyed by doc id — applied optimistically to the
-  // bar's x-offset while dragging; committed via `update` on pointerup.
-  const [dragDelta, setDragDelta] = useState<{ id: string; days: number } | null>(null)
+  // Live drag delta (whole days) keyed by doc id — applied optimistically to
+  // the bar while dragging; committed via `update` on pointerup. `mode` picks
+  // what the delta means: 'move' shifts both dates, 'start'/'end' resize one
+  // edge (via the hover handles) and never invert the bar (span clamps at 0).
+  type DragMode = 'move' | 'start' | 'end'
+  // `ids` usually holds one doc — but a 'move' drag that starts on a bar that
+  // is part of the current multi-selection carries the WHOLE selection, every
+  // carried bar shifting by the same day delta.
+  const [dragDelta, setDragDelta] = useState<{ ids: string[]; days: number; mode: DragMode } | null>(
+    null,
+  )
   // Browsers fire a click after pointerup on the same element, so a completed
   // drag would also toggle selection — swallow the click that follows a drag.
   const suppressClick = useRef(false)
 
-  const startDrag = (doc: Record<string, unknown>) => (e: React.PointerEvent) => {
+  const startDrag = (doc: Record<string, unknown>, mode: DragMode) => (e: React.PointerEvent) => {
     if (e.button !== 0) return
+    // Edge handles sit inside the bar — don't let a resize also start a move.
+    e.stopPropagation()
     const id = String(doc.id ?? '')
+    // A move-drag on a selected bar carries the whole selection along.
+    const ids =
+      mode === 'move' && selectedIds?.has(id) && selectedIds.size > 1 ? [...selectedIds] : [id]
     const originX = e.clientX
     const el = e.currentTarget as HTMLElement
     el.setPointerCapture(e.pointerId)
 
+    // Days between the two dates — resize clamps so the span never inverts.
+    const span = daysBetween(valueToDay(doc[startField])!, valueToDay(doc[endField])!)
+    const clampDays = (days: number): number => {
+      if (mode === 'start') return Math.min(days, span) // start can't pass end
+      if (mode === 'end') return Math.max(days, -span) // end can't pass start
+      return days
+    }
+
     const onMove = (ev: PointerEvent) => {
-      const days = Math.round((ev.clientX - originX) / DAY_WIDTH)
+      const days = clampDays(Math.round((ev.clientX - originX) / DAY_WIDTH))
       setDragDelta((prev) =>
-        prev && prev.id === id && prev.days === days ? prev : { id, days },
+        prev && prev.days === days && prev.mode === mode && prev.ids[0] === ids[0]
+          ? prev
+          : { ids, days, mode },
       )
     }
     const onUp = (ev: PointerEvent) => {
@@ -158,14 +186,26 @@ export function GanttView({
       // Ignore drags under half a day (lets a plain click fall through).
       if (Math.abs(rawDays) < 0.5) return
       suppressClick.current = true
-      const days = Math.round(rawDays)
+      const days = clampDays(Math.round(rawDays))
       if (days === 0) return
-      const nextStart = shiftValue(doc[startField], days)
-      const nextEnd = shiftValue(doc[endField], days)
-      if (nextStart == null || nextEnd == null) return
-      void update(id, { [startField]: nextStart, [endField]: nextEnd }).catch((err) => {
-        console.error('Failed to reschedule:', err)
-      })
+      for (const carriedId of ids) {
+        const carried = docs.find((d) => String(d.id ?? '') === carriedId)
+        if (!carried) continue
+        const patch: Record<string, unknown> = {}
+        if (mode !== 'end') {
+          const nextStart = shiftValue(carried[startField], days)
+          if (nextStart == null) continue
+          patch[startField] = nextStart
+        }
+        if (mode !== 'start') {
+          const nextEnd = shiftValue(carried[endField], days)
+          if (nextEnd == null) continue
+          patch[endField] = nextEnd
+        }
+        void update(carriedId, patch).catch((err) => {
+          console.error('Failed to reschedule:', err)
+        })
+      }
     }
     el.addEventListener('pointermove', onMove)
     el.addEventListener('pointerup', onUp)
@@ -195,7 +235,13 @@ export function GanttView({
                   e.preventDefault()
                   onDocMenu(id, e.clientX, e.clientY)
                 }}
-                onClick={() => (onToggleSelect ? onToggleSelect(id) : onOpen(id))}
+                onClick={(e) =>
+                  e.metaKey || e.ctrlKey
+                    ? onOpen(id)
+                    : onToggleSelect
+                      ? onToggleSelect(id)
+                      : onOpen(id)
+                }
                 onDoubleClick={() => onOpen(id)}
               >
                 {docTitle(doc, useAsTitle)}
@@ -238,10 +284,14 @@ export function GanttView({
               const id = String(doc.id ?? '')
               const start = valueToDay(doc[startField])!
               const end = valueToDay(doc[endField])!
-              // Bars span inclusive of the end day; delta shifts both edges.
-              const delta = dragDelta?.id === id ? dragDelta.days : 0
-              const x = dayToX(domain, start) + delta * DAY_WIDTH
-              const span = Math.max(0, daysBetween(start, end)) + 1
+              // Bars span inclusive of the end day. A live drag applies its
+              // delta per mode: 'move' slides the bar, 'start'/'end' pin the
+              // opposite edge and grow/shrink the span.
+              const drag = dragDelta?.ids.includes(id) ? dragDelta : null
+              const startDelta = drag && drag.mode !== 'end' ? drag.days : 0
+              const endDelta = drag && drag.mode !== 'start' ? drag.days : 0
+              const x = dayToX(domain, start) + startDelta * DAY_WIDTH
+              const span = Math.max(0, daysBetween(start, end) - startDelta + endDelta) + 1
               const w = span * DAY_WIDTH
               // Narrow bars can't hold their title — set it beside the bar
               // instead of truncating it to a letter or two inside.
@@ -250,27 +300,47 @@ export function GanttView({
               return (
                 <div key={id} style={{ display: 'contents' }}>
                   <div
-                    className={`gantt-bar${selectedIds?.has(id) ? ' selected' : ''}${delta !== 0 ? ' dragging' : ''}`}
+                    className={`gantt-bar${selectedIds?.has(id) ? ' selected' : ''}${drag && drag.days !== 0 ? ' dragging' : ''}`}
                     style={{ top: i * ROW_H + 4, left: x, width: Math.max(w, 6), height: ROW_H - 8 }}
                     title={title}
                     {...(onPeek ? longPressHandlers(() => onPeek(id)) : {})}
-                    onPointerDown={startDrag(doc)}
+                    onPointerDown={startDrag(doc, 'move')}
                     onContextMenu={(e) => {
                       if (!onDocMenu) return
                       e.preventDefault()
                       onDocMenu(id, e.clientX, e.clientY)
                     }}
-                    onClick={() => {
+                    onClick={(e) => {
                       if (suppressClick.current) {
                         suppressClick.current = false
                         return
                       }
+                      // Cmd/Ctrl+click: open in a tab, leave selection alone.
+                      if (e.metaKey || e.ctrlKey) return onOpen(id)
                       if (onToggleSelect) onToggleSelect(id)
                       else onOpen(id)
                     }}
                     onDoubleClick={() => onOpen(id)}
                   >
-                    {labelInside && <span className="gantt-bar-label">{title}</span>}
+                    {labelInside && (
+                      <span className="gantt-bar-label">
+                        {title}
+                        {cardCols && cardCols.length > 0 && (
+                          <CardFields doc={doc} cols={cardCols} inline />
+                        )}
+                      </span>
+                    )}
+                    {/* Hover handles: drag an edge to change only that date. */}
+                    <span
+                      className="gantt-handle left"
+                      onPointerDown={startDrag(doc, 'start')}
+                      title={`Adjust ${startField}`}
+                    />
+                    <span
+                      className="gantt-handle right"
+                      onPointerDown={startDrag(doc, 'end')}
+                      title={`Adjust ${endField}`}
+                    />
                   </div>
                   {!labelInside && (
                     <span
@@ -278,6 +348,9 @@ export function GanttView({
                       style={{ top: i * ROW_H + 4, left: x + Math.max(w, 6) + 6, height: ROW_H - 8 }}
                     >
                       {title}
+                      {cardCols && cardCols.length > 0 && (
+                        <CardFields doc={doc} cols={cardCols} inline />
+                      )}
                     </span>
                   )}
                 </div>
@@ -305,7 +378,13 @@ export function GanttView({
                   e.preventDefault()
                   onDocMenu(id, e.clientX, e.clientY)
                 }}
-                onClick={() => (onToggleSelect ? onToggleSelect(id) : onOpen(id))}
+                onClick={(e) =>
+                  e.metaKey || e.ctrlKey
+                    ? onOpen(id)
+                    : onToggleSelect
+                      ? onToggleSelect(id)
+                      : onOpen(id)
+                }
                 onDoubleClick={() => onOpen(id)}
               >
                 {docTitle(doc, useAsTitle)}
