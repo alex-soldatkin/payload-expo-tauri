@@ -28,9 +28,11 @@ type Props = {
   onOpen: (id: string) => void
   onPeek?: (id: string) => void
   onDocMenu?: (id: string, x: number, y: number) => void
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
-export function CalendarView({ fieldName, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
+export function CalendarView({ fieldName, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect }: Props) {
   const [cursor, setCursor] = useState<MonthCursor>(() => cursorFromKey(todayKey()))
 
   // Bucket docs by their local day key for the chosen field; count undated.
@@ -101,7 +103,7 @@ export function CalendarView({ fieldName, docs, useAsTitle, onOpen, onPeek, onDo
                   <button
                     key={id}
                     type="button"
-                    className="cal-chip"
+                    className={`cal-chip${selectedIds?.has(id) ? ' selected' : ''}`}
                     title={docTitle(doc, useAsTitle)}
                     {...(onPeek ? longPressHandlers(() => onPeek(id)) : {})}
                     onContextMenu={(e) => {
@@ -109,7 +111,8 @@ export function CalendarView({ fieldName, docs, useAsTitle, onOpen, onPeek, onDo
                       e.preventDefault()
                       onDocMenu(id, e.clientX, e.clientY)
                     }}
-                    onClick={() => onOpen(id)}
+                    onClick={() => (onToggleSelect ? onToggleSelect(id) : onOpen(id))}
+                    onDoubleClick={() => onOpen(id)}
                   >
                     {docTitle(doc, useAsTitle)}
                   </button>

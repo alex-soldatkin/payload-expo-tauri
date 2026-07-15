@@ -16,9 +16,11 @@ type Props = {
   onOpen: (id: string) => void
   onPeek?: (id: string) => void
   onDocMenu?: (id: string, x: number, y: number) => void
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
-export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
+export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect }: Props) {
   const { setNodeRef, isOver } = useDroppable({ id: `col:${value ?? NO_VALUE}` })
 
   return (
@@ -32,6 +34,8 @@ export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, o
           <KanbanCard
             onPeek={onPeek}
             onDocMenu={onDocMenu}
+            selected={selectedIds?.has(String(doc.id ?? ''))}
+            onToggleSelect={onToggleSelect}
             key={String(doc.id ?? '')}
             doc={doc}
             useAsTitle={useAsTitle}

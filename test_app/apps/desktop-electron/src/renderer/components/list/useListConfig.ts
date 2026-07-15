@@ -76,11 +76,18 @@ export function useListConfig(slug: string): {
     (patch: ListConfigEntry) => {
       setConfig((prev) => {
         const next = { ...prev, ...patch }
-        const nextMap = { ...mapRef.current, [slug]: next }
-        mapRef.current = nextMap
-        // Fire-and-forget; the merge on the main side is a shallow overwrite of
-        // the whole listConfig key, which is exactly the map we hold here.
-        void window.payloadDesktop.setSettings({ [SETTINGS_KEY]: nextMap })
+        // Read-merge-write at WRITE time: holding the whole map from mount and
+        // writing it back resurrects stale entries — a long-lived instance
+        // would clobber changes made by other panes (or manual edits) for
+        // every OTHER slug. Only this slug's entry is ours to overwrite.
+        void window.payloadDesktop
+          .getSettings()
+          .then((settings) => {
+            const freshMap = readMap(settings)
+            mapRef.current = { ...freshMap, [slug]: next }
+            return window.payloadDesktop.setSettings({ [SETTINGS_KEY]: mapRef.current })
+          })
+          .catch(() => {})
         return next
       })
     },

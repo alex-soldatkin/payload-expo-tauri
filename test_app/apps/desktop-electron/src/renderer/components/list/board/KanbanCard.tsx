@@ -13,9 +13,11 @@ type Props = {
   onOpen: (id: string) => void
   onPeek?: (id: string) => void
   onDocMenu?: (id: string, x: number, y: number) => void
+  selected?: boolean
+  onToggleSelect?: (id: string) => void
 }
 
-export function KanbanCard({ doc, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
+export function KanbanCard({ doc, useAsTitle, onOpen, onPeek, onDocMenu, selected, onToggleSelect }: Props) {
   const id = String(doc.id ?? '')
   const modified = Boolean(doc._locallyModified)
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id })
@@ -24,7 +26,7 @@ export function KanbanCard({ doc, useAsTitle, onOpen, onPeek, onDocMenu }: Props
     <div
       ref={setNodeRef}
       style={transform ? { transform: CSS.Translate.toString(transform) } : undefined}
-      className={`board-card${isDragging ? ' dragging' : ''}`}
+      className={`board-card${isDragging ? ' dragging' : ''}${selected ? ' selected' : ''}`}
       {...attributes}
       {...listeners}
       role="button"
@@ -35,7 +37,8 @@ export function KanbanCard({ doc, useAsTitle, onOpen, onPeek, onDocMenu }: Props
         e.preventDefault()
         onDocMenu(id, e.clientX, e.clientY)
       }}
-      onClick={() => onOpen(id)}
+      onClick={() => (onToggleSelect ? onToggleSelect(id) : onOpen(id))}
+      onDoubleClick={() => onOpen(id)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()

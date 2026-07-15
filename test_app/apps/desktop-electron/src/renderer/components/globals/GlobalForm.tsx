@@ -125,7 +125,15 @@ export function GlobalForm({ slug, schema, serverURL, token, onTitle }: Props) {
 
   return (
     <FormEngineProvider value={engine}>
-      <div className="main">
+      <div
+        className="main"
+        onKeyDown={(e) => {
+          if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
+            e.preventDefault()
+            void save()
+          }
+        }}
+      >
         <div className="form-layout">
           <div className="form-main">{mainFields.map((f) => renderField(f, ''))}</div>
           {sidebarFields.length > 0 && (

@@ -82,11 +82,15 @@ export function ListTable({
               e.preventDefault()
               onDocMenu(id, e.clientX, e.clientY)
             }}
-            onClick={() => onOpen(id)}
+            onClick={() => onToggleOne(id)}
+            onDoubleClick={() => onOpen(id)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === ' ') {
+              if (e.key === 'Enter') {
                 e.preventDefault()
                 onOpen(id)
+              } else if (e.key === ' ') {
+                e.preventDefault()
+                onToggleOne(id)
               }
             }}
           >

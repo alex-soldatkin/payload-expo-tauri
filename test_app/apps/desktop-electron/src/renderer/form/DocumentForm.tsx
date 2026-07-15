@@ -242,7 +242,17 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
 
   return (
     <FormEngineProvider value={engine}>
-      <div className="main">
+      <div
+        className="main"
+        onKeyDown={(e) => {
+          // Cmd/Ctrl+S saves keeping the current _status (scoped to this form's
+          // DOM so only the pane being edited saves in split layouts).
+          if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 's') {
+            e.preventDefault()
+            void save()()
+          }
+        }}
+      >
         <div className="main-header">
           <button className="link" onClick={onClose}>‹ Back</button>
           <span className="doc-meta">

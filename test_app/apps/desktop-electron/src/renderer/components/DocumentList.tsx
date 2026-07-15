@@ -303,7 +303,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
         />
       </div>
 
-      {viewMode === 'table' && selectedIds.size > 0 && (
+      {selectedIds.size > 0 && (
         <SelectionBar
           slug={slug}
           serverURL={serverURL}
@@ -327,6 +327,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onOpen={onOpen}
             onPeek={onPeek}
             onDocMenu={onDocMenu}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleOne}
           />
         ) : viewMode === 'calendar' && calendarField?.name ? (
           <CalendarView
@@ -336,6 +338,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onOpen={onOpen}
             onPeek={onPeek}
             onDocMenu={onDocMenu}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleOne}
           />
         ) : visible.length === 0 ? (
           <div className="empty">

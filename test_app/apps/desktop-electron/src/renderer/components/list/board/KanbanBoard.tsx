@@ -26,11 +26,13 @@ type Props = {
   onOpen: (id: string) => void
   onPeek?: (id: string) => void
   onDocMenu?: (id: string, x: number, y: number) => void
+  selectedIds?: Set<string>
+  onToggleSelect?: (id: string) => void
 }
 
 type Column = { value: string | null; label: string }
 
-export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onDocMenu }: Props) {
+export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onDocMenu, selectedIds, onToggleSelect }: Props) {
   const localDB = useLocalDB()
   const { update } = useLocalMutations(localDB, slug)
   const fieldName = field.name ?? ''
@@ -94,6 +96,8 @@ export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onD
             onOpen={onOpen}
             onPeek={onPeek}
             onDocMenu={onDocMenu}
+            selectedIds={selectedIds}
+            onToggleSelect={onToggleSelect}
           />
         ))}
       </div>

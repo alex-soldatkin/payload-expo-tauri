@@ -800,3 +800,11 @@
 .selection-action.danger:disabled {
   opacity: 0.4;
 }
+
+/* Selection in board/calendar views (single click selects, double opens) */
+.board-card.selected,
+.cal-chip.selected {
+  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline-offset: -1px;
+  background: rgba(96, 140, 255, 0.14);
+}
