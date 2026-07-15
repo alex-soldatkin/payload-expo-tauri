@@ -23,6 +23,11 @@ export type ActionContext = {
   remove: (id: string) => Promise<void>
   /** Payload server base URL (for shareable links). */
   serverURL: string
+  token?: string
+  /** Promise-based modal steps for multi-step flows (confirm/form). */
+  steps?: import('../components/preview/ActionSteps').ActionSteps
+  /** Read docs from ANY locally-synced collection (cross-collection lookups). */
+  getDocs?: (slug: string, limit?: number) => Promise<Record<string, unknown>[]>
   /** Corner-toast notifier. */
   toast: (message: string, opts?: { type?: 'info' | 'success' | 'error' }) => void
   /**
@@ -100,6 +105,20 @@ export const actionRegistry: ActionRegistry = {
       // Mobile: incrementalPatch({ status: 'archived', ... }) — note it writes
       // the `status` field, NOT `_status`. Copied verbatim.
       bulkArchive: async (ctx) => {
+      // Multi-step example: show exactly what will be archived, then confirm
+      // through the modal steps (falls back to window.confirm without them).
+      if (ctx.steps) {
+        const titles = ctx.docs
+          .map((d) => String((d as { title?: unknown }).title ?? (d as { id?: unknown }).id ?? '?'))
+          .slice(0, 12)
+        const more = ctx.docs.length - titles.length
+        const ok = await ctx.steps.confirmStep({
+          title: `Archive ${ctx.docs.length} post${ctx.docs.length === 1 ? '' : 's'}?`,
+          body: titles.join('\n') + (more > 0 ? `\n…and ${more} more` : ''),
+          confirmLabel: 'Archive',
+        })
+        if (!ok) return
+      }
         if (ctx.docs.length === 0) {
           ctx.toast('Select one or more posts to archive.', { type: 'info' })
           return

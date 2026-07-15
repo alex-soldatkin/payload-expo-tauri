@@ -17,6 +17,7 @@ import { SplitLayout } from '../workspace/SplitLayout'
 import { GlobalForm } from './globals/GlobalForm'
 import { DocPeekProvider } from './preview/DocPeek'
 import { DocContextMenuProvider } from './preview/DocContextMenu'
+import { ActionStepsProvider } from './preview/ActionSteps'
 import { useQuickSelect } from '../workspace/useQuickSelect'
 import { useNavHistory } from '../workspace/useNavHistory'
 import {
@@ -172,6 +173,7 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const activeSlug = activeTab?.kind !== 'settings' ? activeTab?.slug ?? null : null
 
   return (
+    <ActionStepsProvider>
     <DocPeekProvider onOpenEditor={openEditor}>
     <DocContextMenuProvider schema={schema} serverURL={serverURL} onOpenEditor={openEditor}>
     <div className="workspace">
@@ -277,5 +279,6 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
     </div>
     </DocContextMenuProvider>
     </DocPeekProvider>
+    </ActionStepsProvider>
   )
 }

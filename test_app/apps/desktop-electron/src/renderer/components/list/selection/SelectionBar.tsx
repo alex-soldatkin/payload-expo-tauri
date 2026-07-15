@@ -6,6 +6,7 @@
 import { useState } from 'react'
 import type { NativeActionMeta } from '@payload-universal/admin-schema'
 import { resolveHandler, type ActionContext } from '../../../lib/actions'
+import { useActionSteps } from '../../preview/ActionSteps'
 import { useToast } from '../../toast/ToastProvider'
 
 type Props = {
@@ -30,6 +31,7 @@ export function SelectionBar({
   onClear,
 }: Props) {
   const { showToast } = useToast()
+  const steps = useActionSteps()
   const [running, setRunning] = useState<string | null>(null)
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
 
@@ -42,6 +44,7 @@ export function SelectionBar({
     update,
     remove,
     serverURL,
+    steps,
     toast: (message, opts) => showToast(message, opts),
     onProgress: (done, total) => setProgress({ done, total }),
   })
@@ -49,7 +52,8 @@ export function SelectionBar({
   const runAction = async (meta: NativeActionMeta) => {
     const handler = resolveHandler(slug, 'list', meta.key)
     if (!handler) return
-    if (meta.destructive && !window.confirm(`${meta.label} — ${count} item${count !== 1 ? 's' : ''}?`)) {
+    const handlerOwnsConfirm = meta.key === 'bulkArchive' // steps-based flows confirm themselves
+    if (meta.destructive && !handlerOwnsConfirm && !window.confirm(`${meta.label} — ${count} item${count !== 1 ? 's' : ''}?`)) {
       return
     }
     setRunning(meta.key)

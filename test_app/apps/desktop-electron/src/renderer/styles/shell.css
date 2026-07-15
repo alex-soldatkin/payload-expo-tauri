@@ -303,7 +303,14 @@
 .doc-context-menu {
   position: fixed;
   z-index: 95;
-  min-width: 200px;
+  /* .picker-menu sets left/right:0 for dropdowns — a cursor menu must size
+     to its content instead of stretching to the viewport edge. */
+  right: auto;
+  width: max-content;
+  min-width: 180px;
+  max-width: 280px;
   max-height: none;
 }
 .doc-context-menu .option.danger { color: var(--danger, #e5484d); }
+
+.action-step .action-step-body { white-space: pre-wrap; font-size: 12.5px; color: var(--ink-muted); }
