@@ -211,23 +211,27 @@ export const startReplication = (
                     continue
                   }
                 }
+                if (res.status === 400) {
+                  // Server-side VALIDATION rejection (e.g. a new doc whose
+                  // required fields are still empty). Throwing here would
+                  // head-of-line-block every future push in this collection
+                  // (batchSize 1 + retry loop) — proven failure mode. Skip:
+                  // the doc stays local (still shown as unsynced); the next
+                  // local edit re-enters the push queue and retries.
+                  console.warn(`[local-db] push skipped (${slug}/${doc.id}): ${body.errors?.[0]?.message ?? 'validation failed'}`)
+                  continue
+                }
                 throw new Error(body.errors?.[0]?.message || `Push create failed: ${res.status}`)
               }
             } else {
-              // Update — check for conflicts via updatedAt
-              const assumed = row.assumedMasterState
-              if (assumed) {
-                const serverDoc = await fetch(`${baseURL}/api/${slug}/${doc.id}?depth=0`, {
-                  headers: buildHeaders(getToken()),
-                }).then((r) => (r.ok ? r.json() : null)).catch(() => null)
-
-                if (serverDoc && serverDoc.updatedAt !== assumed.updatedAt) {
-                  // Server has a newer version — conflict, server wins
-                  conflicts.push({ ...serverDoc, _deleted: false })
-                  continue
-                }
-              }
-
+              // Update — push unconditionally (local wins). Every pushed doc
+              // carries a local edit (_locallyModified), and the collection's
+              // conflict handler resolves those to LOCAL-wins anyway — so a
+              // "server is newer → report conflict" pre-check here both
+              // contradicted that policy and DEADLOCKED the doc: the handler
+              // resolved to the identical local state, which produced no new
+              // write, so no re-push was ever triggered and the doc stayed
+              // flagged/unsynced forever (server changes kept it that way).
               const updateURL = isDraft ? `${baseURL}/api/${slug}/${doc.id}?draft=true` : `${baseURL}/api/${slug}/${doc.id}`
               const res = await fetch(updateURL, {
                 method: 'PATCH',
@@ -246,6 +250,12 @@ export const startReplication = (
                 })
                 if (!createRes.ok) {
                   const body = await createRes.json().catch(() => ({}))
+                  if (createRes.status === 400) {
+                    // Same validation-skip policy as the create path above —
+                    // an invalid doc must not block the collection's queue.
+                    console.warn(`[local-db] push skipped (${slug}/${doc.id}): ${body.errors?.[0]?.message ?? 'validation failed'}`)
+                    continue
+                  }
                   throw new Error(body.errors?.[0]?.message || `Push create-after-404 failed: ${createRes.status}`)
                 }
               } else if (!res.ok) {

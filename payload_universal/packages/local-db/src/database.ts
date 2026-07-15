@@ -217,6 +217,24 @@ export const createLocalDB = async ({
       livePush: true, // Push enabled — ID reconciliation no longer upserts (no loop)
       hasDrafts: draftSlugs.has(slug),
     })
+    // Replication failures (push rejections, pull errors) were previously
+    // swallowed — a stalled doc just sat "unsynced" with no trace. Surface
+    // them so apps (and debugging sessions) can see WHY sync is stuck.
+    replications[slug].error$.subscribe((err) => {
+      // RxDB wraps handler throws as RC_PUSH/RC_PULL with the real errors in
+      // err.parameters.errors — surface those, the wrapper text is useless.
+      const inner = (err as { parameters?: { errors?: unknown[] } }).parameters?.errors
+        ?.map((e) => {
+          if (e instanceof Error) return e.message
+          try {
+            return JSON.stringify(e).slice(0, 300)
+          } catch {
+            return String(e)
+          }
+        })
+        .join('; ')
+      console.error(`[local-db] replication error (${slug}): ${inner || err.message || err}`)
+    })
   }
 
   // If WebSocket URL is provided, also start WS sync for real-time push notifications.
