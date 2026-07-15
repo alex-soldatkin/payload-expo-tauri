@@ -175,7 +175,7 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
   }, [formState.isDirty, onDirtyChange])
 
   const record = (doc ?? {}) as Record<string, unknown>
-  const engine = { slug, serverURL, docId: id, control, getValues, setValue, errors, onEdit: clearFieldError }
+  const engine = { slug, serverURL, token, docId: id, control, getValues, setValue, errors, onEdit: clearFieldError }
 
   if (!localDB || (loading && !doc)) return <div className="empty">Loading…</div>
   if (!doc) return <div className="empty">This document no longer exists locally.</div>

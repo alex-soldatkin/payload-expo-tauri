@@ -7,6 +7,7 @@ import { useLocalCollection, useLocalDB, useLocalDocument } from '@payload-unive
 import type { PayloadDoc } from '@payload-universal/local-db'
 import type { FieldComponentProps } from '../types'
 import { FieldShell, isReadOnly, useFieldValue } from './shared'
+import { InlineCreateModal } from '../InlineCreateModal'
 import { docTitle } from '../../lib/doc'
 
 /** A normalized reference: which collection it points at + the target id. */
@@ -143,6 +144,7 @@ function Picker({
   const [open, setOpen] = useState(false)
   const [activeTarget, setActiveTarget] = useState(targets[0] ?? '')
   const [search, setSearch] = useState('')
+  const [creating, setCreating] = useState(false)
 
   const target = poly ? activeTarget : targets[0] ?? ''
   const { docs } = useLocalCollection(localDB, target, { limit: 50 })
@@ -201,7 +203,28 @@ function Picker({
               {docTitle(doc)}
             </button>
           ))}
+          {target && (
+            <button
+              type="button"
+              className="option option-create"
+              onClick={() => setCreating(true)}
+            >
+              + Create new…
+            </button>
+          )}
         </div>
+      )}
+      {creating && target && (
+        <InlineCreateModal
+          slug={target}
+          onCreated={(id) => {
+            onPick({ relationTo: target, value: id })
+            setCreating(false)
+            setSearch('')
+            if (single) setOpen(false)
+          }}
+          onClose={() => setCreating(false)}
+        />
       )}
     </div>
   )

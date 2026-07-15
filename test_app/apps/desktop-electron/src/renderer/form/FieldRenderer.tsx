@@ -35,6 +35,8 @@ type FormEngine = {
   slug: string
   /** Configured server base URL (media thumbnails, admin links). */
   serverURL: string
+  /** Auth JWT — used for direct REST uploads (UploadField drop-zone). */
+  token: string
   /** The document being edited (join-field queries). */
   docId: string
   control: Control<Record<string, unknown>>

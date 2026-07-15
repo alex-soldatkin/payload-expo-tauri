@@ -15,6 +15,7 @@ type Props = {
   titleKey: string
   onToggleColumn: (key: string) => void
   onMoveColumn: (key: string, dir: -1 | 1) => void
+  onReorderColumn?: (from: number, to: number) => void
   onResetColumns: () => void
   pageSize: number
   onPageSize: (n: number) => void
@@ -31,6 +32,7 @@ export function ListToolbar({
   titleKey,
   onToggleColumn,
   onMoveColumn,
+  onReorderColumn,
   onResetColumns,
   pageSize,
   onPageSize,
@@ -85,6 +87,7 @@ export function ListToolbar({
             titleKey={titleKey}
             onToggle={onToggleColumn}
             onMove={onMoveColumn}
+            onReorder={onReorderColumn}
             onReset={onResetColumns}
             onClose={() => setConfigOpen(false)}
           />

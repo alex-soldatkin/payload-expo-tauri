@@ -1,0 +1,56 @@
+/* Container-query responsiveness. Two levels:
+   1. The PANE (.group-content) decides whether the form sidebar fits beside
+      the main column.
+   2. The COLUMNS (.form-main / .form-sidebar) decide whether width-split rows
+      stack — a column can be narrow even in a wide pane, and vice versa.
+   Fields must NEVER paint over a neighbour: columns clip their overflow via
+   min-width:0 + wrapping, not by hiding content. */
+
+.group-content { container-type: inline-size; }
+.form-main, .form-sidebar { container-type: inline-size; min-width: 0; }
+
+/* Sidebar drops below the main column when the pane can't fit both
+   comfortably (main needs ~560px + sidebar 260px + gaps). */
+@container (max-width: 900px) {
+  .form-layout { flex-direction: column; }
+  .form-sidebar {
+    width: auto;
+    align-self: stretch;
+  }
+}
+
+/* Width-split rows stack when THEIR COLUMN is narrow. The inline flexBasis
+   from admin.width must yield — the one justified use of !important: a
+   responsive escape hatch over per-field inline styles. */
+@container (max-width: 460px) {
+  .field-row { flex-direction: column; }
+  .field-row > .field {
+    flex-basis: auto !important;
+    width: auto !important;
+    flex-grow: 1 !important;
+  }
+  .point-pair { flex-wrap: wrap; }
+  .editor-actions { flex-wrap: wrap; }
+}
+
+/* Anything inside a field that lays out horizontally must wrap, not overflow
+   (slug + generate button, date + clear, picker rows). */
+.field > div { min-width: 0; flex-wrap: wrap; }
+.field input, .field select, .field textarea { min-width: 0; max-width: 100%; }
+
+/* Labels/tab bars never paint over neighbours. */
+.field-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+.field-tabs-bar { overflow-x: auto; scrollbar-width: none; }
+.field-tabs-bar::-webkit-scrollbar { display: none; }
+
+/* Versions panel takes the whole pane when narrow. */
+@container (max-width: 700px) {
+  .versions-panel { width: 100%; }
+  .list-toolbar { flex-wrap: wrap; row-gap: 8px; }
+  .media-preview img { max-height: 140px; }
+}

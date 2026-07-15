@@ -56,6 +56,8 @@ export const buildMenuModel = (config: SanitizedConfig, i18n: I18n<any, any>): M
       drafts: Boolean(collection.versions?.drafts),
       versions: Boolean(collection.versions),
       useAsTitle: collection.admin?.useAsTitle,
+      // Drives the desktop list's default column set (falls back client-side).
+      defaultColumns: collection.admin?.defaultColumns,
       ...(icon ? { icon } : {}),
       ...(listActions?.length ? { listActions } : {}),
       ...(editActions?.length ? { editActions } : {}),

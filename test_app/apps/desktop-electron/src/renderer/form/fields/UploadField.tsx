@@ -34,11 +34,28 @@ function thumbSrc(doc: PayloadDoc | MediaShape | null, serverURL: string): strin
   }
 }
 
+/** POST a File to {serverURL}/api/media as multipart, returning the new id. */
+async function uploadMedia(file: File, serverURL: string, token: string): Promise<string> {
+  const form = new FormData()
+  form.append('file', file)
+  form.append('alt', file.name)
+  const res = await fetch(new URL('/api/media', serverURL).toString(), {
+    method: 'POST',
+    headers: token ? { Authorization: `JWT ${token}` } : undefined,
+    body: form,
+  })
+  const json = (await res.json().catch(() => null)) as { doc?: { id?: string }; errors?: unknown } | null
+  if (!res.ok || !json?.doc?.id) {
+    throw new Error(`Upload failed (${res.status})`)
+  }
+  return json.doc.id
+}
+
 export function UploadField(props: FieldComponentProps) {
   const { field } = props
   const { value, setValue } = useFieldValue(props)
   const readOnly = isReadOnly(props)
-  const { serverURL } = useFormEngine()
+  const { serverURL, token } = useFormEngine()
   const localDB = useLocalDB()
 
   const mediaSlug = typeof field.relationTo === 'string' ? field.relationTo : 'media'
@@ -46,39 +63,77 @@ export function UploadField(props: FieldComponentProps) {
 
   const { doc: current } = useLocalDocument(localDB, mediaSlug, currentId || null)
   const [open, setOpen] = useState(false)
+  const [dragOver, setDragOver] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
 
   const select = (id: string) => {
     setValue(id)
     setOpen(false)
   }
 
+  // Drop → upload the first image directly to the server; the local copy
+  // arrives on the next sync pull, but the value id is set immediately.
+  const onDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setDragOver(false)
+    if (readOnly || uploading) return
+    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith('image/'))
+    if (!file) return
+    setUploading(true)
+    setUploadError(null)
+    uploadMedia(file, serverURL, token)
+      .then((id) => setValue(id))
+      .catch((err) => setUploadError(err instanceof Error ? err.message : 'Upload failed.'))
+      .finally(() => setUploading(false))
+  }
+
+  const dropHandlers = readOnly
+    ? {}
+    : {
+        onDragOver: (e: React.DragEvent) => {
+          e.preventDefault()
+          setDragOver(true)
+        },
+        onDragLeave: () => setDragOver(false),
+        onDrop,
+      }
+
   return (
     <FieldShell props={props}>
-      {currentId ? (
-        <div className="picker-value">
-          <Thumb doc={current} serverURL={serverURL} />
-          <span className="title">{(current as MediaShape | null)?.filename ?? currentId}</span>
-          {!readOnly && (
-            <>
+      <div
+        className={`picker-value upload-drop${dragOver ? ' over' : ''}`}
+        {...dropHandlers}
+      >
+        {currentId ? (
+          <>
+            <Thumb doc={current} serverURL={serverURL} />
+            <span className="title">{(current as MediaShape | null)?.filename ?? currentId}</span>
+            {!readOnly && (
+              <>
+                <button type="button" onClick={() => setOpen((o) => !o)}>
+                  Change
+                </button>
+                <button type="button" onClick={() => setValue(null)}>
+                  Clear
+                </button>
+              </>
+            )}
+          </>
+        ) : (
+          <>
+            <span className="doc-meta">
+              {uploading ? 'Uploading…' : 'No file selected — drop an image here'}
+            </span>
+            {!readOnly && !uploading && (
               <button type="button" onClick={() => setOpen((o) => !o)}>
-                Change
+                Select
               </button>
-              <button type="button" onClick={() => setValue(null)}>
-                Clear
-              </button>
-            </>
-          )}
-        </div>
-      ) : (
-        <div className="picker-value">
-          <span className="doc-meta">No file selected</span>
-          {!readOnly && (
-            <button type="button" onClick={() => setOpen((o) => !o)}>
-              Select
-            </button>
-          )}
-        </div>
-      )}
+            )}
+          </>
+        )}
+      </div>
+      {uploadError && <div className="field-error">{uploadError}</div>}
       {!readOnly && open && (
         <MediaPicker slug={mediaSlug} serverURL={serverURL} onSelect={select} />
       )}

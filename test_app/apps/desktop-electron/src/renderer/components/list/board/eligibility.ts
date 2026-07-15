@@ -3,6 +3,7 @@
 // 'select' or 'radio' field with options, NOT hasMany, not hidden. Nested
 // fields (inside tabs/groups/arrays) are out of scope for slice one.
 import type { SchemaField } from '../../../form/types'
+import { flattenTransparent } from '../flattenTransparent'
 
 /** A field is board-eligible iff it's a top-level single-value option field. */
 export function isBoardEligible(field: SchemaField): boolean {
@@ -15,5 +16,5 @@ export function isBoardEligible(field: SchemaField): boolean {
 
 /** Top-level select/radio fields with options that can back a Kanban board. */
 export function eligibleBoardFields(rootFields: SchemaField[]): SchemaField[] {
-  return rootFields.filter(isBoardEligible)
+  return flattenTransparent(rootFields).filter(isBoardEligible)
 }

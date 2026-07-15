@@ -8,7 +8,7 @@ import { collectionLabel } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { ListToolbar } from './list/ListToolbar'
 import { ListTable } from './list/ListTable'
-import { useListConfig } from './list/useListConfig'
+import { useListConfig, type ListViewMode } from './list/useListConfig'
 import {
   displayableFields,
   defaultColumns,
@@ -23,6 +23,8 @@ import { FilterChips } from './list/filters/FilterChips'
 import type { FilterGroups } from './list/filters/types'
 import { eligibleBoardFields } from './list/board/eligibility'
 import { KanbanBoard } from './list/board/KanbanBoard'
+import { eligibleDateFields } from './list/calendar/eligibility'
+import { CalendarView } from './list/calendar/CalendarView'
 import { labelForField } from '../form/labels'
 
 type Props = {
@@ -89,15 +91,28 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
     [columns, displayable],
   )
 
-  // ---- board (Kanban) ----------------------------------------------------
+  // ---- board (Kanban) + calendar -----------------------------------------
   // Top-level select/radio fields that can drive a board; empty → no Kanban.
-  const boardFields = useMemo(() => eligibleBoardFields(getRootFields(schema, slug)), [schema, slug])
+  const rootFields = useMemo(() => getRootFields(schema, slug), [schema, slug])
+  const boardFields = useMemo(() => eligibleBoardFields(rootFields), [rootFields])
+  // Top-level date fields (any pickerAppearance) that can drive a calendar.
+  const dateFields = useMemo(() => eligibleDateFields(rootFields), [rootFields])
   const canBoard = boardFields.length > 0
-  const viewMode = canBoard ? (config.viewMode ?? 'table') : 'table'
+  const canCalendar = dateFields.length > 0
+  // Fall back to 'table' if the stored mode is no longer available (e.g. the
+  // eligible field was removed from the schema).
+  const storedMode = config.viewMode ?? 'table'
+  const viewMode: ListViewMode =
+    (storedMode === 'board' && !canBoard) || (storedMode === 'calendar' && !canCalendar)
+      ? 'table'
+      : storedMode
   // Persisted board field, falling back to the first eligible one when the
   // stored name no longer exists (mirrors the mobile config fallback).
   const boardField =
     boardFields.find((f) => f.name === config.boardField) ?? boardFields[0]
+  // Persisted calendar field, same first-eligible fallback.
+  const calendarField =
+    dateFields.find((f) => f.name === config.calendarField) ?? dateFields[0]
 
   // ---- toolbar handlers ---------------------------------------------------
   const onSort = (key: string) => {
@@ -107,6 +122,13 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
   }
   const onToggleColumn = (key: string) => {
     const next = columns.includes(key) ? columns.filter((c) => c !== key) : [...columns, key]
+    update({ columns: ensureTitle(next, titleKey) })
+  }
+  const onReorderColumn = (from: number, to: number) => {
+    if (from === to || from < 0 || to < 0 || from >= columns.length || to >= columns.length) return
+    const next = [...columns]
+    const [moved] = next.splice(from, 1)
+    next.splice(to, 0, moved)
     update({ columns: ensureTitle(next, titleKey) })
   }
   const onMoveColumn = (key: string, dir: -1 | 1) => {
@@ -153,7 +175,7 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
           {totalDocs} {totalDocs === 1 ? 'item' : 'items'}
         </span>
         {totalDocs > pageSize && <span className="list-count">Page {page}</span>}
-        {canBoard && (
+        {(canBoard || canCalendar) && (
           <div className="view-switch">
             <button
               type="button"
@@ -162,13 +184,24 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
             >
               Table
             </button>
-            <button
-              type="button"
-              className={`chip toggle${viewMode === 'board' ? ' on' : ''}`}
-              onClick={() => update({ viewMode: 'board' })}
-            >
-              Board
-            </button>
+            {canBoard && (
+              <button
+                type="button"
+                className={`chip toggle${viewMode === 'board' ? ' on' : ''}`}
+                onClick={() => update({ viewMode: 'board' })}
+              >
+                Board
+              </button>
+            )}
+            {canCalendar && (
+              <button
+                type="button"
+                className={`chip toggle${viewMode === 'calendar' ? ' on' : ''}`}
+                onClick={() => update({ viewMode: 'calendar' })}
+              >
+                Calendar
+              </button>
+            )}
           </div>
         )}
         {viewMode === 'board' && boardField && boardFields.length > 1 && (
@@ -178,6 +211,19 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
             onChange={(e) => update({ boardField: e.target.value })}
           >
             {boardFields.map((f) => (
+              <option key={f.name} value={f.name}>
+                {labelForField(f)}
+              </option>
+            ))}
+          </select>
+        )}
+        {viewMode === 'calendar' && calendarField && dateFields.length > 1 && (
+          <select
+            className="board-field-picker"
+            value={calendarField.name}
+            onChange={(e) => update({ calendarField: e.target.value })}
+          >
+            {dateFields.map((f) => (
               <option key={f.name} value={f.name}>
                 {labelForField(f)}
               </option>
@@ -194,6 +240,7 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
         titleKey={titleKey}
         onToggleColumn={onToggleColumn}
         onMoveColumn={onMoveColumn}
+        onReorderColumn={onReorderColumn}
         onResetColumns={() => update({ columns: defaults })}
         pageSize={pageSize}
         onPageSize={(n) => update({ pageSize: n })}
@@ -227,6 +274,13 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
           <KanbanBoard
             slug={slug}
             field={boardField}
+            docs={visible as Record<string, unknown>[]}
+            useAsTitle={meta?.useAsTitle}
+            onOpen={onOpen}
+          />
+        ) : viewMode === 'calendar' && calendarField?.name ? (
+          <CalendarView
+            fieldName={calendarField.name}
             docs={visible as Record<string, unknown>[]}
             useAsTitle={meta?.useAsTitle}
             onOpen={onOpen}

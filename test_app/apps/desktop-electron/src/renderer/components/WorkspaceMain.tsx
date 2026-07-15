@@ -2,7 +2,7 @@
 // status bar. Tabs are the navigation model — sidebar clicks open list tabs
 // (preview: reused until promoted), document opens become editor tabs, and the
 // layout survives restarts via a settings.json snapshot.
-import { useCallback, useEffect, useReducer, useRef } from 'react'
+import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { Sidebar } from './Sidebar'
 import { DocumentList } from './DocumentList'
@@ -61,6 +61,30 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const stateRef = useRef(state)
   stateRef.current = state
   useWorkspaceKeys(state, dispatch)
+
+  // ---- Collapsible sidebar (VS Code: Cmd+B, hamburger, titlebar toggler) ----
+  const [sidebarVisible, setSidebarVisible] = useState(true)
+  useEffect(() => {
+    window.payloadDesktop.getSettings().then((s) => {
+      if (s.sidebarVisible === false) setSidebarVisible(false)
+    }).catch(() => {})
+  }, [])
+  const toggleSidebar = useCallback(() => {
+    setSidebarVisible((v) => {
+      window.payloadDesktop.setSettings({ sidebarVisible: !v }).catch(() => {})
+      return !v
+    })
+  }, [])
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && !e.shiftKey && e.key.toLowerCase() === 'b') {
+        e.preventDefault()
+        toggleSidebar()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [toggleSidebar])
 
   // ---- Restore + persist the tab layout ------------------------------------
   const hydrated = useRef(false)
@@ -136,16 +160,26 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
           {serverURL}
         </span>
         <div className="spacer" />
+        <button
+          className="icon-btn no-drag"
+          onClick={toggleSidebar}
+          title={sidebarVisible ? 'Hide sidebar (Cmd+B)' : 'Show sidebar (Cmd+B)'}
+        >
+          ▤
+        </button>
       </div>
 
       <div className="workspace-body">
+        {sidebarVisible && (
         <Sidebar
+          onCollapse={toggleSidebar}
           schema={schema}
           activeSlug={activeTab?.kind === 'list' ? activeTab.slug ?? null : activeSlug}
           settingsActive={activeTab?.kind === 'settings'}
           onSelect={(slug) => openList(slug)}
           onOpenSettings={openSettings}
         />
+        )}
 
         <div className="tab-area">
           <SplitLayout

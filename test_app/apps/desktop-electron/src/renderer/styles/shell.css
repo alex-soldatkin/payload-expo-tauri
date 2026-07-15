@@ -213,3 +213,6 @@
 }
 .toast.success { border-color: rgba(99, 214, 138, 0.5); }
 .toast.error { border-color: var(--danger, #e5484d); }
+
+.sidebar-head { display: flex; padding: 6px 8px 0; }
+.titlebar .icon-btn { -webkit-app-region: no-drag; }

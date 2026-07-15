@@ -1,7 +1,17 @@
 // Gear popover for toggling + reordering list columns. Reuses the .picker-menu
-// vocabulary from form.css. Drag reordering lands in #22 — here reordering is
-// done with ↑/↓ buttons on the active columns.
+// vocabulary from form.css. Active columns drag-reorder (dnd-kit, handle-scoped
+// like the array rows) with the up/down buttons kept for accessibility.
 import { useEffect, useRef } from 'react'
+import {
+  DndContext,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import type { DisplayField } from './columns'
 
 type Props = {
@@ -10,6 +20,8 @@ type Props = {
   titleKey: string
   onToggle: (key: string) => void
   onMove: (key: string, dir: -1 | 1) => void
+  /** Drag reorder (from/to indexes within the active columns). */
+  onReorder?: (from: number, to: number) => void
   onReset: () => void
   onClose: () => void
 }
@@ -20,10 +32,20 @@ export function ColumnConfig({
   titleKey,
   onToggle,
   onMove,
+  onReorder,
   onReset,
   onClose,
 }: Props) {
   const ref = useRef<HTMLDivElement>(null)
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
+
+  const onDragEnd = (e: DragEndEvent) => {
+    const { active, over } = e
+    if (!over || active.id === over.id || !onReorder) return
+    const from = columns.indexOf(String(active.id))
+    const to = columns.indexOf(String(over.id))
+    if (from !== -1 && to !== -1) onReorder(from, to)
+  }
 
   // Close on outside click / Escape.
   useEffect(() => {
@@ -54,36 +76,35 @@ export function ColumnConfig({
         <span>Columns</span>
         <button className="link" onClick={onReset}>Reset</button>
       </div>
-      {active.map((d, i) => (
-        <div key={d.key} className="option column-config-row">
-          <input
-            type="checkbox"
-            checked
-            disabled={d.key === titleKey}
-            onChange={() => onToggle(d.key)}
-          />
-          <span className="column-config-label">{d.label}</span>
-          <span className="type-badge">{d.type}</span>
-          <span className="column-config-move">
-            <button
-              className="mini"
-              disabled={i === 0}
-              onClick={() => onMove(d.key, -1)}
-              title="Move up"
-            >
-              ↑
-            </button>
-            <button
-              className="mini"
-              disabled={i === active.length - 1}
-              onClick={() => onMove(d.key, 1)}
-              title="Move down"
-            >
-              ↓
-            </button>
-          </span>
-        </div>
-      ))}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={active.map((d) => d.key)} strategy={verticalListSortingStrategy}>
+          {active.map((d, i) => (
+            <SortableColumnRow key={d.key} id={d.key}>
+              <input
+                type="checkbox"
+                checked
+                disabled={d.key === titleKey}
+                onChange={() => onToggle(d.key)}
+              />
+              <span className="column-config-label">{d.label}</span>
+              <span className="type-badge">{d.type}</span>
+              <span className="column-config-move">
+                <button className="mini" disabled={i === 0} onClick={() => onMove(d.key, -1)} title="Move up">
+                  ↑
+                </button>
+                <button
+                  className="mini"
+                  disabled={i === active.length - 1}
+                  onClick={() => onMove(d.key, 1)}
+                  title="Move down"
+                >
+                  ↓
+                </button>
+              </span>
+            </SortableColumnRow>
+          ))}
+        </SortableContext>
+      </DndContext>
       {inactive.length > 0 && <div className="column-config-sep" />}
       {inactive.map((d) => (
         <div key={d.key} className="option column-config-row">
@@ -92,6 +113,22 @@ export function ColumnConfig({
           <span className="type-badge">{d.type}</span>
         </div>
       ))}
+    </div>
+  )
+}
+
+function SortableColumnRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
+      className="option column-config-row"
+    >
+      <span className="row-drag-handle" {...attributes} {...listeners}>
+        ⋮⋮
+      </span>
+      {children}
     </div>
   )
 }

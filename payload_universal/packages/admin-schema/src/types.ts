@@ -66,6 +66,8 @@ export type MenuModel = {
     drafts?: boolean
     versions?: boolean
     useAsTitle?: string
+    /** admin.defaultColumns from the config — default list columns. */
+    defaultColumns?: string[]
     /** Lucide icon name (e.g. 'users', 'image', 'file-text') or raw SVG string. */
     icon?: string
     /** Custom action items for the collection list view (rendered in toolbar menu). */
