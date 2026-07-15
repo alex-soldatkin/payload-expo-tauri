@@ -6,7 +6,7 @@ import { createContext, useContext } from 'react'
 import { useWatch } from 'react-hook-form'
 import type { Control, UseFormGetValues, UseFormSetValue } from 'react-hook-form'
 import type { RenderFieldFn, SchemaField } from './types'
-import { subPath } from './paths'
+import { normalizeIndexes, subPath } from './paths'
 import { isFieldVisible } from './conditions'
 import { getFieldSlots } from './registry'
 import { TextField } from './fields/TextField'
@@ -107,7 +107,9 @@ function FieldNode({ field, basePath }: { field: SchemaField; basePath: string }
 
   if (field.admin?.hidden || (field as { hidden?: boolean }).hidden) return null
 
-  const slots = field.name ? getFieldSlots(engine.slug, path) : undefined
+  // Normalize row indexes so slots registered for 'sessions.title' also
+  // resolve at 'sessions.0.title' (fields nested in array/blocks rows).
+  const slots = field.name ? getFieldSlots(engine.slug, normalizeIndexes(path)) : undefined
 
   // `ui` fields are purely presentational — render only if a component is registered.
   if (field.type === 'ui') {

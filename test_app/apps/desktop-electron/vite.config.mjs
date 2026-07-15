@@ -11,6 +11,11 @@ export default defineConfig({
       'expo-file-system/legacy': fileURLToPath(
         new URL('./src/renderer/shims/expo-fs-legacy.ts', import.meta.url),
       ),
+      // Codegen-passthrough custom components import '@payloadcms/ui' — the
+      // real package is Next-only; resolve it to the DOM shim (issue #28).
+      '@payloadcms/ui': fileURLToPath(
+        new URL('./src/renderer/form/ui-shim/index.ts', import.meta.url),
+      ),
     },
   },
   root: 'src/renderer',

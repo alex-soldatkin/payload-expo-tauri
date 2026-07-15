@@ -1,0 +1,19 @@
+// The `@payloadcms/ui` alias target (issue #28 phase 2): vite + tsconfig map
+// that specifier here, so ORIGINAL Payload admin component sources — copied
+// verbatim by the codegen passthrough — resolve their hooks and UI kit against
+// this DOM shim instead of the real (Next-only) package.
+import '../../styles/ui-shim.css'
+
+export {
+  useField,
+  useForm,
+  useDocumentInfo,
+  useAuth,
+  useConfig,
+  useTranslation,
+  useLocale,
+  useRowLabel,
+  RowLabelScopeProvider,
+} from './hooks'
+export { Button, Pill, Banner, Card, Collapsible, Gutter, Link } from './elements'
+export { FieldLabel, FieldDescription, FieldError, TextInput } from './fields'

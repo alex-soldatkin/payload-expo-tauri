@@ -19,7 +19,8 @@
     "test:mobile": "pnpm --filter @payload-universal-test/mobile-expo test",
     "test:web-next": "pnpm --filter @payload-universal-test/web-next test",
     "codegen:native": "tsx ../payload_universal/tools/native-component-codegen/src/cli.ts",
-    "codegen:conditions": "tsx ../payload_universal/tools/native-component-codegen/src/cli-conditions.ts"
+    "codegen:conditions": "tsx ../payload_universal/tools/native-component-codegen/src/cli-conditions.ts",
+    "codegen:dom": "tsx ../payload_universal/tools/native-component-codegen/src/cli-dom.ts"
   },
   "workspaces": [
     "apps/*",

@@ -1,24 +1,9 @@
-// Side-effect module: registers the DOM ports of the SSOT Payload admin custom
-// components into the form registry. Imported once from Workspace.
+// Side-effect module: registers the SSOT config's custom admin components.
 //
-// IMPORTANT: these keys must track the SSOT config (admin.components in
-// apps/server). Paths are runtime form paths — unnamed tabs/rows/collapsibles
-// are transparent, so e.g. `metaTitle` sits at the document root.
-import { registerFieldComponents } from '../registry'
-import { SlugField } from './SlugField'
-import { SEOPreview } from './SEOPreview'
-import { ContentMetrics } from './ContentMetrics'
-import { ReadTimeChart } from './ReadTimeChart'
-import { StatusDashboard } from './StatusDashboard'
-import { PriceSummary } from './PriceSummary'
-import { SessionRowLabel } from './SessionRowLabel'
-import { FooterLinkRowLabel } from './FooterLinkRowLabel'
-
-registerFieldComponents('posts.slug', { Field: SlugField })
-registerFieldComponents('posts.metaTitle', { Field: SEOPreview })
-registerFieldComponents('posts.excerpt', { afterInput: ContentMetrics })
-registerFieldComponents('posts.readTime', { afterInput: ReadTimeChart })
-registerFieldComponents('posts.status', { afterInput: StatusDashboard })
-registerFieldComponents('products.priceSummary', { Field: PriceSummary })
-registerFieldComponents('events.sessions', { RowLabel: SessionRowLabel })
-registerFieldComponents('footer.links', { RowLabel: FooterLinkRowLabel })
+// Since issue #28 phase 3 these are CODEGEN PASSTHROUGHS — the original web
+// admin component sources copied verbatim into ./gen by `pnpm codegen:dom`
+// (which walks apps/server's payload config for field-level
+// admin.components) and registered against the ui-dom shim. Re-run the
+// codegen after changing admin.components in the server config; do not edit
+// ./gen by hand.
+import './gen/register.gen'

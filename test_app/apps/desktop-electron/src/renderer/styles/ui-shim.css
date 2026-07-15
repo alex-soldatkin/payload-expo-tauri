@@ -1,0 +1,98 @@
+/* @payloadcms/ui shim components (.pui-*) — desktop-token skins for the
+   admin UI kit surface used by passthrough custom components. */
+
+.pui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--font);
+  color: var(--ink);
+  background: var(--surface);
+  white-space: nowrap;
+}
+.pui-btn:disabled { opacity: 0.5; cursor: default; }
+.pui-btn-primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.pui-btn-secondary { background: var(--surface); border-color: var(--line-strong); }
+.pui-btn-secondary:hover { background: var(--surface-hover); }
+.pui-btn-pill { border-radius: 999px; border-color: var(--line-strong); }
+.pui-btn-none, .pui-btn-transparent { background: transparent; border-color: transparent; }
+.pui-btn-xsmall { padding: 2px 8px; font-size: 11px; }
+.pui-btn-small { padding: 4px 10px; font-size: 12px; }
+.pui-btn-medium { padding: 6px 12px; font-size: 13px; }
+.pui-btn-large { padding: 8px 16px; font-size: 14px; }
+
+.pui-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.pui-pill-white { background: var(--ink); color: var(--accent-ink); border-color: var(--ink); }
+.pui-pill-dark { background: var(--surface-active); color: var(--ink); }
+.pui-pill-light-gray { color: var(--ink-faint); }
+.pui-pill-success { background: color-mix(in srgb, var(--ok) 18%, transparent); border-color: color-mix(in srgb, var(--ok) 45%, transparent); color: var(--ok); }
+.pui-pill-warning { background: color-mix(in srgb, var(--dot) 18%, transparent); border-color: color-mix(in srgb, var(--dot) 45%, transparent); color: var(--dot); }
+.pui-pill-error { background: color-mix(in srgb, var(--danger) 18%, transparent); border-color: color-mix(in srgb, var(--danger) 45%, transparent); color: var(--danger); }
+
+.pui-banner {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink-muted);
+}
+.pui-banner-info { border-color: color-mix(in srgb, var(--accent) 40%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); color: var(--ink); }
+.pui-banner-success { border-color: color-mix(in srgb, var(--ok) 40%, transparent); background: color-mix(in srgb, var(--ok) 10%, transparent); color: var(--ink); }
+.pui-banner-error { border-color: color-mix(in srgb, var(--danger) 40%, transparent); background: color-mix(in srgb, var(--danger) 10%, transparent); color: var(--ink); }
+
+.pui-card {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface);
+}
+.pui-card-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.pui-card-title { font-weight: 600; font-size: 13px; }
+
+.pui-collapsible { border: 1px solid var(--line); border-radius: 6px; }
+.pui-collapsible-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 10px;
+  background: transparent;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+}
+.pui-collapsible-body { padding: 4px 10px 10px; }
+.pui-caret { display: inline-block; transition: transform 0.12s ease; color: var(--ink-faint); }
+.pui-caret.open { transform: rotate(90deg); }
+
+.pui-gutter { padding: 0 4px; }
+
+.pui-link { color: var(--accent); text-decoration: none; }
+.pui-link:hover { text-decoration: underline; }
+
+.pui-label { display: inline-block; font-size: 12px; font-weight: 600; color: var(--ink-muted); margin-bottom: 4px; }
+.pui-required { color: var(--danger); margin-left: 2px; }
+.pui-description { font-size: 12px; color: var(--ink-faint); margin-top: 4px; }
+.pui-error { font-size: 12px; color: var(--danger); margin-top: 4px; }
+.pui-text-input input { width: 100%; }
+
+/* Passthrough components carry the web admin's inline colors in places
+   (#ccc borders, #666/#888 text); those stay as-authored — the shim only
+   guarantees its own kit renders on-token. */

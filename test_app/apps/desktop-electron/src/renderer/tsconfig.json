@@ -7,6 +7,9 @@
     "target": "es2022",
     "lib": ["es2022", "dom"],
     "types": ["vite/client"],
+    "paths": {
+      "@payloadcms/ui": ["./form/ui-shim/index.ts"]
+    },
     "skipLibCheck": true,
     "noEmit": true
   },
