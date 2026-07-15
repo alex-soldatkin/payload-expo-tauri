@@ -11,9 +11,11 @@ import {
 import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
 import { VersionsPanel } from './versions/VersionsPanel'
-import { DocMenu } from './DocMenu'
+import { DocMenu, type DocMenuItem } from './DocMenu'
 import { useAutosave } from './useAutosave'
 import { docTitle, formatUpdatedAt } from '../lib/doc'
+import { resolveHandler, type ActionContext } from '../lib/actions'
+import { useToast } from '../components/toast/ToastProvider'
 
 /** Keys never shown or written by the form. */
 const INTERNAL_KEYS = new Set(['id', 'createdAt', 'updatedAt'])
@@ -48,10 +50,17 @@ type Props = {
   onDuplicated?: (newId: string) => void
   /** Reports the form's dirty state (feeds the workspace dirty-tab guard). */
   onDirtyChange?: (dirty: boolean) => void
+  /**
+   * Schema-declared edit actions for this collection (metadata only). Wired
+   * from WorkspaceMain; defaults to none. Menu items dispatch through the
+   * desktop ActionRegistry with `docs = [current doc]`.
+   */
+  editActions?: Array<{ key: string; label: string; destructive?: boolean }>
 }
 
-export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle, onDuplicated, onDirtyChange }: Props) {
+export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle, onDuplicated, onDirtyChange, editActions = [] }: Props) {
   const localDB = useLocalDB()
+  const { showToast } = useToast()
   const { doc, loading } = useLocalDocument(localDB, slug, id)
   const { create, update, remove, errors, clearFieldError } = useValidatedMutations(
     localDB,
@@ -154,6 +163,57 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
     }
   }
 
+  // Dispatch a schema-declared edit action through the desktop ActionRegistry
+  // with docs = [current doc]. `duplicatePost` is remapped to the generic
+  // Duplicate so the two share one implementation. Destructive actions confirm
+  // first. Unregistered keys are surfaced by the disabled menu item below.
+  const runEditAction = async (key: string, destructive?: boolean) => {
+    if (!doc) return
+    if (key === 'duplicatePost') {
+      await duplicate()
+      return
+    }
+    const handler = resolveHandler(slug, 'edit', key)
+    if (!handler) return
+    if (destructive && !window.confirm('Run this action?')) return
+    const ctx: ActionContext = {
+      slug,
+      docs: [doc as Record<string, unknown>],
+      update: async (docId, data) => {
+        await update(docId, data, doc as Record<string, unknown>)
+      },
+      remove,
+      serverURL,
+      toast: (message, opts) => showToast(message, opts),
+    }
+    setBusy(true)
+    try {
+      await handler(ctx)
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  // Built-in Duplicate/Delete plus every schema-declared edit action. Unknown
+  // keys (no registered handler, and not the built-in Duplicate) render as a
+  // disabled item explaining the gap.
+  const menuItems: DocMenuItem[] = [
+    { label: 'Duplicate', onSelect: () => void duplicate() },
+    { label: 'Delete', danger: true, onSelect: () => void del() },
+    ...editActions.map((a): DocMenuItem => {
+      const known = a.key === 'duplicatePost' || Boolean(resolveHandler(slug, 'edit', a.key))
+      // DocMenu has no disabled-item affordance; surface the gap in the label
+      // and toast on select instead of silently doing nothing.
+      return {
+        label: known ? a.label : `${a.label} (unavailable)`,
+        danger: a.destructive,
+        onSelect: known
+          ? () => void runEditAction(a.key, a.destructive)
+          : () => showToast('Handler not registered.', { type: 'error' }),
+      }
+    }),
+  ]
+
   // Autosave — mirrors mobile gating: only when the collection has drafts, the
   // doc is not published, and the form is dirty. Saves keep the current
   // _status (no forced 'draft'/'published').
@@ -194,13 +254,7 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
               Versions
             </button>
           )}
-          <DocMenu
-            disabled={busy}
-            items={[
-              { label: 'Duplicate', onSelect: () => void duplicate() },
-              { label: 'Delete', danger: true, onSelect: () => void del() },
-            ]}
-          />
+          <DocMenu disabled={busy} items={menuItems} />
           {Boolean(record._locallyModified) && <span className="dot" title="Locally modified" />}
         </div>
 

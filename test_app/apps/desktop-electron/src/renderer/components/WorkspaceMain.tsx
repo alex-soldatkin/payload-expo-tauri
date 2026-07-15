@@ -14,6 +14,8 @@ import { buildMenuTree } from '../lib/menuTree'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
+import { GlobalForm } from './globals/GlobalForm'
+import { useQuickSelect } from '../workspace/useQuickSelect'
 import {
   hydrateWorkspace,
   initialWorkspace,
@@ -61,6 +63,7 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const stateRef = useRef(state)
   stateRef.current = state
   useWorkspaceKeys(state, dispatch)
+  const quickSelect = useQuickSelect(state, dispatch)
 
   // ---- Collapsible sidebar (VS Code: Cmd+B, hamburger, titlebar toggler) ----
   const [sidebarVisible, setSidebarVisible] = useState(true)
@@ -128,6 +131,17 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const openEditor = useCallback((slug: string, docId: string) => {
     dispatch({ type: 'open', target: { kind: 'editor', slug, docId, title: '…' }, mode: 'permanent' })
   }, [])
+  const openGlobal = useCallback(
+    (slug: string) => {
+      const meta = schema.menuModel.globals.find((g) => g.slug === slug)
+      dispatch({
+        type: 'open',
+        target: { kind: 'global', slug, title: meta?.label ?? slug },
+        mode: 'permanent',
+      })
+    },
+    [schema, dispatch],
+  )
   const openSettings = useCallback(() => {
     dispatch({ type: 'open', target: { kind: 'settings', title: 'Settings' }, mode: 'permanent' })
   }, [])
@@ -143,10 +157,11 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
       if (action === 'settings') return openSettings()
       const [verb, slug] = action.split(':')
       if (!slug) return
-      if (verb === 'open' || verb === 'global' || verb === 'new') openList(slug, 'permanent')
+      if (verb === 'global') openGlobal(slug)
+      else if (verb === 'open' || verb === 'new') openList(slug, 'permanent')
     })
     return dispose
-  }, [openList, openSettings])
+  }, [openList, openGlobal, openSettings])
 
   const group = state.groups[state.activeGroupId]
   const activeTab: Tab | undefined = group.activeTabId ? state.tabs[group.activeTabId] : undefined
@@ -177,6 +192,8 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
           activeSlug={activeTab?.kind === 'list' ? activeTab.slug ?? null : activeSlug}
           settingsActive={activeTab?.kind === 'settings'}
           onSelect={(slug) => openList(slug)}
+          onSelectGlobal={openGlobal}
+          activeGlobalSlug={activeTab?.kind === 'global' ? activeTab.slug ?? null : null}
           onOpenSettings={openSettings}
         />
         )}
@@ -185,6 +202,7 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
           <SplitLayout
             state={state}
             dispatch={dispatch}
+            quickSelect={quickSelect}
             renderContent={(tab) => {
               if (tab.kind === 'list' && tab.slug) {
                 return (
@@ -192,7 +210,20 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                     key={tab.id}
                     schema={schema}
                     slug={tab.slug}
+                    serverURL={serverURL}
                     onOpen={(id) => openEditor(tab.slug!, id)}
+                  />
+                )
+              }
+              if (tab.kind === 'global' && tab.slug) {
+                return (
+                  <GlobalForm
+                    key={tab.id}
+                    slug={tab.slug}
+                    schema={schema}
+                    serverURL={serverURL}
+                    token={token}
+                    onTitle={(title) => dispatch({ type: 'retitle', tabId: tab.id, title })}
                   />
                 )
               }
@@ -213,6 +244,9 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                     onTitle={(title) => dispatch({ type: 'retitle', tabId: tab.id, title })}
                     onDirtyChange={(dirty) => dispatch({ type: 'setDirty', tabId: tab.id, dirty })}
                     onDuplicated={(newId) => tab.slug && openEditor(tab.slug, newId)}
+                    editActions={
+                      schema.menuModel.collections.find((c) => c.slug === tab.slug)?.editActions ?? []
+                    }
                   />
                 )
               }

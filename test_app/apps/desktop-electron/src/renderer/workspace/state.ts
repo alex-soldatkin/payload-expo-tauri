@@ -12,7 +12,7 @@ export type GroupId = string
 export type Tab = {
   id: TabId
   /** What the tab shows. */
-  kind: 'list' | 'editor' | 'settings'
+  kind: 'list' | 'editor' | 'settings' | 'global'
   slug?: string
   docId?: string
   title: string

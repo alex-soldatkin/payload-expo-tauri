@@ -25,11 +25,6 @@ export function useWorkspaceKeys(state: WorkspaceState, dispatch: (a: Action) =>
         dispatch({ type: 'mruNext' })
         return
       }
-      // Cmd/Ctrl+1..9 focuses the Nth group in visual order (vscode).
-      if (mod && !e.shiftKey && e.key >= '1' && e.key <= '9') {
-        e.preventDefault()
-        dispatch({ type: 'focusGroupAt', index: Number(e.key) - 1 })
-      }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)

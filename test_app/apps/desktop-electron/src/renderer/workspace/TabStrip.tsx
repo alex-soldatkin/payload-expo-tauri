@@ -14,6 +14,8 @@ import type { Group, Tab, TabId } from './state'
 type Props = {
   group: Group
   tabs: Record<TabId, Tab>
+  /** Quick-select: overlay 1..9 badges on the first nine tabs. */
+  showNumbers?: boolean
   onActivate: (tabId: TabId) => void
   onClose: (tabId: TabId) => void
   onPromote: (tabId: TabId) => void
@@ -22,7 +24,7 @@ type Props = {
 
 // Drag context lives in SplitLayout (drags cross groups); this strip only
 // declares the sortable items.
-export function TabStrip({ group, tabs, onActivate, onClose, onPromote, onPin }: Props) {
+export function TabStrip({ group, tabs, showNumbers, onActivate, onClose, onPromote, onPin }: Props) {
   const stripRef = useRef<HTMLDivElement>(null)
 
   // Keep the active tab visible on change (vscode reveal behavior).
@@ -34,13 +36,14 @@ export function TabStrip({ group, tabs, onActivate, onClose, onPromote, onPin }:
   return (
     <div className="tab-strip" ref={stripRef}>
       <SortableContext items={group.tabIds} strategy={horizontalListSortingStrategy}>
-          {group.tabIds.map((id) => {
+          {group.tabIds.map((id, i) => {
             const tab = tabs[id]
             if (!tab) return null
             return (
               <TabItem
                 key={id}
                 tab={tab}
+                number={showNumbers && i < 9 ? i + 1 : undefined}
                 active={id === group.activeTabId}
                 onActivate={() => onActivate(id)}
                 onClose={() => onClose(id)}
@@ -56,6 +59,7 @@ export function TabStrip({ group, tabs, onActivate, onClose, onPromote, onPin }:
 
 function TabItem({
   tab,
+  number,
   active,
   onActivate,
   onClose,
@@ -63,6 +67,7 @@ function TabItem({
   onTogglePin,
 }: {
   tab: Tab
+  number?: number
   active: boolean
   onActivate: () => void
   onClose: () => void
@@ -106,6 +111,7 @@ function TabItem({
       {tab.pinned && <span className="tab-pin">◆</span>}
       <span className="tab-title">{tab.title}</span>
       {tab.dirty && <span className="tab-dirty" title="Unsaved changes" />}
+      {number !== undefined && <span className="tab-number">{number}</span>}
       {!tab.pinned && (
         <button
           type="button"

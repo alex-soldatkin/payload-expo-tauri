@@ -1,7 +1,7 @@
 // Desktop list-view engine: a sortable, searchable, column-configurable table
 // backed by the local RxDB (issue #20). Orchestrates the toolbar + table and
 // persists per-collection column/sort/pageSize prefs via the desktop bridge.
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLocalCollection, useLocalDB, useLocalMutations } from '@payload-universal/local-db'
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import { collectionLabel } from '../lib/collections'
@@ -25,19 +25,22 @@ import { eligibleBoardFields } from './list/board/eligibility'
 import { KanbanBoard } from './list/board/KanbanBoard'
 import { eligibleDateFields } from './list/calendar/eligibility'
 import { CalendarView } from './list/calendar/CalendarView'
+import { SelectionBar } from './list/selection/SelectionBar'
 import { labelForField } from '../form/labels'
 
 type Props = {
   schema: AdminSchema
   slug: string
   onOpen: (id: string) => void
+  /** Payload server base URL (used by list action handlers). */
+  serverURL?: string
 }
 
 const DEFAULT_PAGE_SIZE = 50
 
-export function DocumentList({ schema, slug, onOpen }: Props) {
+export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
   const localDB = useLocalDB()
-  const { create } = useLocalMutations(localDB, slug)
+  const { create, update: updateDoc, remove: removeDoc } = useLocalMutations(localDB, slug)
   const { config, ready, update } = useListConfig(slug)
 
   const meta = schema.menuModel.collections.find((c) => c.slug === slug)
@@ -90,6 +93,33 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
     () => columns.map((key) => metaOrFieldColumn(key, displayable)),
     [columns, displayable],
   )
+
+  // ---- row selection + bulk actions --------------------------------------
+  // Selection lives here (the list owns it); cleared whenever the collection or
+  // page changes so stale ids never leak across views.
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
+  useEffect(() => {
+    setSelectedIds(new Set())
+  }, [slug, page])
+  const listActions = meta?.listActions ?? []
+  const selectedDocs = useMemo(
+    () => (visible as Record<string, unknown>[]).filter((d) => selectedIds.has(String(d.id ?? ''))),
+    [visible, selectedIds],
+  )
+  const toggleOne = (id: string) =>
+    setSelectedIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  const toggleAll = (checked: boolean) =>
+    setSelectedIds(
+      checked
+        ? new Set((visible as Record<string, unknown>[]).map((d) => String(d.id ?? '')))
+        : new Set(),
+    )
+  const clearSelection = () => setSelectedIds(new Set())
 
   // ---- board (Kanban) + calendar -----------------------------------------
   // Top-level select/radio fields that can drive a board; empty → no Kanban.
@@ -267,6 +297,18 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
         />
       </div>
 
+      {viewMode === 'table' && selectedIds.size > 0 && (
+        <SelectionBar
+          slug={slug}
+          serverURL={serverURL}
+          selected={selectedDocs}
+          actions={listActions}
+          update={updateDoc}
+          remove={removeDoc}
+          onClear={clearSelection}
+        />
+      )}
+
       <div className="main-scroll">
         {!localDB || !ready || loading ? (
           <div className="empty">Loading…</div>
@@ -297,6 +339,9 @@ export function DocumentList({ schema, slug, onOpen }: Props) {
             sortDir={sortDesc ? 'desc' : 'asc'}
             onSort={onSort}
             onOpen={onOpen}
+            selectedIds={selectedIds}
+            onToggleOne={toggleOne}
+            onToggleAll={toggleAll}
           />
         )}
       </div>

@@ -16,6 +16,8 @@ import {
 } from '@dnd-kit/core'
 import { Panel, PanelGroup, PanelResizeHandle } from 'react-resizable-panels'
 import type { Action, Group, Layout, Tab, TabId, WorkspaceState } from './state'
+import type { QuickSelect } from './useQuickSelect'
+import { leafOrder } from './layout'
 import type { SplitDirection } from './layout'
 import { TabStrip } from './TabStrip'
 
@@ -24,10 +26,11 @@ type RenderContent = (tab: Tab, groupId: string) => React.ReactNode
 type Props = {
   state: WorkspaceState
   dispatch: (a: Action) => void
+  quickSelect: QuickSelect
   renderContent: RenderContent
 }
 
-export function SplitLayout({ state, dispatch, renderContent }: Props) {
+export function SplitLayout({ state, dispatch, quickSelect, renderContent }: Props) {
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
   const [draggingTab, setDraggingTab] = useState<TabId | null>(null)
 
@@ -74,6 +77,7 @@ export function SplitLayout({ state, dispatch, renderContent }: Props) {
         path={[]}
         state={state}
         dispatch={dispatch}
+        quickSelect={quickSelect}
         renderContent={renderContent}
         dragging={Boolean(draggingTab)}
       />
@@ -86,6 +90,7 @@ function LayoutNode({
   path,
   state,
   dispatch,
+  quickSelect,
   renderContent,
   dragging,
 }: {
@@ -93,6 +98,7 @@ function LayoutNode({
   path: number[]
   state: WorkspaceState
   dispatch: (a: Action) => void
+  quickSelect: QuickSelect
   renderContent: RenderContent
   dragging: boolean
 }) {
@@ -104,6 +110,7 @@ function LayoutNode({
         group={group}
         state={state}
         dispatch={dispatch}
+        quickSelect={quickSelect}
         renderContent={renderContent}
         dragging={dragging}
       />
@@ -122,6 +129,7 @@ function LayoutNode({
               path={[...path, i]}
               state={state}
               dispatch={dispatch}
+              quickSelect={quickSelect}
               renderContent={renderContent}
               dragging={dragging}
             />
@@ -153,17 +161,22 @@ function GroupView({
   group,
   state,
   dispatch,
+  quickSelect,
   renderContent,
   dragging,
 }: {
   group: Group
   state: WorkspaceState
   dispatch: (a: Action) => void
+  quickSelect: QuickSelect
   renderContent: RenderContent
   dragging: boolean
 }) {
   const activeTab = group.activeTabId ? state.tabs[group.activeTabId] : undefined
   const isActiveGroup = state.activeGroupId === group.id
+  const paneNumber = leafOrder(state.layout).indexOf(group.id) + 1
+  const showPaneBadge = quickSelect.visible && quickSelect.stage === 'panes' && paneNumber <= 9
+  const showTabNumbers = quickSelect.visible && quickSelect.stage === 'tabs' && isActiveGroup
   return (
     <div
       className={`group-view${isActiveGroup ? ' focused' : ''}`}
@@ -171,9 +184,11 @@ function GroupView({
         if (!isActiveGroup && group.activeTabId) dispatch({ type: 'activate', tabId: group.activeTabId })
       }}
     >
+      {showPaneBadge && <span className="pane-badge">{paneNumber}</span>}
       <TabStrip
         group={group}
         tabs={state.tabs}
+        showNumbers={showTabNumbers}
         onActivate={(id) => dispatch({ type: 'activate', tabId: id })}
         onClose={(id) => dispatch({ type: 'close', tabId: id })}
         onPromote={(id) => dispatch({ type: 'promote', tabId: id })}

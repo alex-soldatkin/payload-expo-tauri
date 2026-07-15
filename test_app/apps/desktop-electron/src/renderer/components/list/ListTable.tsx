@@ -1,5 +1,6 @@
-// The grid table: sticky header with click-to-sort, one row per doc. The first
-// cell of every row carries the locally-modified dot marker.
+// The grid table: sticky header with click-to-sort, one row per doc. A leading
+// checkbox column drives row selection (header checkbox = select-all-on-page);
+// the second cell of every row carries the locally-modified dot marker.
 import { renderCell } from './cells'
 import type { DisplayField } from './columns'
 
@@ -10,13 +11,37 @@ type Props = {
   sortDir: 'asc' | 'desc'
   onSort: (key: string) => void
   onOpen: (id: string) => void
+  /** Selected doc ids; presence enables the checkbox column. */
+  selectedIds: Set<string>
+  onToggleOne: (id: string) => void
+  /** Select/clear every doc on the current page. */
+  onToggleAll: (checked: boolean) => void
 }
 
-export function ListTable({ columns, docs, sortField, sortDir, onSort, onOpen }: Props) {
-  const gridTemplate = `18px ${columns.map(() => 'minmax(120px, 1fr)').join(' ')}`
+export function ListTable({
+  columns,
+  docs,
+  sortField,
+  sortDir,
+  onSort,
+  onOpen,
+  selectedIds,
+  onToggleOne,
+  onToggleAll,
+}: Props) {
+  const gridTemplate = `32px 18px ${columns.map(() => 'minmax(120px, 1fr)').join(' ')}`
+  const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(String(d.id ?? '')))
 
   return (
     <div className="list-table" style={{ gridTemplateColumns: gridTemplate }}>
+      <div className="list-head-cell list-select-cell">
+        <input
+          type="checkbox"
+          aria-label="Select all on page"
+          checked={allSelected}
+          onChange={(e) => onToggleAll(e.target.checked)}
+        />
+      </div>
       <div className="list-head-cell" />
       {columns.map((col) => {
         const isSorted = sortField === col.key
@@ -39,10 +64,11 @@ export function ListTable({ columns, docs, sortField, sortDir, onSort, onOpen }:
       {docs.map((doc) => {
         const id = String(doc.id ?? '')
         const modified = Boolean(doc._locallyModified)
+        const selected = selectedIds.has(id)
         return (
           <div
             key={id}
-            className="list-row"
+            className={`list-row${selected ? ' selected' : ''}`}
             role="button"
             tabIndex={0}
             onClick={() => onOpen(id)}
@@ -53,6 +79,18 @@ export function ListTable({ columns, docs, sortField, sortDir, onSort, onOpen }:
               }
             }}
           >
+            <span
+              className="list-select-cell"
+              onClick={(e) => e.stopPropagation()}
+              onKeyDown={(e) => e.stopPropagation()}
+            >
+              <input
+                type="checkbox"
+                aria-label="Select row"
+                checked={selected}
+                onChange={() => onToggleOne(id)}
+              />
+            </span>
             <span className="list-row-marker">
               <span className={`dot${modified ? '' : ' placeholder'}`} />
             </span>
