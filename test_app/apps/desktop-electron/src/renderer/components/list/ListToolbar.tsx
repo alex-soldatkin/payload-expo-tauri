@@ -20,8 +20,10 @@ type Props = {
   pageSize: number
   onPageSize: (n: number) => void
   onRefresh: () => void
-  onCreate: () => void
-  canCreate: boolean
+  /** Filter funnel + presets cluster (rendered after search). */
+  filterSlot?: React.ReactNode
+  /** Active filter chips, inline in the same row. */
+  chipsSlot?: React.ReactNode
 }
 
 export function ListToolbar({
@@ -37,8 +39,8 @@ export function ListToolbar({
   pageSize,
   onPageSize,
   onRefresh,
-  onCreate,
-  canCreate,
+  filterSlot,
+  chipsSlot,
 }: Props) {
   const [configOpen, setConfigOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
@@ -70,6 +72,8 @@ export function ListToolbar({
         value={search}
         onChange={(e) => onSearch(e.target.value)}
       />
+      {filterSlot}
+      {chipsSlot}
       <div className="spacer" />
       <div className="list-config-wrap">
         <button
@@ -106,9 +110,6 @@ export function ListToolbar({
       </select>
       <button className="icon-btn" onClick={onRefresh} title="Refresh" aria-label="Refresh">
         ↻
-      </button>
-      <button className="primary" onClick={onCreate} disabled={!canCreate}>
-        New document
       </button>
     </div>
   )

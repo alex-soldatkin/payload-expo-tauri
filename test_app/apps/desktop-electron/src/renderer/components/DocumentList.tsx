@@ -211,6 +211,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
           {totalDocs} {totalDocs === 1 ? 'item' : 'items'}
         </span>
         {totalDocs > pageSize && <span className="list-count">Page {page}</span>}
+        <div className="spacer" />
         {(canBoard || canCalendar) && (
           <div className="view-switch">
             <button
@@ -266,44 +267,12 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             ))}
           </select>
         )}
+        <button className="primary" onClick={createNew} disabled={!localDB}>
+          New document
+        </button>
       </div>
 
-      <ListToolbar
-        search={search}
-        onSearch={setSearch}
-        displayable={displayable}
-        columns={columns}
-        titleKey={titleKey}
-        onToggleColumn={onToggleColumn}
-        onMoveColumn={onMoveColumn}
-        onReorderColumn={onReorderColumn}
-        onResetColumns={() => update({ columns: defaults })}
-        pageSize={pageSize}
-        onPageSize={(n) => update({ pageSize: n })}
-        onRefresh={refetch}
-        onCreate={createNew}
-        canCreate={Boolean(localDB)}
-      />
-
-      <div className="list-filter-bar">
-        <FilterControls
-          fields={filterFields}
-          groups={groups}
-          onChange={setGroups}
-          presets={presets}
-          onApplyPreset={setGroups}
-          onSavePreset={savePreset}
-          onDeletePreset={deletePreset}
-        />
-        <FilterChips
-          fields={filterFields}
-          groups={groups}
-          onRemove={removeRule}
-          onClear={() => setGroups([])}
-        />
-      </div>
-
-      {selectedIds.size > 0 && (
+      {selectedIds.size > 0 ? (
         <SelectionBar
           slug={slug}
           serverURL={serverURL}
@@ -312,6 +281,40 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
           update={updateDoc}
           remove={removeDoc}
           onClear={clearSelection}
+        />
+      ) : (
+        <ListToolbar
+          search={search}
+          onSearch={setSearch}
+          displayable={displayable}
+          columns={columns}
+          titleKey={titleKey}
+          onToggleColumn={onToggleColumn}
+          onMoveColumn={onMoveColumn}
+          onReorderColumn={onReorderColumn}
+          onResetColumns={() => update({ columns: defaults })}
+          pageSize={pageSize}
+          onPageSize={(n) => update({ pageSize: n })}
+          onRefresh={refetch}
+          filterSlot={
+            <FilterControls
+              fields={filterFields}
+              groups={groups}
+              onChange={setGroups}
+              presets={presets}
+              onApplyPreset={setGroups}
+              onSavePreset={savePreset}
+              onDeletePreset={deletePreset}
+            />
+          }
+          chipsSlot={
+            <FilterChips
+              fields={filterFields}
+              groups={groups}
+              onRemove={removeRule}
+              onClear={() => setGroups([])}
+            />
+          }
         />
       )}
 

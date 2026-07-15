@@ -808,3 +808,10 @@
   outline-offset: -1px;
   background: rgba(96, 140, 255, 0.14);
 }
+
+/* Two-line list header: identity/views/new on line 1, tools or selection on
+   line 2 — no stacked whitespate bars. */
+.main-header { padding: 8px 20px 6px; gap: 10px; }
+.list-toolbar { padding: 4px 20px 8px; }
+.list-toolbar .chips { flex-wrap: wrap; }
+.selection-bar { padding: 4px 20px 8px; }
