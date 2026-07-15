@@ -154,3 +154,25 @@ pnpm dev:electron   # vite + electron (test_app/)
 ```
 
 Seeded dev login: `admin@example.com` / `payload-test-1234` (008 progress log).
+
+## 2026-07-15 — epic round: config→desktop keystone
+
+- **ui-dom shim + DOM passthrough (#28 ph2–3, 45d09b3)**: `@payloadcms/ui` aliased to
+  `form/ui-shim` (hooks over the RHF FormEngine; useAuth decodes the JWT; UI kit skinned
+  with desktop tokens). `pnpm codegen:dom` walks ANY payload config's field-level
+  admin.components and emits verbatim passthroughs + `register.gen.ts` into
+  `form/custom/gen/`. All 8 SSOT components generate; hand-ports deleted. Regenerate
+  after admin.components changes; never edit gen/ by hand.
+- **Gantt view (#25, 739a8e6)**: eligibility ≥2 top-level date fields; start/end pickers in
+  listConfig; whole-day bar drag updates both dates (time-of-day preserved) through the
+  local-first path; today-anchored initial scroll; external labels for narrow bars.
+- **Status badges**: shared pill vocabulary (semantic first, 8-hue hash fallback) in table
+  cells + kanban headers (`components/badges/StatusBadge.tsx`, `styles/badges.css`).
+- **Theme (#27 part)**: system/light/dark in Settings, persisted, pre-paint applied via
+  `data-theme`; ~30 dark-only literals migrated to role tokens (--menu-bg, --panel-bg,
+  --header-bg, --scrim, --shadow...) defined in base.css's three palette blocks (two dark
+  blocks must stay in sync).
+- **Cmd+K palette (e6e0e4f)**: commands + cross-collection doc search from the local DB.
+- Known nits: gantt external label bleeds mid-word when its bar is scrolled off-left;
+  calendar view renders no chips for products in months without dated docs (expected);
+  locale switching (#27) and upload-queue panel (#26) still open.
