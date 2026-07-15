@@ -1,12 +1,11 @@
 // Client-side condition registry. Payload admin.condition functions cannot be
 // serialized — the admin schema only marks fields with admin.hasCondition and
-// lists their paths. Real predicates are registered here per collection, the
-// same pattern the Expo app uses (ConditionRegistryProvider).
-//
-// KEEP IN SYNC with test_app/apps/server/src/{collections,globals} — each
-// entry mirrors an admin.condition in the SSOT config. Resolution and
-// fail-open semantics mirror admin-native/contexts/ConditionContext.tsx.
+// lists their paths. The predicates are CODEGEN-EXTRACTED from the SSOT config
+// sources (generated/conditions.gen.ts, re-run `pnpm codegen:native`); the
+// hand-written entries below remain only as overrides and win on key clashes.
+// Resolution and fail-open semantics mirror admin-native's ConditionContext.
 import { getAtPath, normalizeIndexes, parentPath } from './paths'
+import { generatedConditions } from '../generated/conditions.gen'
 
 export type ConditionFn = (
   data: Record<string, unknown>,
@@ -15,32 +14,19 @@ export type ConditionFn = (
 
 type Registry = Record<string, Record<string, ConditionFn>>
 
-/** Mirrors the SSOT config's admin.condition functions (see file:line refs). */
-const registry: Registry = {
-  pages: {
-    // Pages.ts CallToActionBlock — block-scoped paths: {field}.{blockSlug}.{name}
-    'layout.cta.internalPage': (_d, s) => s.linkType === 'internal',
-    'layout.cta.externalUrl': (_d, s) => s.linkType === 'external',
-    'layout.cta.openInNewTab': (_d, s) => s.linkType === 'external',
-    // Pages.ts named tab `settings`
-    'settings.navOrder': (_d, s) => Boolean(s.showInNav),
-  },
-  events: {
-    'registrationUrl': (_d, s) => Boolean(s.requiresRegistration),
-    'capacity': (_d, s) => Boolean(s.requiresRegistration),
-  },
-  'site-settings': {
-    'maintenanceMessage': (d) => Boolean(d.maintenanceMode),
-  },
-  'view-presets': {
-    'statusField': (d) => d.viewType !== 'table',
-    'calendarSources': (d) => d.viewType === 'calendar',
-    'calendarDefaultMode': (d) => d.viewType === 'calendar',
-    'ganttSources': (d) => d.viewType === 'gantt',
-    'ganttOptions': (d) => d.viewType === 'gantt',
-    'sharedWith': (d) => d.accessMode === 'specificUsers',
-  },
-}
+/** Hand-written overrides — merged OVER the generated registry. */
+const overrides: Registry = {}
+
+const registry: Registry = (() => {
+  const merged: Registry = {}
+  for (const [slug, conds] of Object.entries(generatedConditions)) {
+    merged[slug] = { ...conds }
+  }
+  for (const [slug, conds] of Object.entries(overrides)) {
+    merged[slug] = { ...merged[slug], ...conds }
+  }
+  return merged
+})()
 
 /**
  * Resolve the condition for a concrete form path: exact match first, then
