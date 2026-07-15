@@ -27,6 +27,8 @@ import { eligibleBoardFields } from './list/board/eligibility'
 import { KanbanBoard } from './list/board/KanbanBoard'
 import { eligibleDateFields } from './list/calendar/eligibility'
 import { CalendarView } from './list/calendar/CalendarView'
+import { eligibleGanttDateFields } from './list/gantt/eligibility'
+import { GanttView } from './list/gantt/GanttView'
 import { SelectionBar } from './list/selection/SelectionBar'
 import { labelForField } from '../form/labels'
 
@@ -133,13 +135,18 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
   const boardFields = useMemo(() => eligibleBoardFields(rootFields), [rootFields])
   // Top-level date fields (any pickerAppearance) that can drive a calendar.
   const dateFields = useMemo(() => eligibleDateFields(rootFields), [rootFields])
+  // Gantt shares the calendar's date-field rule but needs ≥2 (start + end).
+  const ganttFields = useMemo(() => eligibleGanttDateFields(rootFields), [rootFields])
   const canBoard = boardFields.length > 0
   const canCalendar = dateFields.length > 0
+  const canGantt = ganttFields.length >= 2
   // Fall back to 'table' if the stored mode is no longer available (e.g. the
   // eligible field was removed from the schema).
   const storedMode = config.viewMode ?? 'table'
   const viewMode: ListViewMode =
-    (storedMode === 'board' && !canBoard) || (storedMode === 'calendar' && !canCalendar)
+    (storedMode === 'board' && !canBoard) ||
+    (storedMode === 'calendar' && !canCalendar) ||
+    (storedMode === 'gantt' && !canGantt)
       ? 'table'
       : storedMode
   // Persisted board field, falling back to the first eligible one when the
@@ -149,6 +156,17 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
   // Persisted calendar field, same first-eligible fallback.
   const calendarField =
     dateFields.find((f) => f.name === config.calendarField) ?? dateFields[0]
+  // Gantt start/end fields. Start falls back to the first date field, end to the
+  // second — never defaulting equal. If the user later picks the same field for
+  // both, that is kept (bars just render zero-width). Each still falls back to a
+  // still-existing default when its persisted name disappears from the schema.
+  const ganttStartField =
+    ganttFields.find((f) => f.name === config.ganttStartField) ?? ganttFields[0]
+  const ganttEndField =
+    ganttFields.find((f) => f.name === config.ganttEndField) ??
+    ganttFields.find((f) => f.name !== ganttStartField?.name) ??
+    ganttFields[1] ??
+    ganttFields[0]
 
   // ---- toolbar handlers ---------------------------------------------------
   const onSort = (key: string) => {
@@ -212,7 +230,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
         </span>
         {totalDocs > pageSize && <span className="list-count">Page {page}</span>}
         <div className="spacer" />
-        {(canBoard || canCalendar) && (
+        {(canBoard || canCalendar || canGantt) && (
           <div className="view-switch">
             <button
               type="button"
@@ -237,6 +255,15 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
                 onClick={() => update({ viewMode: 'calendar' })}
               >
                 Calendar
+              </button>
+            )}
+            {canGantt && (
+              <button
+                type="button"
+                className={`chip toggle${viewMode === 'gantt' ? ' on' : ''}`}
+                onClick={() => update({ viewMode: 'gantt' })}
+              >
+                Gantt
               </button>
             )}
           </div>
@@ -266,6 +293,32 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
               </option>
             ))}
           </select>
+        )}
+        {viewMode === 'gantt' && ganttStartField && ganttEndField && (
+          <>
+            <select
+              className="board-field-picker"
+              value={ganttStartField.name}
+              onChange={(e) => update({ ganttStartField: e.target.value })}
+            >
+              {ganttFields.map((f) => (
+                <option key={f.name} value={f.name}>
+                  {labelForField(f)}
+                </option>
+              ))}
+            </select>
+            <select
+              className="board-field-picker"
+              value={ganttEndField.name}
+              onChange={(e) => update({ ganttEndField: e.target.value })}
+            >
+              {ganttFields.map((f) => (
+                <option key={f.name} value={f.name}>
+                  {labelForField(f)}
+                </option>
+              ))}
+            </select>
+          </>
         )}
         <button className="primary" onClick={createNew} disabled={!localDB}>
           New document
@@ -343,6 +396,19 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
             onDocMenu={onDocMenu}
             selectedIds={selectedIds}
             onToggleSelect={toggleOne}
+          />
+        ) : viewMode === 'gantt' && ganttStartField?.name && ganttEndField?.name ? (
+          <GanttView
+            startField={ganttStartField.name}
+            endField={ganttEndField.name}
+            docs={visible as Record<string, unknown>[]}
+            useAsTitle={meta?.useAsTitle}
+            onOpen={onOpen}
+            onPeek={onPeek}
+            onDocMenu={onDocMenu}
+            selectedIds={selectedIds}
+            onToggleSelect={toggleOne}
+            update={updateDoc}
           />
         ) : visible.length === 0 ? (
           <div className="empty">

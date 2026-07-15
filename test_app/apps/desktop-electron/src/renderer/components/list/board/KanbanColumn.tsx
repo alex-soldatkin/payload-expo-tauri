@@ -3,6 +3,7 @@
 // and tints (.over) while a card is dragged over it. Header shows label +
 // live count; body scrolls vertically when its cards overflow.
 import { useDroppable } from '@dnd-kit/core'
+import { StatusBadge } from '../../badges/StatusBadge'
 import { KanbanCard } from './KanbanCard'
 
 export const NO_VALUE = '__none__'
@@ -26,7 +27,15 @@ export function KanbanColumn({ value, label, docs, useAsTitle, onOpen, onPeek, o
   return (
     <div className={`board-col${isOver ? ' over' : ''}`}>
       <div className="board-col-head">
-        <span className="board-col-label">{label}</span>
+        {/* The 'No value' column (null value) stays a plain label; real option
+            columns get the shared status pill, coloured by their value. */}
+        {value == null ? (
+          <span className="board-col-label">{label}</span>
+        ) : (
+          <span className="board-col-label board-col-badge">
+            <StatusBadge value={value} label={label} />
+          </span>
+        )}
         <span className="board-col-count">{docs.length}</span>
       </div>
       <div className="board-col-body" ref={setNodeRef}>

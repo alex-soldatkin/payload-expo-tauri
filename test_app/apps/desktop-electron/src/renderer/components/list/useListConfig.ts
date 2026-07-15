@@ -11,7 +11,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { FilterGroups, FilterPreset } from './filters/types'
 
-export type ListViewMode = 'table' | 'board' | 'calendar'
+export type ListViewMode = 'table' | 'board' | 'calendar' | 'gantt'
 
 export type ListConfigEntry = {
   columns?: string[]
@@ -21,12 +21,16 @@ export type ListConfigEntry = {
   activeFilters?: FilterGroups
   /** Named filter presets saved locally for this collection. */
   presets?: FilterPreset[]
-  /** Table (default) vs. property-driven Kanban board / calendar (issue #25). */
+  /** Table (default) vs. property-driven Kanban board / calendar / gantt (issue #25). */
   viewMode?: ListViewMode
   /** Field name backing the board's columns (a board-eligible select/radio). */
   boardField?: string
   /** Field name backing the calendar's day buckets (a top-level date field). */
   calendarField?: string
+  /** Field name backing the gantt bar's start edge (a top-level date field). */
+  ganttStartField?: string
+  /** Field name backing the gantt bar's end edge (a top-level date field). */
+  ganttEndField?: string
 }
 
 type ListConfigMap = Record<string, ListConfigEntry>

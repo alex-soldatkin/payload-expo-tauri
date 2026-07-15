@@ -5,6 +5,7 @@ import type { ReactNode } from 'react'
 import type { SchemaField } from '../../form/types'
 import { formatUpdatedAt } from '../../lib/doc'
 import { resolveOptionLabel, optionValue } from '../../form/labels'
+import { StatusBadge } from '../badges/StatusBadge'
 import type { DisplayField } from './columns'
 
 /** Extract a plausible display value out of a relationship row shape. */
@@ -53,7 +54,6 @@ function countBadge(v: unknown): ReactNode {
 }
 
 function selectLabel(field: SchemaField | undefined, v: unknown): string {
-  if (v == null || v === '') return '—'
   const options = field?.options
   if (Array.isArray(options)) {
     for (const opt of options) {
@@ -61,6 +61,19 @@ function selectLabel(field: SchemaField | undefined, v: unknown): string {
     }
   }
   return String(v)
+}
+
+/** Render one (or many) select/radio values as colored status pills. */
+function selectBadges(field: SchemaField | undefined, v: unknown): ReactNode {
+  const values = (Array.isArray(v) ? v : [v]).filter((x) => x != null && x !== '')
+  if (values.length === 0) return '—'
+  return (
+    <span className="cell-badges">
+      {values.map((x) => (
+        <StatusBadge key={String(x)} value={String(x)} label={selectLabel(field, x)} />
+      ))}
+    </span>
+  )
 }
 
 function truncate(v: unknown): string {
@@ -78,8 +91,7 @@ export function renderCell(col: DisplayField, doc: Record<string, unknown>): Rea
       return v === true ? '✓' : '—'
     case 'select':
     case 'radio':
-      if (Array.isArray(v)) return v.map((x) => selectLabel(col.field, x)).join(', ') || '—'
-      return selectLabel(col.field, v)
+      return selectBadges(col.field, v)
     case 'relationship':
     case 'upload':
       return relationshipLabel(v)

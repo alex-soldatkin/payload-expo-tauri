@@ -1,8 +1,15 @@
 // Server / sync settings: shows the active server, logout, change-server, and
 // a destructive "reset local data" wired to resetAndResync.
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useLocalDBStatus } from '@payload-universal/local-db'
 import { deriveWsURL } from '../lib/settings'
+import { applyTheme, THEME_CHOICES, type ThemeChoice } from '../lib/theme'
+
+const THEME_LABELS: Record<ThemeChoice, string> = {
+  system: 'System',
+  light: 'Light',
+  dark: 'Dark',
+}
 
 type Props = {
   serverURL: string
@@ -21,6 +28,29 @@ export function SettingsScreen({
 }: Props) {
   const { resetAndResync, isResetting } = useLocalDBStatus()
   const [confirmingReset, setConfirmingReset] = useState(false)
+
+  // Theme choice is self-contained here: read the persisted value on mount,
+  // then persist + apply immediately on change (write-through, like the boot
+  // path in main.tsx). 'system' clears the override so the OS wins.
+  const [theme, setTheme] = useState<ThemeChoice>('system')
+  useEffect(() => {
+    let cancelled = false
+    window.payloadDesktop
+      .getSettings()
+      .then((s) => {
+        if (!cancelled) setTheme((s.theme as ThemeChoice) ?? 'system')
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const chooseTheme = (next: ThemeChoice) => {
+    setTheme(next)
+    applyTheme(next)
+    void window.payloadDesktop.setSettings({ theme: next }).catch(() => {})
+  }
 
   const effectiveWs = deriveWsURL(serverURL, wsURLOverride)
 
@@ -41,6 +71,25 @@ export function SettingsScreen({
               <span className="v">{email}</span>
             </div>
           )}
+
+          <div className="row">
+            <span className="k">Appearance</span>
+            {/* Three-way segmented control; reuses the .chip.toggle pill look. */}
+            <div className="theme-seg" role="radiogroup" aria-label="Theme">
+              {THEME_CHOICES.map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  role="radio"
+                  aria-checked={theme === c}
+                  className={`chip toggle${theme === c ? ' on' : ''}`}
+                  onClick={() => chooseTheme(c)}
+                >
+                  {THEME_LABELS[c]}
+                </button>
+              ))}
+            </div>
+          </div>
           <div className="row">
             <span className="k">WebSocket</span>
             <span className="v">

@@ -101,7 +101,7 @@
   gap: 14px;
   padding: 0 12px;
   border-top: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--chrome-bg);
   font-size: 11.5px;
   color: var(--ink-muted);
 }
@@ -282,7 +282,7 @@
   align-items: center;
   gap: 5px;
   padding: 9px 12px;
-  background: rgba(30, 30, 34, 0.96);
+  background: var(--header-bg);
   border-bottom: 1px solid var(--line-strong);
   border-radius: 0;
   color: var(--ink-muted);
@@ -297,7 +297,7 @@
 }
 .list-head-cell.sortable:hover {
   color: var(--ink);
-  background: rgba(40, 40, 46, 0.96);
+  background: var(--header-hover-bg);
 }
 .list-head-cell:disabled {
   opacity: 1;
@@ -345,7 +345,7 @@
   display: inline-block;
   padding: 1px 7px;
   border-radius: 999px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-hover);
   border: 1px solid var(--line);
   font-size: 11px;
   color: var(--ink-muted);
@@ -566,7 +566,7 @@
   max-height: 100%;
   border: 1px solid var(--line);
   border-radius: 10px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface);
   transition: background 0.12s ease, outline-color 0.12s ease;
   outline: 1px solid transparent;
 }
@@ -610,7 +610,7 @@
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--surface);
   cursor: pointer;
   user-select: none;
 }
@@ -769,7 +769,7 @@
   align-items: center;
   gap: 10px;
   padding: 8px 14px;
-  background: rgba(40, 40, 46, 0.96);
+  background: var(--header-hover-bg);
   border-bottom: 1px solid var(--line-strong);
 }
 .selection-count {
@@ -809,9 +809,205 @@
   background: rgba(96, 140, 255, 0.14);
 }
 
+/* ---- Gantt timeline view (issue #25 slice three) ------------------------- */
+/* Left fixed title column + a horizontally-scrollable timeline; bars span each
+   doc's start→end. Same tokens as kanban/calendar: muted borders, compact type. */
+.gantt {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 8px;
+  min-height: 0;
+}
+.gantt-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow: hidden;
+}
+/* Left title column — pinned, does not scroll horizontally. */
+.gantt-labels {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line-strong);
+  background: var(--surface);
+  overflow: hidden;
+}
+.gantt-label-head {
+  display: flex;
+  align-items: flex-end;
+  padding: 0 10px 6px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-muted);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-hover);
+}
+.gantt-label {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: 0 10px;
+  text-align: left;
+  background: none;
+  border: none;
+  border-bottom: 1px solid var(--line);
+  border-radius: 0;
+  font-size: 12px;
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.gantt-label:hover {
+  background: var(--surface-hover);
+}
+.gantt-label.selected {
+  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline-offset: -2px;
+  background: rgba(96, 140, 255, 0.14);
+}
+
+/* Right timeline — scrolls horizontally over the full day-width domain. */
+.gantt-timeline {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+.gantt-axis {
+  position: relative;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-hover);
+}
+.gantt-month {
+  position: absolute;
+  top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  padding-left: 4px;
+  border-left: 1px solid var(--line-strong);
+}
+.gantt-week-label {
+  position: absolute;
+  font-size: 9.5px;
+  color: var(--ink-faint);
+  padding-left: 2px;
+}
+.gantt-body {
+  position: relative;
+}
+.gantt-gridline {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: var(--line);
+}
+.gantt-today {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  opacity: 0.8;
+  z-index: 1;
+}
+.gantt-bar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  padding: 0 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(124, 92, 255, 0.55);
+  background: rgba(124, 92, 255, 0.28);
+  color: var(--ink);
+  cursor: grab;
+  user-select: none;
+  z-index: 2;
+  overflow: hidden;
+}
+.gantt-bar:hover {
+  background: rgba(124, 92, 255, 0.4);
+}
+.gantt-bar.dragging {
+  cursor: grabbing;
+  opacity: 0.85;
+}
+.gantt-bar.selected {
+  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline-offset: -1px;
+}
+.gantt-bar-label {
+  font-size: 11px;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Unscheduled section — docs missing either date, title-only rows. */
+.gantt-unscheduled {
+  flex: 0 0 auto;
+  max-height: 30%;
+  overflow-y: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.gantt-unscheduled-head {
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-faint);
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-hover);
+}
+
 /* Two-line list header: identity/views/new on line 1, tools or selection on
    line 2 — no stacked whitespate bars. */
 .main-header { padding: 8px 20px 6px; gap: 10px; }
 .list-toolbar { padding: 4px 20px 8px; }
 .list-toolbar .chips { flex-wrap: wrap; }
 .selection-bar { padding: 4px 20px 8px; }
+
+/* Gantt vertical scrolling + narrow-bar external labels. The scroll container
+   owns the y axis (both columns move together); the axis and label header
+   stick to the top so long collections keep their time scale in view. */
+.gantt-scroll {
+  overflow-y: auto;
+}
+.gantt-labels {
+  min-height: 100%;
+}
+.gantt-label-head {
+  position: sticky;
+  top: 0;
+  z-index: 3;
+}
+.gantt-axis {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+.gantt-bar-ext-label {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  max-width: 260px;
+  font-size: 11px;
+  color: var(--ink-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}

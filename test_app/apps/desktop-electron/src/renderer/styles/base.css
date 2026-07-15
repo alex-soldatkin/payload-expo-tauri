@@ -1,6 +1,59 @@
-/* Dark, translucent theme so macOS vibrancy shows through the window. */
+/* Translucent theme so macOS vibrancy shows through the window. The app ships
+   dark-first; `:root` below holds the LIGHT palette (the explicit-light and
+   system-light case), and the dark tokens live in the two blocks further down.
+   Theme is chosen by the user in Settings and applied as data-theme on <html>:
+     - data-theme='dark'   → force dark
+     - data-theme='light'  → force light
+     - (absent)            → follow prefers-color-scheme
+   Non-colour tokens (fonts) are shared and never overridden. */
 
 :root {
+  color-scheme: light dark;
+
+  --ink: #1c1c1f;
+  --ink-muted: #55555e;
+  --ink-faint: #85858f;
+  --line: rgba(0, 0, 0, 0.1);
+  --line-strong: rgba(0, 0, 0, 0.18);
+  --surface: rgba(0, 0, 0, 0.03);
+  --surface-hover: rgba(0, 0, 0, 0.06);
+  --surface-active: rgba(0, 0, 0, 0.1);
+  --accent: #3d6bff;
+  --accent-ink: #ffffff;
+  --danger: #d64545;
+  --dot: #b9812b;
+  --ok: #2e9e58;
+  /* Translucent window base so macOS vibrancy bleeds through. */
+  --window-bg: rgba(246, 246, 248, 0.62);
+
+  /* ---- Role surfaces (light) --------------------------------------------
+     Elevated/floating/chrome surfaces + overlay scrims + shadows. Mirrored in
+     both dark blocks below — keep in sync. */
+  --pane-bg: rgba(255, 255, 255, 0.55);
+  --chrome-bg: rgba(0, 0, 0, 0.02);
+  --tabstrip-bg: rgba(0, 0, 0, 0.04);
+  --tabstrip-focused-bg: rgba(0, 0, 0, 0.06);
+  --menu-bg: rgba(250, 250, 252, 0.97);
+  --panel-bg: rgba(250, 250, 252, 0.98);
+  --header-bg: rgba(238, 238, 242, 0.96);
+  --header-hover-bg: rgba(226, 226, 232, 0.96);
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --scrim: rgba(0, 0, 0, 0.24);
+  --scrim-strong: rgba(0, 0, 0, 0.32);
+  --shadow: rgba(0, 0, 0, 0.18);
+
+  --font:
+    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
+    sans-serif;
+  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+/* ---- Dark palette ---------------------------------------------------------
+   Applied when the user forces dark, OR when the OS prefers dark and no
+   explicit light override is set. CSS can't fold these into one selector, so
+   the token list is duplicated across the two blocks below — KEEP THEM IN
+   SYNC when editing either. */
+:root[data-theme='dark'] {
   color-scheme: dark;
 
   --ink: #ececee;
@@ -16,11 +69,55 @@
   --danger: #ff6b6b;
   --dot: #ffcc66;
   --ok: #63d68a;
+  --window-bg: rgba(30, 30, 32, 0.6);
 
-  --font:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+  --pane-bg: rgba(24, 24, 26, 0.72);
+  --chrome-bg: rgba(255, 255, 255, 0.02);
+  --tabstrip-bg: rgba(0, 0, 0, 0.12);
+  --tabstrip-focused-bg: rgba(0, 0, 0, 0.2);
+  --menu-bg: rgba(30, 30, 34, 0.96);
+  --panel-bg: rgba(28, 28, 32, 0.96);
+  --header-bg: rgba(30, 30, 34, 0.96);
+  --header-hover-bg: rgba(40, 40, 46, 0.96);
+  --input-bg: rgba(0, 0, 0, 0.25);
+  --scrim: rgba(0, 0, 0, 0.35);
+  --scrim-strong: rgba(0, 0, 0, 0.45);
+  --shadow: rgba(0, 0, 0, 0.5);
+}
+
+@media (prefers-color-scheme: dark) {
+  /* Mirror of :root[data-theme='dark'] — keep the two token lists identical. */
+  :root:not([data-theme='light']) {
+    color-scheme: dark;
+
+    --ink: #ececee;
+    --ink-muted: #b7b7bf;
+    --ink-faint: #8a8a94;
+    --line: rgba(255, 255, 255, 0.09);
+    --line-strong: rgba(255, 255, 255, 0.16);
+    --surface: rgba(255, 255, 255, 0.04);
+    --surface-hover: rgba(255, 255, 255, 0.07);
+    --surface-active: rgba(255, 255, 255, 0.11);
+    --accent: #7aa2ff;
+    --accent-ink: #0b1220;
+    --danger: #ff6b6b;
+    --dot: #ffcc66;
+    --ok: #63d68a;
+    --window-bg: rgba(30, 30, 32, 0.6);
+
+    --pane-bg: rgba(24, 24, 26, 0.72);
+    --chrome-bg: rgba(255, 255, 255, 0.02);
+    --tabstrip-bg: rgba(0, 0, 0, 0.12);
+    --tabstrip-focused-bg: rgba(0, 0, 0, 0.2);
+    --menu-bg: rgba(30, 30, 34, 0.96);
+    --panel-bg: rgba(28, 28, 32, 0.96);
+    --header-bg: rgba(30, 30, 34, 0.96);
+    --header-hover-bg: rgba(40, 40, 46, 0.96);
+    --input-bg: rgba(0, 0, 0, 0.25);
+    --scrim: rgba(0, 0, 0, 0.35);
+    --scrim-strong: rgba(0, 0, 0, 0.45);
+    --shadow: rgba(0, 0, 0, 0.5);
+  }
 }
 
 html,
@@ -32,7 +129,7 @@ body,
 
 body {
   /* Translucent so vibrancy bleeds through; the main pane sits opaquer on top. */
-  background: rgba(30, 30, 32, 0.6);
+  background: var(--window-bg);
   color: var(--ink);
   font-family: var(--font);
   font-size: 13px;
@@ -97,7 +194,7 @@ input,
 textarea {
   font-family: inherit;
   color: var(--ink);
-  background: rgba(0, 0, 0, 0.25);
+  background: var(--input-bg);
   border: 1px solid var(--line-strong);
   border-radius: 6px;
   padding: 8px 10px;

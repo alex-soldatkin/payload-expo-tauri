@@ -32,7 +32,7 @@
 .sidebar {
   width: 220px;
   flex: 0 0 220px;
-  background: rgba(255, 255, 255, 0.02);
+  background: var(--chrome-bg);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
@@ -83,7 +83,7 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  background: rgba(24, 24, 26, 0.72);
+  background: var(--pane-bg);
   overflow: hidden;
 }
 .main-header {
@@ -120,7 +120,7 @@
   overflow-x: auto;
   scrollbar-width: none;
   border-bottom: 1px solid var(--line);
-  background: rgba(0, 0, 0, 0.12);
+  background: var(--tabstrip-bg);
   min-height: 34px;
 }
 .tab-strip::-webkit-scrollbar { display: none; }
@@ -140,7 +140,7 @@
 }
 .tab.active {
   color: var(--ink);
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--surface-hover);
   box-shadow: inset 0 -2px 0 var(--accent, #7c5cff);
 }
 .tab.preview .tab-title { font-style: italic; }
@@ -157,11 +157,11 @@
   opacity: 0;
 }
 .tab:hover .tab-close, .tab.active .tab-close { opacity: 1; }
-.tab-close:hover { background: rgba(255, 255, 255, 0.12); color: var(--ink); }
+.tab-close:hover { background: var(--surface-active); color: var(--ink); }
 
 /* ---- Split editor groups ---------------------------------------------------- */
 .group-view { display: flex; flex-direction: column; height: 100%; min-width: 0; }
-.group-view.focused .tab-strip { background: rgba(0, 0, 0, 0.2); }
+.group-view.focused .tab-strip { background: var(--tabstrip-focused-bg); }
 .group-content { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .group-content > .main { flex: 1; min-height: 0; }
 .split-handle {
@@ -206,9 +206,9 @@
   padding: 8px 14px;
   border-radius: 8px;
   font-size: 12.5px;
-  background: rgba(30, 30, 34, 0.95);
+  background: var(--menu-bg);
   border: 1px solid var(--line);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 8px 24px var(--shadow);
   cursor: pointer;
 }
 .toast.success { border-color: rgba(99, 214, 138, 0.5); }
@@ -273,7 +273,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim);
 }
 .peek-card {
   width: min(560px, 86vw);
@@ -282,9 +282,9 @@
   flex-direction: column;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(28, 28, 32, 0.96);
+  background: var(--panel-bg);
   backdrop-filter: blur(14px);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 18px 48px var(--shadow);
   overflow: hidden;
 }
 .peek-head {
@@ -324,7 +324,7 @@
   align-items: flex-start;
   justify-content: center;
   padding-top: 12vh;
-  background: rgba(0, 0, 0, 0.35);
+  background: var(--scrim);
 }
 .palette {
   width: min(560px, 90vw);
@@ -333,9 +333,9 @@
   flex-direction: column;
   border-radius: 12px;
   border: 1px solid var(--line);
-  background: rgba(28, 28, 32, 0.96);
+  background: var(--panel-bg);
   backdrop-filter: blur(14px);
-  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.5);
+  box-shadow: 0 18px 48px var(--shadow);
   overflow: hidden;
 }
 .palette-input {

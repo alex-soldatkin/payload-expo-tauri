@@ -1,0 +1,78 @@
+/* Status pills for select/radio option values. Shared vocabulary rendered by
+   StatusBadge: a soft tinted background with stronger, same-hue text. Colours
+   are built with color-mix against the theme surface/ink so a single hue value
+   yields a readable pill in both dark and light themes. */
+
+.status-badge {
+  display: inline-block;
+  max-width: 100%;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.5;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: middle;
+  /* --badge-hue is set per hue class; mix it soft for the fill, add a faint
+     same-hue border, and use the near-pure hue for text. */
+  background: color-mix(in srgb, var(--badge-hue) 22%, transparent);
+  border: 1px solid color-mix(in srgb, var(--badge-hue) 34%, transparent);
+  color: color-mix(in srgb, var(--badge-hue) 82%, var(--ink));
+}
+
+/* Settings › Appearance segmented control — a row of .chip.toggle pills.
+   (Lives here because views.css/form.css are owned by another change; purely a
+   layout wrapper, the pill visuals come from .chip.toggle.) */
+.theme-seg {
+  display: inline-flex;
+  gap: 6px;
+}
+.theme-seg .chip.toggle {
+  padding: 3px 12px;
+}
+
+/* Table cell wrapper when a select holds multiple values — wrap with a gap. */
+.cell-badges {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  max-width: 100%;
+}
+
+/* Board header: the label slot holds a pill instead of bare text. Keep it
+   flex-shrinking so long labels ellipsize inside the pill, not overflow. */
+.board-col-badge {
+  min-width: 0;
+  overflow: visible;
+}
+
+/* Curated 8-hue palette (evenly spread around the wheel, muted saturation so
+   they sit calmly against the translucent surfaces). */
+.badge-hue-0 { --badge-hue: #7aa2ff; } /* blue */
+.badge-hue-1 { --badge-hue: #63d68a; } /* green */
+.badge-hue-2 { --badge-hue: #ffcc66; } /* amber */
+.badge-hue-3 { --badge-hue: #ff8fa3; } /* rose */
+.badge-hue-4 { --badge-hue: #b48cff; } /* violet */
+.badge-hue-5 { --badge-hue: #5fd0d6; } /* teal */
+.badge-hue-6 { --badge-hue: #f0a878; } /* orange */
+.badge-hue-7 { --badge-hue: #9fb4c8; } /* slate */
+
+/* Semantic aliases — kept intuitive and distinct from the hashed palette. */
+.badge-hue-ok { --badge-hue: #63d68a; }     /* published / active / done */
+.badge-hue-warn { --badge-hue: #ffcc66; }   /* draft / pending / in-progress */
+.badge-hue-mute { --badge-hue: #9aa0ac; }   /* archived / inactive */
+.badge-hue-danger { --badge-hue: #ff6b6b; } /* cancelled / rejected / failed */
+
+/* In light theme the soft tint over a light surface washes out the same-hue
+   text, so darken it. Two blocks (mirrors base.css theming): the explicit
+   light override, and system-light when no override forces a theme. */
+:root[data-theme='light'] .status-badge {
+  color: color-mix(in srgb, var(--badge-hue) 70%, #1a1a1f);
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme='dark']):not([data-theme='light']) .status-badge {
+    color: color-mix(in srgb, var(--badge-hue) 70%, #1a1a1f);
+  }
+}
