@@ -41,10 +41,10 @@
 .field-inline { flex-direction: row; align-items: center; gap: 8px; }
 .field-label { font-size: 11px; font-weight: 650; color: var(--ink-muted); text-transform: uppercase; letter-spacing: 0.05em; }
 .field-label.inline { font-weight: 500; color: var(--ink); }
-.field-required { color: var(--danger, #e5484d); margin-left: 2px; }
+.field-required { color: var(--danger); margin-left: 2px; }
 .field-flag { margin-left: 6px; font-size: 10px; opacity: 0.7; }
 .field-description { font-size: 11px; color: var(--ink-faint); }
-.field-error { font-size: 11px; color: var(--danger, #e5484d); }
+.field-error { font-size: 11px; color: var(--danger); }
 
 .input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; }
 
@@ -85,7 +85,7 @@
   padding: 8px 12px;
   color: var(--ink-muted);
 }
-.field-tabs-bar button.active { color: var(--ink); border-bottom-color: var(--accent, #7c5cff); }
+.field-tabs-bar button.active { color: var(--ink); border-bottom-color: var(--accent); }
 .field-tab-body { display: flex; flex-direction: column; gap: 14px; padding-top: 12px; }
 
 /* Array / blocks rows */
@@ -124,13 +124,13 @@
   gap: 4px;
   padding: 2px 8px;
   border-radius: 999px;
-  background: rgba(124, 92, 255, 0.18);
-  border: 1px solid rgba(124, 92, 255, 0.4);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
   font-size: 12px;
 }
 .chip button { background: none; border: none; padding: 0 2px; color: var(--ink-muted); }
 .chip.toggle { cursor: pointer; background: var(--surface); border-color: var(--line); }
-.chip.toggle.on { background: rgba(124, 92, 255, 0.25); border-color: rgba(124, 92, 255, 0.6); }
+.chip.toggle.on { background: color-mix(in srgb, var(--accent) 22%, transparent); border-color: color-mix(in srgb, var(--accent) 55%, transparent); }
 
 /* Relationship / upload pickers */
 .picker-value { display: flex; align-items: center; gap: 8px; }
@@ -224,7 +224,7 @@
   cursor: pointer;
 }
 .version-row:hover { background: var(--surface-hover); }
-.version-row.selected { background: rgba(122, 162, 255, 0.16); }
+.version-row.selected { background: color-mix(in srgb, var(--accent) 16%, transparent); }
 .version-when { font-size: 12px; color: var(--ink); }
 .version-tags { display: flex; flex-wrap: wrap; gap: 4px; }
 .version-badge {
@@ -238,17 +238,17 @@
   color: var(--ink-muted);
 }
 .version-badge.status-published {
-  background: rgba(99, 214, 138, 0.18);
-  border-color: rgba(99, 214, 138, 0.4);
-  color: #8ee6ab;
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+  border-color: color-mix(in srgb, var(--ok) 40%, transparent);
+  color: var(--success-foreground);
 }
 .version-badge.status-draft {
   background: var(--surface-hover);
   color: var(--ink-muted);
 }
 .version-badge.autosave {
-  background: rgba(122, 162, 255, 0.16);
-  border-color: rgba(122, 162, 255, 0.4);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border-color: color-mix(in srgb, var(--accent) 40%, transparent);
   color: var(--accent);
 }
 
@@ -301,9 +301,9 @@
   word-break: break-word;
   min-width: 0;
 }
-.diff-changed { background: rgba(122, 162, 255, 0.12); border-color: rgba(122, 162, 255, 0.35); }
-.diff-added { background: rgba(99, 214, 138, 0.12); border-color: rgba(99, 214, 138, 0.35); }
-.diff-removed { background: rgba(255, 107, 107, 0.12); border-color: rgba(255, 107, 107, 0.35); }
+.diff-changed { background: color-mix(in srgb, var(--accent) 12%, transparent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); }
+.diff-added { background: color-mix(in srgb, var(--ok) 12%, transparent); border-color: color-mix(in srgb, var(--ok) 35%, transparent); }
+.diff-removed { background: color-mix(in srgb, var(--danger) 12%, transparent); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
 
 .versions-actions {
   display: flex;
@@ -313,14 +313,14 @@
   border-top: 1px solid var(--line);
 }
 .restore-btn {
-  border: 1px solid rgba(255, 107, 107, 0.5);
+  border: 1px solid color-mix(in srgb, var(--danger) 50%, transparent);
   color: var(--danger);
-  background: rgba(255, 107, 107, 0.1);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
 }
-.restore-btn:hover:not(:disabled) { background: rgba(255, 107, 107, 0.18); }
+.restore-btn:hover:not(:disabled) { background: color-mix(in srgb, var(--danger) 18%, transparent); }
 .restore-btn.confirm {
   background: var(--danger);
-  color: #1a0d0d;
+  color: #ffffff;
   border-color: var(--danger);
   font-weight: 650;
 }
@@ -342,7 +342,7 @@
 }
 .doc-menu-popover .option { font-size: 12px; }
 .doc-menu-popover .option.danger { color: var(--danger); }
-.doc-menu-popover .option.danger:hover { background: rgba(255, 107, 107, 0.14); }
+.doc-menu-popover .option.danger:hover { background: color-mix(in srgb, var(--danger) 14%, transparent); }
 
 /* Relationship "+ Create new…" row — separated from candidate options */
 .picker-menu .option.option-create {
@@ -360,7 +360,7 @@
 }
 .upload-drop.over {
   border-color: var(--accent);
-  background: rgba(122, 162, 255, 0.1);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
 }
 
 /* Inline-create modal — centered overlay with a picker-menu-like surface */

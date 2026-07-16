@@ -381,8 +381,8 @@
   position: relative;
 }
 .filter-btn.on {
-  color: var(--accent, #7c5cff);
-  border-color: rgba(124, 92, 255, 0.6);
+  color: var(--accent);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
 }
 .filter-badge {
   position: absolute;
@@ -392,8 +392,8 @@
   height: 15px;
   padding: 0 3px;
   border-radius: 999px;
-  background: rgba(124, 92, 255, 0.9);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-ink);
   font-size: 9.5px;
   line-height: 15px;
   text-align: center;
@@ -571,8 +571,8 @@
   outline: 1px solid transparent;
 }
 .board-col.over {
-  background: rgba(124, 92, 255, 0.18);
-  outline: 1px solid rgba(124, 92, 255, 0.5);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  outline: 1px solid color-mix(in srgb, var(--accent) 50%, transparent);
 }
 .board-col-head {
   display: flex;
@@ -782,8 +782,8 @@
 }
 /* Day cell tints while a chip is dragged over it (mirrors .board-col.over). */
 .cal-cell.over {
-  background: rgba(124, 92, 255, 0.16);
-  box-shadow: inset 0 0 0 1px rgba(124, 92, 255, 0.45);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent);
 }
 /* The in-cell chip dims while its DragOverlay preview moves. */
 .cal-chip.dragging {
@@ -849,8 +849,8 @@
   cursor: not-allowed;
 }
 .selection-action.danger {
-  color: var(--danger, #ff6b6b);
-  border-color: var(--danger, #ff6b6b);
+  color: var(--danger);
+  border-color: var(--danger);
 }
 .selection-action.danger:disabled {
   opacity: 0.4;
@@ -859,9 +859,9 @@
 /* Selection in board/calendar views (single click selects, double opens) */
 .board-card.selected,
 .cal-chip.selected {
-  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
   outline-offset: -1px;
-  background: rgba(96, 140, 255, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* ---- Gantt timeline view (issue #25 slice three) ------------------------- */
@@ -924,9 +924,9 @@
   background: var(--surface-hover);
 }
 .gantt-label.selected {
-  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
   outline-offset: -2px;
-  background: rgba(96, 140, 255, 0.14);
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
 }
 
 /* Right timeline — scrolls horizontally over the full day-width domain. */
@@ -982,8 +982,8 @@
   align-items: center;
   padding: 0 6px;
   border-radius: 5px;
-  border: 1px solid rgba(124, 92, 255, 0.55);
-  background: rgba(124, 92, 255, 0.28);
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 28%, transparent);
   color: var(--ink);
   cursor: grab;
   user-select: none;
@@ -991,14 +991,14 @@
   overflow: hidden;
 }
 .gantt-bar:hover {
-  background: rgba(124, 92, 255, 0.4);
+  background: color-mix(in srgb, var(--accent) 40%, transparent);
 }
 .gantt-bar.dragging {
   cursor: grabbing;
   opacity: 0.85;
 }
 .gantt-bar.selected {
-  outline: 2px solid rgba(96, 140, 255, 0.65);
+  outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent);
   outline-offset: -1px;
 }
 .gantt-bar-label {
@@ -1096,7 +1096,7 @@
   bottom: 3px;
   width: 3px;
   border-radius: 2px;
-  background: var(--accent, #7c5cff);
+  background: var(--accent);
 }
 .gantt-handle.left { left: -3px; }
 .gantt-handle.left::after { left: 3px; }
@@ -1142,8 +1142,8 @@
   justify-content: center;
   font-size: 11px;
   font-weight: 700;
-  background: var(--accent, #7c5cff);
-  color: var(--accent-ink, #fff);
+  background: var(--accent);
+  color: var(--accent-ink);
   box-shadow: 0 2px 8px var(--shadow);
 }
 @keyframes board-card-place {

@@ -1,51 +1,84 @@
-/* Translucent theme so macOS vibrancy shows through the window. The app ships
-   dark-first; `:root` below holds the LIGHT palette (the explicit-light and
-   system-light case), and the dark tokens live in the two blocks further down.
+/* T3 Code design language. Flat SOLID surfaces (no vibrancy translucency),
+   hairline low-alpha borders, 4%-alpha hover fills, ONE blue accent (--primary)
+   used sparingly, generous 10px radius, subtle shadows only on popovers.
+
+   Each palette block declares the T3 PRIMITIVES first (--background /
+   --foreground / --muted / --border / --primary / semantics + --radius) then
+   expresses every existing app token as an ALIAS of them — so all seven
+   stylesheets keep working unchanged. The app ships dark-first; `:root` below
+   holds the LIGHT palette (explicit-light + system-light), and the dark tokens
+   live in the two blocks further down.
    Theme is chosen by the user in Settings and applied as data-theme on <html>:
      - data-theme='dark'   → force dark
      - data-theme='light'  → force light
      - (absent)            → follow prefers-color-scheme
-   Non-colour tokens (fonts) are shared and never overridden. */
+   Non-colour tokens (fonts, radius) are shared and never overridden. */
 
 :root {
   color-scheme: light dark;
 
-  --ink: #1c1c1f;
-  --ink-muted: #55555e;
-  --ink-faint: #85858f;
-  --line: rgba(0, 0, 0, 0.1);
-  --line-strong: rgba(0, 0, 0, 0.18);
-  --surface: rgba(0, 0, 0, 0.03);
+  /* ---- T3 primitives (light) --------------------------------------------- */
+  --background: #ffffff;
+  --foreground: #262626; /* neutral-800 */
+  --card: #ffffff;
+  --popover: #ffffff;
+  --muted: rgba(0, 0, 0, 0.04);
+  --muted-foreground: #686868;
+  --accent-surface: rgba(0, 0, 0, 0.04);
+  --border: rgba(0, 0, 0, 0.08);
+  --input: rgba(0, 0, 0, 0.1);
+  --primary: oklch(48.8% 0.217 264);
+  --primary-foreground: #ffffff;
+  --ring: oklch(48.8% 0.217 264);
+  --destructive: oklch(63.7% 0.237 25.331); /* red-500 */
+  --destructive-foreground: oklch(50.5% 0.213 27.518); /* red-700 */
+  --success: oklch(69.6% 0.17 162.48); /* emerald-500 */
+  --success-foreground: oklch(50.8% 0.118 165.612); /* emerald-700 */
+  --warning: oklch(76.9% 0.188 70.08); /* amber-500 */
+  --warning-foreground: oklch(55.5% 0.163 48.998); /* amber-700 */
+  --info: oklch(62.3% 0.214 259.815); /* blue-500 */
+
+  --radius: 0.625rem; /* 10px */
+
+  /* ---- App tokens as aliases (light) ------------------------------------- */
+  --ink: var(--foreground);
+  --ink-muted: var(--muted-foreground);
+  --ink-faint: #9a9a9a;
+  --line: var(--border);
+  --line-strong: rgba(0, 0, 0, 0.14);
+  --surface: var(--muted);
   --surface-hover: rgba(0, 0, 0, 0.06);
-  --surface-active: rgba(0, 0, 0, 0.1);
-  --accent: #3d6bff;
-  --accent-ink: #ffffff;
-  --danger: #d64545;
-  --dot: #b9812b;
-  --ok: #2e9e58;
-  /* Translucent window base so macOS vibrancy bleeds through. */
-  --window-bg: rgba(246, 246, 248, 0.62);
+  --surface-active: rgba(0, 0, 0, 0.09);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --dot: var(--warning);
+  --ok: var(--success);
+  /* SOLID window base — T3 is not translucent. */
+  --window-bg: var(--background);
 
   /* ---- Role surfaces (light) --------------------------------------------
      Elevated/floating/chrome surfaces + overlay scrims + shadows. Mirrored in
      both dark blocks below — keep in sync. */
-  --pane-bg: rgba(255, 255, 255, 0.55);
+  --pane-bg: var(--background);
   --chrome-bg: rgba(0, 0, 0, 0.02);
-  --tabstrip-bg: rgba(0, 0, 0, 0.04);
-  --tabstrip-focused-bg: rgba(0, 0, 0, 0.06);
-  --menu-bg: rgba(250, 250, 252, 0.97);
-  --panel-bg: rgba(250, 250, 252, 0.98);
-  --header-bg: rgba(238, 238, 242, 0.96);
-  --header-hover-bg: rgba(226, 226, 232, 0.96);
-  --input-bg: rgba(0, 0, 0, 0.04);
-  --scrim: rgba(0, 0, 0, 0.24);
-  --scrim-strong: rgba(0, 0, 0, 0.32);
-  --shadow: rgba(0, 0, 0, 0.18);
+  --tabstrip-bg: rgba(0, 0, 0, 0.02);
+  --tabstrip-focused-bg: rgba(0, 0, 0, 0.04);
+  --menu-bg: var(--popover);
+  --panel-bg: var(--card);
+  --header-bg: rgba(0, 0, 0, 0.02);
+  --header-hover-bg: rgba(0, 0, 0, 0.05);
+  --input-bg: var(--muted);
+  --scrim: rgba(0, 0, 0, 0.2);
+  --scrim-strong: rgba(0, 0, 0, 0.28);
+  --shadow: rgba(0, 0, 0, 0.1);
 
   --font:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial,
-    sans-serif;
-  --mono: ui-monospace, 'SF Mono', SFMono-Regular, Menlo, Consolas, monospace;
+    'DM Sans Variable', 'DM Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+    system-ui, sans-serif;
+  --mono:
+    'SF Mono', 'SFMono-Regular', 'JetBrains Mono', Consolas, 'Liberation Mono',
+    Menlo, monospace;
 }
 
 /* ---- Dark palette ---------------------------------------------------------
@@ -56,33 +89,57 @@
 :root[data-theme='dark'] {
   color-scheme: dark;
 
-  --ink: #ececee;
-  --ink-muted: #b7b7bf;
-  --ink-faint: #8a8a94;
-  --line: rgba(255, 255, 255, 0.09);
-  --line-strong: rgba(255, 255, 255, 0.16);
-  --surface: rgba(255, 255, 255, 0.04);
-  --surface-hover: rgba(255, 255, 255, 0.07);
-  --surface-active: rgba(255, 255, 255, 0.11);
-  --accent: #7aa2ff;
-  --accent-ink: #0b1220;
-  --danger: #ff6b6b;
-  --dot: #ffcc66;
-  --ok: #63d68a;
-  --window-bg: rgba(30, 30, 32, 0.6);
+  /* ---- T3 primitives (dark) ---------------------------------------------- */
+  --background: #161616; /* SOLID — T3 dark is not translucent */
+  --foreground: #f5f5f5; /* neutral-100 */
+  --card: #161616;
+  --popover: #1c1c1c;
+  --muted: rgba(255, 255, 255, 0.04);
+  --muted-foreground: #818181;
+  --accent-surface: rgba(255, 255, 255, 0.04);
+  --border: rgba(255, 255, 255, 0.06);
+  --input: rgba(255, 255, 255, 0.08);
+  --primary: oklch(58.8% 0.217 264);
+  --primary-foreground: #ffffff;
+  --ring: oklch(58.8% 0.217 264);
+  --destructive: #fb414a;
+  --destructive-foreground: oklch(70.4% 0.191 22.216); /* red-400 */
+  --success: oklch(69.6% 0.17 162.48); /* emerald-500 */
+  --success-foreground: oklch(76.5% 0.177 163.223); /* emerald-400 */
+  --warning: oklch(76.9% 0.188 70.08); /* amber-500 */
+  --warning-foreground: oklch(82.8% 0.189 84.429); /* amber-400 */
+  --info: oklch(62.3% 0.214 259.815); /* blue-500 */
 
-  --pane-bg: rgba(24, 24, 26, 0.72);
+  --radius: 0.625rem;
+
+  /* ---- App tokens as aliases (dark) -------------------------------------- */
+  --ink: var(--foreground);
+  --ink-muted: var(--muted-foreground);
+  --ink-faint: #6a6a6a;
+  --line: var(--border);
+  --line-strong: rgba(255, 255, 255, 0.12);
+  --surface: var(--muted);
+  --surface-hover: rgba(255, 255, 255, 0.06);
+  --surface-active: rgba(255, 255, 255, 0.1);
+  --accent: var(--primary);
+  --accent-ink: var(--primary-foreground);
+  --danger: var(--destructive);
+  --dot: var(--warning);
+  --ok: var(--success);
+  --window-bg: var(--background);
+
+  --pane-bg: var(--background);
   --chrome-bg: rgba(255, 255, 255, 0.02);
-  --tabstrip-bg: rgba(0, 0, 0, 0.12);
-  --tabstrip-focused-bg: rgba(0, 0, 0, 0.2);
-  --menu-bg: rgba(30, 30, 34, 0.96);
-  --panel-bg: rgba(28, 28, 32, 0.96);
-  --header-bg: rgba(30, 30, 34, 0.96);
-  --header-hover-bg: rgba(40, 40, 46, 0.96);
-  --input-bg: rgba(0, 0, 0, 0.25);
-  --scrim: rgba(0, 0, 0, 0.35);
-  --scrim-strong: rgba(0, 0, 0, 0.45);
-  --shadow: rgba(0, 0, 0, 0.5);
+  --tabstrip-bg: rgba(255, 255, 255, 0.02);
+  --tabstrip-focused-bg: rgba(255, 255, 255, 0.04);
+  --menu-bg: var(--popover);
+  --panel-bg: var(--card);
+  --header-bg: rgba(255, 255, 255, 0.02);
+  --header-hover-bg: rgba(255, 255, 255, 0.05);
+  --input-bg: var(--muted);
+  --scrim: rgba(0, 0, 0, 0.5);
+  --scrim-strong: rgba(0, 0, 0, 0.6);
+  --shadow: rgba(0, 0, 0, 0.4);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -90,33 +147,57 @@
   :root:not([data-theme='light']) {
     color-scheme: dark;
 
-    --ink: #ececee;
-    --ink-muted: #b7b7bf;
-    --ink-faint: #8a8a94;
-    --line: rgba(255, 255, 255, 0.09);
-    --line-strong: rgba(255, 255, 255, 0.16);
-    --surface: rgba(255, 255, 255, 0.04);
-    --surface-hover: rgba(255, 255, 255, 0.07);
-    --surface-active: rgba(255, 255, 255, 0.11);
-    --accent: #7aa2ff;
-    --accent-ink: #0b1220;
-    --danger: #ff6b6b;
-    --dot: #ffcc66;
-    --ok: #63d68a;
-    --window-bg: rgba(30, 30, 32, 0.6);
+    /* ---- T3 primitives (dark) -------------------------------------------- */
+    --background: #161616; /* SOLID — T3 dark is not translucent */
+    --foreground: #f5f5f5; /* neutral-100 */
+    --card: #161616;
+    --popover: #1c1c1c;
+    --muted: rgba(255, 255, 255, 0.04);
+    --muted-foreground: #818181;
+    --accent-surface: rgba(255, 255, 255, 0.04);
+    --border: rgba(255, 255, 255, 0.06);
+    --input: rgba(255, 255, 255, 0.08);
+    --primary: oklch(58.8% 0.217 264);
+    --primary-foreground: #ffffff;
+    --ring: oklch(58.8% 0.217 264);
+    --destructive: #fb414a;
+    --destructive-foreground: oklch(70.4% 0.191 22.216); /* red-400 */
+    --success: oklch(69.6% 0.17 162.48); /* emerald-500 */
+    --success-foreground: oklch(76.5% 0.177 163.223); /* emerald-400 */
+    --warning: oklch(76.9% 0.188 70.08); /* amber-500 */
+    --warning-foreground: oklch(82.8% 0.189 84.429); /* amber-400 */
+    --info: oklch(62.3% 0.214 259.815); /* blue-500 */
 
-    --pane-bg: rgba(24, 24, 26, 0.72);
+    --radius: 0.625rem;
+
+    /* ---- App tokens as aliases (dark) ------------------------------------ */
+    --ink: var(--foreground);
+    --ink-muted: var(--muted-foreground);
+    --ink-faint: #6a6a6a;
+    --line: var(--border);
+    --line-strong: rgba(255, 255, 255, 0.12);
+    --surface: var(--muted);
+    --surface-hover: rgba(255, 255, 255, 0.06);
+    --surface-active: rgba(255, 255, 255, 0.1);
+    --accent: var(--primary);
+    --accent-ink: var(--primary-foreground);
+    --danger: var(--destructive);
+    --dot: var(--warning);
+    --ok: var(--success);
+    --window-bg: var(--background);
+
+    --pane-bg: var(--background);
     --chrome-bg: rgba(255, 255, 255, 0.02);
-    --tabstrip-bg: rgba(0, 0, 0, 0.12);
-    --tabstrip-focused-bg: rgba(0, 0, 0, 0.2);
-    --menu-bg: rgba(30, 30, 34, 0.96);
-    --panel-bg: rgba(28, 28, 32, 0.96);
-    --header-bg: rgba(30, 30, 34, 0.96);
-    --header-hover-bg: rgba(40, 40, 46, 0.96);
-    --input-bg: rgba(0, 0, 0, 0.25);
-    --scrim: rgba(0, 0, 0, 0.35);
-    --scrim-strong: rgba(0, 0, 0, 0.45);
-    --shadow: rgba(0, 0, 0, 0.5);
+    --tabstrip-bg: rgba(255, 255, 255, 0.02);
+    --tabstrip-focused-bg: rgba(255, 255, 255, 0.04);
+    --menu-bg: var(--popover);
+    --panel-bg: var(--card);
+    --header-bg: rgba(255, 255, 255, 0.02);
+    --header-hover-bg: rgba(255, 255, 255, 0.05);
+    --input-bg: var(--muted);
+    --scrim: rgba(0, 0, 0, 0.5);
+    --scrim-strong: rgba(0, 0, 0, 0.6);
+    --shadow: rgba(0, 0, 0, 0.4);
   }
 }
 
@@ -187,7 +268,7 @@ button.link:hover {
 
 button.danger {
   color: var(--danger);
-  border-color: rgba(255, 107, 107, 0.4);
+  border-color: color-mix(in srgb, var(--danger) 40%, transparent);
 }
 
 input,
@@ -219,8 +300,8 @@ textarea {
   flex-direction: column;
 }
 .screen-drag {
-  height: 38px;
-  flex: 0 0 38px;
+  height: 44px;
+  flex: 0 0 44px;
   -webkit-app-region: drag;
 }
 .screen-body {
@@ -264,17 +345,17 @@ button { white-space: nowrap; }
 select {
   appearance: none;
   -webkit-appearance: none;
-  background-color: rgba(255, 255, 255, 0.06);
+  background-color: var(--input-bg);
   border: 1px solid var(--line);
   border-radius: 7px;
   color: var(--ink);
   font-size: 13px;
   padding: 7px 30px 7px 10px;
-  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23b7b7bf' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'><path d='M1 1l4 4 4-4' stroke='%23818181' stroke-width='1.5' fill='none' stroke-linecap='round'/></svg>");
   background-repeat: no-repeat;
   background-position: right 10px center;
 }
-select:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); }
+select:focus { outline: none; border-color: var(--accent); }
 .preset-row {
   display: flex;
   gap: 8px;
@@ -282,9 +363,28 @@ select:focus { outline: none; border-color: rgba(124, 92, 255, 0.6); }
 .error-box {
   color: var(--danger);
   font-size: 12.5px;
-  background: rgba(255, 107, 107, 0.1);
-  border: 1px solid rgba(255, 107, 107, 0.25);
+  background: color-mix(in srgb, var(--danger) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--danger) 25%, transparent);
   border-radius: 6px;
   padding: 8px 10px;
+}
+
+/* ---- Thin 6px scrollbars (T3) --------------------------------------------- */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--line-strong);
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-faint);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
 }
 

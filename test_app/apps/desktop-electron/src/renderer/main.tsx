@@ -1,4 +1,5 @@
 import { createRoot } from 'react-dom/client'
+import '@fontsource-variable/dm-sans'
 import './styles/base.css'
 import './styles/shell.css'
 import './styles/views.css'

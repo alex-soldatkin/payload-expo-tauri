@@ -6,15 +6,15 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const preloadPath = fileURLToPath(new URL('../preload/index.cjs', import.meta.url))
 
-// Shared macOS window chrome (mirrors desktop-tauri tauri.conf.json).
+// Shared macOS window chrome. T3 design language is SOLID (no vibrancy /
+// transparency); the window paints an opaque background. trafficLightPosition.y
+// centers the ~16px controls in the 44px titlebar ((44-16)/2 ≈ 14).
 const macChrome =
   process.platform === 'darwin'
     ? {
-        vibrancy: 'sidebar',
         titleBarStyle: 'hiddenInset',
-        trafficLightPosition: { x: 20, y: 12 },
-        transparent: true,
-        backgroundColor: '#00000000',
+        trafficLightPosition: { x: 20, y: 14 },
+        backgroundColor: '#161616',
       }
     : {}
 
