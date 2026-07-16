@@ -22,6 +22,8 @@ type Props = {
   update: (id: string, data: Record<string, unknown>) => Promise<void>
   remove: (id: string) => Promise<void>
   onClear: () => void
+  /** Reset the list's column config (passthrough ResetColumns actions). */
+  onResetColumns?: () => void
 }
 
 export function SelectionBar({
@@ -32,6 +34,7 @@ export function SelectionBar({
   update,
   remove,
   onClear,
+  onResetColumns,
 }: Props) {
   const { showToast } = useToast()
   const steps = useActionSteps()
@@ -133,7 +136,7 @@ export function SelectionBar({
         {getActionComponents(slug, 'list').length > 0 && (
           <DocInfoScopeProvider value={{ slug, docId: null, serverURL }}>
             <SelectionScopeProvider
-              value={{ slug, docs: selected, totalDocs: count, clear: onClear }}
+              value={{ slug, docs: selected, totalDocs: count, clear: onClear, resetColumns: onResetColumns }}
             >
               {getActionComponents(slug, 'list').map((Action, i) => (
                 <span key={i} className="selection-action passthrough">

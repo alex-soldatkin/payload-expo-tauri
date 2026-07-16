@@ -17,6 +17,7 @@ import { useToast } from './toast/ToastProvider'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
+import { TabErrorBoundary } from './TabErrorBoundary'
 import { GlobalForm } from './globals/GlobalForm'
 import { DocPeekProvider } from './preview/DocPeek'
 import { DocContextMenuProvider } from './preview/DocContextMenu'
@@ -278,7 +279,9 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
             state={state}
             dispatch={dispatch}
             quickSelect={quickSelect}
-            renderContent={(tab) => {
+            renderContent={(tab) => (
+              <TabErrorBoundary tabKey={`${tab.kind}|${tab.slug ?? ''}|${tab.docId ?? ''}`}>
+                {((tab) => {
               if (tab.kind === 'list' && tab.slug) {
                 return (
                   <DocumentList
@@ -339,7 +342,9 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                 )
               }
               return <div className="empty">Unknown tab.</div>
-            }}
+                })(tab)}
+              </TabErrorBoundary>
+            )}
           />
         </div>
       </div>

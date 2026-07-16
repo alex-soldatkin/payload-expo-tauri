@@ -24,6 +24,9 @@ export type SelectionScope = {
   docs: Record<string, unknown>[]
   totalDocs: number
   clear: () => void
+  /** Reset the desktop list's column config (gear flow) — used by
+   *  passthrough ResetColumns-style actions. */
+  resetColumns?: () => void
 }
 
 const SelectionContext = createContext<SelectionScope | null>(null)
@@ -82,7 +85,12 @@ export const toast = Object.assign(
  */
 export function navigateAdminURL(url: string): boolean {
   const m = /\/collections\/([^/?#]+)(?:\/([^/?#]+))?/.exec(url)
-  if (!m || !navSink) return false
+  if (!m || !navSink) {
+    // Custom web-admin sub-views (kanban/finder/planner routes) have no
+    // desktop counterpart yet — say so instead of silently doing nothing.
+    toastSink?.('This admin view is not available in the desktop app yet.', { type: 'info' })
+    return false
+  }
   const [, slug, id] = m
   if (id && id !== 'create') navSink.openEditor(slug, id)
   else navSink.openList(slug)

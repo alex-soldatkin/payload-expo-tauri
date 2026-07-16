@@ -325,11 +325,17 @@ export function useListQuery(): {
   }
 }
 
-/** Table column controls — the desktop gear-icon flow owns columns; no-ops. */
+/** Table column controls — resetting maps onto the desktop's own
+ *  gear-icon column config when the selection scope provides it. */
 export function useTableColumns(): {
   columns: unknown[]
   setActiveColumns: () => void
-  resetColumns: () => void
+  resetColumns: () => Promise<void>
+  resetColumnsState: () => Promise<void>
 } {
-  return { columns: [], setActiveColumns: () => {}, resetColumns: () => {} }
+  const scope = useSelectionScope()
+  const reset = async () => {
+    scope?.resetColumns?.()
+  }
+  return { columns: [], setActiveColumns: () => {}, resetColumns: reset, resetColumnsState: reset }
 }

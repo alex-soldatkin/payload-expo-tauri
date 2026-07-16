@@ -353,6 +353,7 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
           update={updateDoc}
           remove={removeDoc}
           onClear={clearSelection}
+          onResetColumns={() => update({ columns: defaults })}
         />
       ) : (
         <ListToolbar

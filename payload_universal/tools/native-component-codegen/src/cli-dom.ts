@@ -45,6 +45,8 @@ type Discovered = {
   /** Registry key: `${slug}.${runtimeFieldPath}`. */
   key: string
   filePath: string
+  /** Config-declared clientProps (e.g. StatusBadge colorMap) — JSON only. */
+  clientProps?: Record<string, unknown>
 }
 
 type ActionRef = {
@@ -148,6 +150,16 @@ function componentNameFromPath(filePath: string): string {
 
 const FIELD_SLOTS = new Set(['Field', 'beforeInput', 'afterInput', 'RowLabel'])
 
+/** clientProps must be embeddable in generated source — JSON-clone or drop. */
+function tryJsonClone(v: unknown): Record<string, unknown> | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  try {
+    return JSON.parse(JSON.stringify(v)) as Record<string, unknown>
+  } catch {
+    return undefined
+  }
+}
+
 /** Pull `{path}`-shaped component refs out of one admin.components value. */
 function componentPaths(comp: unknown): string[] {
   if (Array.isArray(comp)) return comp.flatMap(componentPaths)
@@ -175,11 +187,19 @@ function walkFields(fields: unknown, prefix: string, configDir: string, out: Dis
     if (comps && typeof comps === 'object') {
       for (const [slot, comp] of Object.entries(comps)) {
         if (!FIELD_SLOTS.has(slot)) continue
+        // clientProps ride along with object-form component refs — components
+        // read them as props in the web admin (e.g. StatusBadge's colorMap),
+        // so the desktop registration must deliver them too.
+        const clientProps =
+          comp && typeof comp === 'object' && !Array.isArray(comp) && 'clientProps' in comp
+            ? tryJsonClone((comp as { clientProps?: unknown }).clientProps)
+            : undefined
         for (const compPath of componentPaths(comp)) {
           out.push({
             slot: slot as Discovered['slot'],
             key: fieldKey,
             filePath: specToAbsBase(compPath, configDir),
+            clientProps,
           })
         }
       }
@@ -638,8 +658,9 @@ program
           continue
         }
         seenReg.add(regKey)
+        const extra = ref.clientProps ? `, ${JSON.stringify(ref.clientProps)}` : ''
         const wrapped =
-          ref.slot === 'RowLabel' ? `asPayloadRowLabel(${entry.name})` : `asPayloadField(${entry.name})`
+          ref.slot === 'RowLabel' ? `asPayloadRowLabel(${entry.name})` : `asPayloadField(${entry.name}${extra})`
         lines.push(`registerFieldComponents('${ref.key}', { ${ref.slot}: ${wrapped} })`)
       }
     }

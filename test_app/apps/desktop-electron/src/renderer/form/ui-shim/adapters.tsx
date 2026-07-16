@@ -15,6 +15,10 @@ export function asPayloadField(
   // components declare arbitrary Payload prop subsets; the adapter supplies
   // a superset, so any narrower prop contract is satisfied at runtime.
   Component: ComponentType<any>,
+  /** Config-declared clientProps (admin.components.Field.clientProps) — the
+   *  web admin passes these to the component; so do we (e.g. StatusBadge's
+   *  colorMap, whose absence crashed five editors). */
+  clientProps?: Record<string, unknown>,
 ): ComponentType<FieldComponentProps> {
   return function PayloadFieldAdapter(props: FieldComponentProps) {
     return (
@@ -25,6 +29,7 @@ export function asPayloadField(
         description={resolveLabel(props.field.admin?.description) || undefined}
         required={props.field.required}
         readOnly={Boolean(props.field.admin?.readOnly)}
+        {...clientProps}
       />
     )
   }
