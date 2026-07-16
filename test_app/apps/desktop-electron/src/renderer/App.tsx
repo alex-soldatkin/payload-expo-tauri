@@ -57,7 +57,7 @@ export function App() {
   // ---- loading-schema: fetch the admin schema with the token --------------
   useEffect(() => {
     if (stage.name !== 'loading-schema') return
-    const { serverURL, token } = settings
+    const { serverURL, token, language } = settings
     if (!serverURL || !token) {
       setStage(token ? { name: 'connect' } : { name: 'login' })
       return
@@ -66,7 +66,7 @@ export function App() {
     setSchemaError(null)
     ;(async () => {
       try {
-        const schema = await loadSchema(serverURL, token)
+        const schema = await loadSchema(serverURL, token, language)
         if (!cancelled) setStage({ name: 'workspace', schema })
       } catch (err) {
         if (cancelled) return
@@ -83,7 +83,7 @@ export function App() {
     return () => {
       cancelled = true
     }
-  }, [stage.name, settings.serverURL, settings.token, persist])
+  }, [stage.name, settings.serverURL, settings.token, settings.language, persist])
 
   // ---- Transitions --------------------------------------------------------
   const handleConnect = useCallback(
@@ -110,6 +110,17 @@ export function App() {
     persist({ token: undefined })
     setStage({ name: 'login' })
   }, [persist])
+
+  // Re-fetch the admin schema in a new language WITHOUT a full logout: persist
+  // the choice, then drop back to loading-schema so the effect above re-fetches
+  // (?language=) and swaps the localized schema into the workspace.
+  const handleChangeLanguage = useCallback(
+    (language: string) => {
+      persist({ language })
+      setStage({ name: 'loading-schema' })
+    },
+    [persist],
+  )
 
   // ---- Render -------------------------------------------------------------
   if (stage.name === 'boot' || stage.name === 'loading-schema') {
@@ -163,8 +174,10 @@ export function App() {
       token={settings.token!}
       wsURLOverride={settings.wsURLOverride}
       email={settings.email}
+      language={settings.language}
       onLogout={handleLogout}
       onChangeServer={handleChangeServer}
+      onChangeLanguage={handleChangeLanguage}
     />
   )
 }

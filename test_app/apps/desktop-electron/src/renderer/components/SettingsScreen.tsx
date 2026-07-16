@@ -11,20 +11,32 @@ const THEME_LABELS: Record<ThemeChoice, string> = {
   dark: 'Dark',
 }
 
+// Admin UI languages offered for schema labels. Payload's i18n resolves these
+// via @payloadcms/translations; en/es match the server's content locales.
+const LANGUAGE_CHOICES: Array<{ code: string; label: string }> = [
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'de', label: 'Deutsch' },
+]
+
 type Props = {
   serverURL: string
   wsURLOverride?: string
   email?: string
+  language?: string
   onLogout: () => void
   onChangeServer: () => void
+  onChangeLanguage: (language: string) => void
 }
 
 export function SettingsScreen({
   serverURL,
   wsURLOverride,
   email,
+  language,
   onLogout,
   onChangeServer,
+  onChangeLanguage,
 }: Props) {
   const { resetAndResync, isResetting } = useLocalDBStatus()
   const [confirmingReset, setConfirmingReset] = useState(false)
@@ -90,6 +102,25 @@ export function SettingsScreen({
               ))}
             </div>
           </div>
+
+          <div className="row">
+            <span className="k">Language</span>
+            {/* Re-fetches the admin schema (?language=) and swaps localized
+                labels into the workspace — no logout. */}
+            <select
+              className="lang-select"
+              aria-label="Admin language"
+              value={language ?? 'en'}
+              onChange={(e) => onChangeLanguage(e.target.value)}
+            >
+              {LANGUAGE_CHOICES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.label}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <div className="row">
             <span className="k">WebSocket</span>
             <span className="v">

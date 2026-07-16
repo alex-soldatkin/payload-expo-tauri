@@ -72,11 +72,16 @@ export async function login(
  * Fetch the admin schema for a server using a JWT.
  * Throws {@link AuthError} on 401/403 so the caller can drop the token.
  */
-export async function loadSchema(serverURL: string, token: string): Promise<AdminSchema> {
+export async function loadSchema(
+  serverURL: string,
+  token: string,
+  language?: string,
+): Promise<AdminSchema> {
   const base = normalizeServerURL(serverURL)
   try {
     return await fetchAdminSchema({
       baseURL: base,
+      language: language || undefined,
       requestInit: { headers: { Authorization: `JWT ${token}` } },
     })
   } catch (err) {

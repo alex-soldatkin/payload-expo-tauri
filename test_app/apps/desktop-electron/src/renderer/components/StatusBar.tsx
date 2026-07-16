@@ -2,6 +2,7 @@
 // queued (locally-modified) changes for the active collection.
 import { useEffect, useState } from 'react'
 import { useLocalDB, useLocalDBStatus, useLocalQuery } from '@payload-universal/local-db'
+import { UploadQueuePanel } from './uploads/UploadQueuePanel'
 
 type Props = {
   activeSlug: string | null
@@ -73,6 +74,8 @@ export function StatusBar({ activeSlug, onOpenSettings }: Props) {
           ? `${queuedCount} unsynced change${queuedCount === 1 ? '' : 's'}`
           : 'No pending changes'}
       </div>
+
+      <UploadQueuePanel />
 
       <div className="spacer" />
 

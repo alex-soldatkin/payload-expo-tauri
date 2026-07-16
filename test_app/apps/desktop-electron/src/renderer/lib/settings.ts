@@ -8,6 +8,8 @@ export type DesktopSettings = {
   wsURLOverride?: string
   token?: string
   email?: string
+  /** Admin UI language for schema labels (?language= on /api/admin-schema). */
+  language?: string
 }
 
 /**

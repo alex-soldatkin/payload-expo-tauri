@@ -19,8 +19,10 @@ type Props = {
   token: string
   wsURLOverride?: string
   email?: string
+  language?: string
   onLogout: () => void
   onChangeServer: () => void
+  onChangeLanguage: (language: string) => void
 }
 
 export function Workspace({
@@ -29,8 +31,10 @@ export function Workspace({
   token,
   wsURLOverride,
   email,
+  language,
   onLogout,
   onChangeServer,
+  onChangeLanguage,
 }: Props) {
   // One storage instance per server — the DB name prefix isolates each server's
   // data on disk.
@@ -64,8 +68,10 @@ export function Workspace({
         token={token}
         wsURLOverride={wsURLOverride}
         email={email}
+        language={language}
         onLogout={onLogout}
         onChangeServer={onChangeServer}
+        onChangeLanguage={onChangeLanguage}
       />
       </ToastProvider>
     </LocalDBProvider>

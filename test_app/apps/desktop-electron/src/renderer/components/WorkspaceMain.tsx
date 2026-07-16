@@ -39,11 +39,13 @@ type Props = {
   token: string
   wsURLOverride?: string
   email?: string
+  language?: string
   onLogout: () => void
   onChangeServer: () => void
+  onChangeLanguage: (language: string) => void
 }
 
-export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, onLogout, onChangeServer }: Props) {
+export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, language, onLogout, onChangeServer, onChangeLanguage }: Props) {
   const [state, rawDispatch] = useReducer(workspaceReducer, null, () => {
     const first = firstCollectionSlug(schema)
     const meta = schema.menuModel.collections.find((c) => c.slug === first)
@@ -312,8 +314,10 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                     serverURL={serverURL}
                     wsURLOverride={wsURLOverride}
                     email={email}
+                    language={language}
                     onLogout={onLogout}
                     onChangeServer={onChangeServer}
+                    onChangeLanguage={onChangeLanguage}
                   />
                 )
               }
