@@ -76,3 +76,17 @@ Assemblon testing env: dump 2026-05-15 restored to `assemblon_copy` DB;
 `next dev -p 3200 --webpack` needs NODE_OPTIONS max-old-space-size=8192
 (4096 OOM'd under desktop sync load). Verified: 14 eager + 53 lazy, five
 lazy collections sync+render ≤3s each, eviction/reopen clean.
+
+## 2026-07-16 — action passthrough (5e62c86)
+
+Bulk (listMenuItems) + document (edit.editMenuItems) actions transpile via
+`pnpm codegen:dom` (per config: `--config --out --allow lucide-react --allow
+react-loading-skeleton`). gen/ is now GITIGNORED (contains per-config copies —
+assemblon's are proprietary); regenerate before building. Rendering: selection
+bar chips (SelectionScope → useSelection live counts), editor ⋯ menu (form
+engine context), right-click menu (DocInfoScope). Every action renders in an
+ActionBoundary — throwing components vanish with a console warning (that's how
+form-scoped actions "defer" from list context to the editor menu). The '@'
+vite alias maps onto the gen mirror, so specifier rewriting isn't load-bearing.
+Known skips on assemblon: ketcher/d3/next-dynamic components (sequence editor,
+monomer tools), jszip/exceljs importers, @payloadcms/ui subpath imports.
