@@ -3,6 +3,11 @@
 // verbatim by the codegen passthrough — resolve their hooks and UI kit against
 // this DOM shim instead of the real (Next-only) package.
 import '../../styles/ui-shim.css'
+import { installShimFetch } from './scopes'
+
+// Rewrites passthrough components' relative '/api/…' fetches onto the session
+// server with JWT auth (see scopes.tsx).
+installShimFetch()
 
 export {
   useField,

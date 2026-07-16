@@ -154,23 +154,33 @@ export function useSelection(): {
   count: number
   totalDocs: number
   selected: Map<string, boolean>
+  selectedIDs: string[]
   docs: Record<string, unknown>[]
   setSelection: (id: string) => void
   toggleAll: () => void
+  /** Payload's selection-as-query-string ('?where[id][in]=…') for REST calls. */
+  getQueryParams: () => string
 } {
   const scope = useSelectionScope()
+  const selectedIDs = useMemo(
+    () => (scope?.docs ?? []).map((d) => String(d.id ?? '')).filter(Boolean),
+    [scope?.docs],
+  )
   const selected = useMemo(() => {
     const m = new Map<string, boolean>()
-    for (const d of scope?.docs ?? []) m.set(String(d.id ?? ''), true)
+    for (const id of selectedIDs) m.set(id, true)
     return m
-  }, [scope?.docs])
+  }, [selectedIDs])
   return {
     count: scope?.docs.length ?? 0,
     totalDocs: scope?.totalDocs ?? 0,
     selected,
+    selectedIDs,
     docs: scope?.docs ?? [],
     setSelection: () => {},
     toggleAll: () => scope?.clear(),
+    getQueryParams: () =>
+      selectedIDs.length > 0 ? `?where[id][in]=${selectedIDs.join(',')}` : '',
   }
 }
 
