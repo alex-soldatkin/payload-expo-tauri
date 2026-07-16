@@ -58,3 +58,21 @@ collection's push queue forever (batchSize 1 + throw + silent error$). Fixed:
 valid); push-side "server newer" pre-check removed (contradicted the
 local-wins-while-flagged conflict policy and could deadlock); replication
 error$ now logged with inner errors unwrapped.
+
+## 2026-07-16 — #29 resolved: lazy collections (92dd565)
+
+RxDB free tier caps parallel RxCollections at 16 (COL23, checked in
+collection.prepare(); collection.close() frees the slot and deletes the name
+from the db registry, so evict→reopen is clean). local-db now opens the first
+14 collections eagerly (sidebar order; small configs unchanged) and the rest
+lazily via `ensureCollection(slug)` with LRU eviction (replication cancelled +
+RxCollection closed on evict; SQLite data persists; sync resumes on reopen).
+Hooks go through `useEnsuredCollection` — ensure on mount, subscribe to
+`onCollectionsChanged`, re-ensure while mounted. The 'docs never land' half of
+#29 was the same root cause: post-cap collections never existed locally.
+
+Assemblon testing env: dump 2026-05-15 restored to `assemblon_copy` DB;
+.env points there; dev user dev@assemblon.local / assemblon-dev-1234; server
+`next dev -p 3200 --webpack` needs NODE_OPTIONS max-old-space-size=8192
+(4096 OOM'd under desktop sync load). Verified: 14 eager + 53 lazy, five
+lazy collections sync+render ≤3s each, eviction/reopen clean.
