@@ -157,7 +157,7 @@ export function useValidatedMutations(
         // fetch; otherwise read the current state from the local DB.
         let baseDoc: Record<string, unknown> | undefined = originalDoc
         if (!baseDoc) {
-          const collection = localDB?.collections[slug]
+          const collection = localDB ? await localDB.ensureCollection(slug) : null
           const rxDoc = collection ? await collection.findOne(id).exec() : null
           if (rxDoc) baseDoc = rxDoc.toMutableJSON() as Record<string, unknown>
         }

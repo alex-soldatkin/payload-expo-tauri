@@ -43,12 +43,22 @@ let _existingDB: PayloadLocalDB | null = null
 
 export type PayloadLocalDB = {
   db: RxDatabase
+  /** OPEN collections only. Large configs open lazily — see ensureCollection. */
   collections: Record<string, RxCollection<PayloadDoc>>
   replications: Record<string, RxReplicationState<PayloadDoc, any>>
   /** WebSocket sync state (when using sync replication) */
   syncState: SyncReplicationState | null
   uploadCollection: RxCollection<PendingUploadItem>
   uploadQueue: UploadQueueManager
+  /**
+   * Open (create + replicate) a collection on demand, evicting the
+   * least-recently-used one when at the open-collection cap. Resolves the
+   * open collection, or null when the slug isn't in the schema / creation
+   * failed. No-op (returns the existing collection) when already open.
+   */
+  ensureCollection: (slug: string) => Promise<RxCollection<PayloadDoc> | null>
+  /** Subscribe to open/evict changes of the collections map. Returns unsubscribe. */
+  onCollectionsChanged: (cb: () => void) => () => void
   /** Trigger an immediate pull for a collection */
   pullNow: (slug: string) => Promise<void>
   /** Push all locally-modified documents now */
@@ -56,6 +66,18 @@ export type PayloadLocalDB = {
   /** Stop all replications and close the database */
   destroy: () => Promise<void>
 }
+
+/**
+ * Open-source RxDB caps PARALLEL RxCollections at 16 (COL23) — production
+ * configs (assemblon: 74 collections) blow straight past it, and everything
+ * after the 16th silently failed to create (issue #29). Instead of requiring
+ * the premium flag, collections beyond this cap open LAZILY: the first
+ * OPEN_CAP (sidebar order) open eagerly at startup, the rest on first use,
+ * evicting the least-recently-used open collection (its replication pauses;
+ * SQLite data persists and sync resumes on reopen). Budget: 16 minus the
+ * upload-queue collection minus headroom for RxDB internals.
+ */
+const OPEN_CAP = 14
 
 export type CreateLocalDBArgs = {
   /** The admin schema fetched from the server */
@@ -148,10 +170,23 @@ export const createLocalDB = async ({
     },
   }
 
-  // Try to add all collections. On DB6 (schema conflict), wipe everything
-  // and retry ONCE with a fresh database — no recursive call needed.
+  // Split into an eager head (created now, DB6-recoverable) and a lazy tail
+  // (created on first use via ensureCollection). Small configs fit entirely
+  // in the eager head — exactly the previous behavior.
+  const eagerEntries = collectionEntries.slice(0, OPEN_CAP)
+  const pendingDefs = new Map<string, any>(
+    collectionEntries.slice(OPEN_CAP).map((e) => [e.slug, e.rxSchema]),
+  )
+  if (pendingDefs.size > 0) {
+    console.info(
+      `[local-db] ${collectionEntries.length} collections exceed the open cap (${OPEN_CAP}); ${pendingDefs.size} will open lazily on first use`,
+    )
+  }
+
+  // Try to add the eager collections. On DB6 (schema conflict), wipe
+  // everything and retry ONCE with a fresh database — no recursive call.
   let needsRetry = false
-  for (const { slug, rxSchema } of collectionEntries) {
+  for (const { slug, rxSchema } of eagerEntries) {
     try {
       const created = await db.addCollections({
         [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true, conflictHandler: payloadConflictHandler },
@@ -185,7 +220,7 @@ export const createLocalDB = async ({
     // Re-open fresh
     db = await openDB()
 
-    for (const { slug, rxSchema } of collectionEntries) {
+    for (const { slug, rxSchema } of eagerEntries) {
       try {
         const created = await db.addCollections({
           [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true, conflictHandler: payloadConflictHandler },
@@ -205,9 +240,9 @@ export const createLocalDB = async ({
       .map((c: { slug: string }) => c.slug) ?? []
   )
 
-  // Always start polling replication for initial pull + background sync.
-  // This handles the bulk data transfer efficiently (batched REST queries).
-  for (const [slug, col] of Object.entries(collections)) {
+  // Start polling replication for a collection (initial pull + background
+  // sync) with error visibility — used for the eager head and every lazy open.
+  const startCollectionReplication = (slug: string, col: RxCollection<PayloadDoc>) => {
     replications[slug] = startReplication({
       baseURL,
       token,
@@ -235,6 +270,81 @@ export const createLocalDB = async ({
         .join('; ')
       console.error(`[local-db] replication error (${slug}): ${inner || err.message || err}`)
     })
+  }
+
+  for (const [slug, col] of Object.entries(collections)) {
+    startCollectionReplication(slug, col)
+  }
+
+  // ---- Lazy open / LRU eviction (issue #29) --------------------------------
+  // `lruOrder` tracks open payload collections, least-recently-used first.
+  // Evicting cancels the replication and closes the RxCollection (freeing a
+  // COL23 slot); persisted SQLite data is untouched and sync resumes when the
+  // collection reopens. Unsynced local edits survive eviction the same way
+  // they survive an app restart.
+  const lruOrder: string[] = eagerEntries.map((e) => e.slug)
+  const changeListeners = new Set<() => void>()
+  const notifyCollectionsChanged = () => {
+    for (const cb of changeListeners) {
+      try { cb() } catch { /* listener errors are theirs */ }
+    }
+  }
+  const onCollectionsChanged = (cb: () => void) => {
+    changeListeners.add(cb)
+    return () => { changeListeners.delete(cb) }
+  }
+  const touchLRU = (slug: string) => {
+    const i = lruOrder.indexOf(slug)
+    if (i >= 0) lruOrder.splice(i, 1)
+    lruOrder.push(slug)
+  }
+  /** In-flight ensures, so concurrent hooks don't double-create. */
+  const ensuring = new Map<string, Promise<RxCollection<PayloadDoc> | null>>()
+
+  const ensureCollection = (slug: string): Promise<RxCollection<PayloadDoc> | null> => {
+    const open = collections[slug]
+    if (open) {
+      touchLRU(slug)
+      return Promise.resolve(open)
+    }
+    const inFlight = ensuring.get(slug)
+    if (inFlight) return inFlight
+    const rxSchema = pendingDefs.get(slug)
+    if (!rxSchema) return Promise.resolve(null) // unknown slug or failed before
+
+    const p = (async (): Promise<RxCollection<PayloadDoc> | null> => {
+      // Evict least-recently-used opens until there's a free slot.
+      while (lruOrder.length >= OPEN_CAP) {
+        const victim = lruOrder.shift()!
+        const rep = replications[victim]
+        delete replications[victim]
+        try { await rep?.cancel() } catch { /* already stopped */ }
+        const col = collections[victim]
+        delete collections[victim]
+        try { await col?.close() } catch { /* already closed */ }
+        // The victim becomes lazily reopenable.
+        const def = collectionEntries.find((e) => e.slug === victim)
+        if (def) pendingDefs.set(victim, def.rxSchema)
+      }
+      try {
+        const created = await db.addCollections({
+          [slug]: { schema: rxSchema, migrationStrategies: {}, autoMigrate: true, conflictHandler: payloadConflictHandler },
+        })
+        collections[slug] = created[slug]
+        pendingDefs.delete(slug)
+        lruOrder.push(slug)
+        startCollectionReplication(slug, created[slug])
+        notifyCollectionsChanged()
+        return created[slug]
+      } catch (err) {
+        console.warn(`[local-db] lazy open failed for "${slug}":`, err)
+        return null
+      } finally {
+        ensuring.delete(slug)
+      }
+    })()
+    ensuring.set(slug, p)
+    return p
   }
 
   // If WebSocket URL is provided, also start WS sync for real-time push notifications.
@@ -299,7 +409,8 @@ export const createLocalDB = async ({
 
   const instance: PayloadLocalDB = {
     db, collections, replications, syncState,
-    uploadCollection, uploadQueue, pullNow, pushNow, destroy,
+    uploadCollection, uploadQueue, ensureCollection, onCollectionsChanged,
+    pullNow, pushNow, destroy,
   }
   _existingDB = instance
   return instance

@@ -37,6 +37,36 @@ export type UseLocalCollectionResult = {
   hasNextPage: boolean
 }
 
+/**
+ * The open collection for a slug, opening it lazily when the config exceeds
+ * the RxDB parallel-collection cap (issue #29). Subscribes to open/evict
+ * changes: a mounted (visible) consumer whose collection gets evicted
+ * re-ensures it immediately; unmounted consumers don't hold slots.
+ */
+const useEnsuredCollection = (
+  localDB: PayloadLocalDB | null,
+  slug: string,
+): RxCollection<PayloadDoc> | undefined => {
+  const [, bump] = useState(0)
+  useEffect(() => {
+    if (!localDB || !slug) return
+    let disposed = false
+    const ensure = () => {
+      if (!disposed && !localDB.collections[slug]) void localDB.ensureCollection(slug)
+    }
+    const unsubscribe = localDB.onCollectionsChanged(() => {
+      bump((x) => x + 1)
+      ensure()
+    })
+    ensure()
+    return () => {
+      disposed = true
+      unsubscribe()
+    }
+  }, [localDB, slug])
+  return localDB?.collections[slug]
+}
+
 export const useLocalCollection = (
   localDB: PayloadLocalDB | null,
   slug: string,
@@ -57,7 +87,7 @@ export const useLocalCollection = (
   const sortField = options?.sort ?? '-updatedAt'
   const where = options?.where
 
-  const collection = localDB?.collections[slug]
+  const collection = useEnsuredCollection(localDB, slug)
 
   useEffect(() => {
     if (!collection) {
@@ -158,7 +188,7 @@ export const useLocalDocument = (
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const collection = localDB?.collections[slug]
+  const collection = useEnsuredCollection(localDB, slug)
 
   useEffect(() => {
     if (!collection || !id) {
@@ -217,7 +247,7 @@ export const useLocalQuery = (
   const [docs, setDocs] = useState<PayloadDoc[]>([])
   const [loading, setLoading] = useState(true)
 
-  const collection = localDB?.collections[slug]
+  const collection = useEnsuredCollection(localDB, slug)
   const queryKey = JSON.stringify(mangoQuery)
 
   useEffect(() => {
@@ -269,7 +299,7 @@ export const useLocalMutations = (
   localDB: PayloadLocalDB | null,
   slug: string,
 ): UseLocalMutationsResult => {
-  const collection = localDB?.collections[slug]
+  const collection = useEnsuredCollection(localDB, slug)
 
   const create = useCallback(
     async (data: Record<string, unknown>): Promise<string> => {
