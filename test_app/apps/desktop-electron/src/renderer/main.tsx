@@ -5,6 +5,7 @@ import './styles/views.css'
 import './styles/form.css'
 import './styles/badges.css'
 import './styles/responsive.css'
+import './styles/tailwind.css'
 import { App } from './App'
 import { applyTheme, type ThemeChoice } from './lib/theme'
 

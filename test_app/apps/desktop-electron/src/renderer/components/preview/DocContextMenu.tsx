@@ -9,6 +9,9 @@ import type { AdminSchema } from '@payload-universal/admin-schema'
 import { resolveHandler } from '../../lib/actions'
 import { useToast } from '../toast/ToastProvider'
 import { useDocPeek } from './DocPeek'
+import { getActionComponents } from '../../form/registry'
+import { DocInfoScopeProvider } from '../../form/ui-shim/scopes'
+import { ActionBoundary } from '../../form/ui-shim/ActionBoundary'
 
 type MenuTarget = { slug: string; docId: string; x: number; y: number }
 
@@ -185,6 +188,8 @@ function MenuBody({
     top: Math.min(target.y, window.innerHeight - items.length * 34 - 16),
   }
 
+  const passthrough = getActionComponents(target.slug, 'edit')
+
   return (
     <div className="doc-context-menu picker-menu" style={style} onMouseDown={(e) => e.stopPropagation()}>
       {items.map((item) => (
@@ -197,6 +202,19 @@ function MenuBody({
           {item.label}
         </button>
       ))}
+      {/* Codegen passthrough document actions (config editMenuItems): the
+          ORIGINAL admin components, given this doc's identity via scope. */}
+      {passthrough.length > 0 && (
+        <DocInfoScopeProvider value={{ slug: target.slug, docId: target.docId, serverURL }}>
+          <div className="doc-menu-passthrough">
+            {passthrough.map((Action, i) => (
+              <ActionBoundary key={i} label={`${target.slug}.edit[${i}]`}>
+                <Action />
+              </ActionBoundary>
+            ))}
+          </div>
+        </DocInfoScopeProvider>
+      )}
     </div>
   )
 }

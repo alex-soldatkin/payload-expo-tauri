@@ -588,3 +588,43 @@
   color: var(--ink);
   cursor: pointer;
 }
+
+/* Codegen passthrough actions: chips in the selection bar, menu-entry-like
+   rows in doc menus. The components bring their own inner markup. */
+.selection-action.passthrough {
+  display: inline-flex;
+}
+.selection-action.passthrough > button {
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.selection-action.passthrough > button:hover {
+  background: var(--surface-hover);
+}
+.doc-menu-passthrough {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 4px;
+  display: flex;
+  flex-direction: column;
+}
+.doc-menu-passthrough button {
+  width: 100%;
+  text-align: left;
+  padding: 6px 10px;
+  background: none;
+  border: none;
+  color: var(--ink);
+  font-size: 13px;
+  cursor: pointer;
+  border-radius: 4px;
+}
+.doc-menu-passthrough button:hover {
+  background: var(--surface-hover);
+}

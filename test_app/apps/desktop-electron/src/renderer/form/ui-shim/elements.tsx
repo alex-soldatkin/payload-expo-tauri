@@ -15,12 +15,17 @@ export function Button({
   disabled,
   className,
   type,
+  icon,
+  iconPosition = 'right',
 }: WithChildren & {
   onClick?: () => void
   buttonStyle?: 'primary' | 'secondary' | 'pill' | 'transparent' | 'none'
   size?: 'xsmall' | 'small' | 'medium' | 'large'
   disabled?: boolean
   type?: 'button' | 'submit'
+  /** Payload buttons take an icon slot (passthrough components use lucide). */
+  icon?: ReactNode
+  iconPosition?: 'left' | 'right'
 }) {
   return (
     <button
@@ -29,7 +34,9 @@ export function Button({
       onClick={onClick}
       disabled={disabled}
     >
+      {icon && iconPosition === 'left' && <span className="pui-btn-icon">{icon}</span>}
       {children}
+      {icon && iconPosition !== 'left' && <span className="pui-btn-icon">{icon}</span>}
     </button>
   )
 }

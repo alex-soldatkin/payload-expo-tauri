@@ -58,6 +58,8 @@ export function TextInput({
   placeholder,
   readOnly,
   required,
+  description,
+  className,
   Error: ErrorSlot,
 }: {
   value?: string
@@ -67,10 +69,12 @@ export function TextInput({
   placeholder?: string
   readOnly?: boolean
   required?: boolean
+  description?: LabelValue
+  className?: string
   Error?: ReactNode
 }) {
   return (
-    <div className="pui-text-input">
+    <div className={`pui-text-input${className ? ` ${className}` : ''}`}>
       <FieldLabel label={label} required={required} htmlFor={path} />
       <input
         id={path}
@@ -81,7 +85,156 @@ export function TextInput({
         readOnly={readOnly}
         onChange={onChange}
       />
+      {description ? <FieldDescription description={description} /> : null}
       {ErrorSlot}
+    </div>
+  )
+}
+
+// ---- additional Payload inputs used by passthrough components ---------------
+
+export function CheckboxInput({
+  checked,
+  onToggle,
+  label,
+  id,
+}: {
+  checked?: boolean
+  onToggle?: (e: ChangeEvent<HTMLInputElement>) => void
+  label?: LabelValue
+  id?: string
+}) {
+  return (
+    <label className="pui-checkbox" htmlFor={id}>
+      <input id={id} type="checkbox" checked={Boolean(checked)} onChange={onToggle} />
+      {label ? <span>{resolveLabel(label)}</span> : null}
+    </label>
+  )
+}
+
+export function SelectInput({
+  options = [],
+  value,
+  onChange,
+  path,
+  label,
+  required,
+}: {
+  options?: Array<{ label: string; value: string }>
+  value?: string | { value: string }
+  onChange?: (opt: { label: string; value: string } | null) => void
+  path?: string
+  label?: LabelValue
+  required?: boolean
+}) {
+  const current = typeof value === 'object' && value !== null ? value.value : value
+  return (
+    <div className="pui-text-input">
+      <FieldLabel label={label} required={required} htmlFor={path} />
+      <select
+        id={path}
+        className="input"
+        value={current ?? ''}
+        onChange={(e) => {
+          const opt = options.find((o) => o.value === e.target.value) ?? null
+          onChange?.(opt)
+        }}
+      >
+        <option value="">—</option>
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {resolveLabel(o.label)}
+          </option>
+        ))}
+      </select>
+    </div>
+  )
+}
+
+/** react-select stand-in: native select (single) / multi-select. */
+export function ReactSelect({
+  options = [],
+  value,
+  onChange,
+  isMulti,
+  isClearable,
+  placeholder,
+}: {
+  options?: Array<{ label: string; value: string }>
+  value?: { label: string; value: string } | Array<{ label: string; value: string }> | null
+  onChange?: (v: unknown) => void
+  isMulti?: boolean
+  isClearable?: boolean
+  placeholder?: string
+}) {
+  void isClearable
+  if (isMulti) {
+    const selected = Array.isArray(value) ? value.map((v) => v.value) : []
+    return (
+      <select
+        className="input"
+        multiple
+        value={selected}
+        onChange={(e) => {
+          const picked = Array.from(e.target.selectedOptions).map(
+            (o) => options.find((opt) => opt.value === o.value)!,
+          )
+          onChange?.(picked)
+        }}
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>
+            {o.label}
+          </option>
+        ))}
+      </select>
+    )
+  }
+  const current = value && !Array.isArray(value) ? value.value : ''
+  return (
+    <select
+      className="input"
+      value={current}
+      onChange={(e) => onChange?.(options.find((o) => o.value === e.target.value) ?? null)}
+    >
+      <option value="">{placeholder ?? '—'}</option>
+      {options.map((o) => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  )
+}
+
+export function TextareaInput({
+  value,
+  onChange,
+  path,
+  label,
+  placeholder,
+  required,
+  rows,
+}: {
+  value?: string
+  onChange?: (e: ChangeEvent<HTMLTextAreaElement>) => void
+  path?: string
+  label?: LabelValue
+  placeholder?: string
+  required?: boolean
+  rows?: number
+}) {
+  return (
+    <div className="pui-text-input">
+      <FieldLabel label={label} required={required} htmlFor={path} />
+      <textarea
+        id={path}
+        className="input"
+        rows={rows ?? 4}
+        value={value ?? ''}
+        placeholder={placeholder}
+        onChange={onChange}
+      />
     </div>
   )
 }

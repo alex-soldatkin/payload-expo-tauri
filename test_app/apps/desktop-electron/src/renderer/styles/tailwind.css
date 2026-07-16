@@ -1,0 +1,4 @@
+/* Tailwind for codegen-passthrough components ONLY: theme + utilities, NO
+   preflight — the reset would clobber the app's own design system. */
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities.css';

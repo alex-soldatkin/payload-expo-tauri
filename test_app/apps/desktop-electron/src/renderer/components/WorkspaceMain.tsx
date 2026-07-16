@@ -12,6 +12,8 @@ import { DocumentForm } from '../form/DocumentForm'
 import '../form/custom/registerSSOT'
 import { buildMenuTree } from '../lib/menuTree'
 import { useLocalDB, useLocalMutations } from '@payload-universal/local-db'
+import { setShimNavSink, setShimSession, setShimToastSink } from '../form/ui-shim/scopes'
+import { useToast } from './toast/ToastProvider'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
 import { getRootFields } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
@@ -178,6 +180,21 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
   const group = state.groups[state.activeGroupId]
   const activeTab: Tab | undefined = group.activeTabId ? state.tabs[group.activeTabId] : undefined
   const activeSlug = activeTab?.kind !== 'settings' ? activeTab?.slug ?? null : null
+
+  // ---- Shim sinks for passthrough action components --------------------------
+  // Session identity, tab navigation and toasts for codegen'd admin components
+  // (they call useRouter/useDocumentDrawer/toast from the ui-dom shim).
+  const { showToast } = useToast()
+  useEffect(() => {
+    setShimSession({ serverURL, token })
+    setShimNavSink({ openEditor, openList: (slug) => openList(slug, 'permanent') })
+    setShimToastSink((message, opts) => showToast(message, opts))
+    return () => {
+      setShimSession(null)
+      setShimNavSink(null)
+      setShimToastSink(null)
+    }
+  }, [serverURL, token, openEditor, openList, showToast])
 
   // ---- Cmd/Ctrl+N: new document in the active collection --------------------
   // Works from a list OR editor tab (globals/settings have no 'new'). Mirrors

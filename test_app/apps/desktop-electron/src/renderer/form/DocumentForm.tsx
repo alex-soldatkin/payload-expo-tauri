@@ -12,6 +12,8 @@ import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
 import { VersionsPanel } from './versions/VersionsPanel'
 import { DocMenu, type DocMenuItem } from './DocMenu'
+import { getActionComponents } from './registry'
+import { ActionBoundary } from './ui-shim/ActionBoundary'
 import { useAutosave } from './useAutosave'
 import { docTitle, formatUpdatedAt } from '../lib/doc'
 import { resolveHandler, type ActionContext } from '../lib/actions'
@@ -264,7 +266,19 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
               Versions
             </button>
           )}
-          <DocMenu disabled={busy} items={menuItems} />
+          <DocMenu
+            disabled={busy}
+            items={menuItems}
+            passthrough={
+              getActionComponents(slug, 'edit').length > 0
+                ? getActionComponents(slug, 'edit').map((Action, i) => (
+                    <ActionBoundary key={i} label={`${slug}.edit[${i}]`}>
+                      <Action />
+                    </ActionBoundary>
+                  ))
+                : undefined
+            }
+          />
           {Boolean(record._locallyModified) && <span className="dot" title="Locally modified" />}
         </div>
 

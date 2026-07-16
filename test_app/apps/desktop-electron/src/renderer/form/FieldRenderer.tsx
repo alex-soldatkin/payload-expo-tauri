@@ -53,6 +53,10 @@ export function useFormEngine(): FormEngine {
   if (!ctx) throw new Error('FieldRenderer must be used inside DocumentForm')
   return ctx
 }
+/** Nullable peek — shim hooks used by ACTION components (outside any form). */
+export function useFormEngineMaybe(): FormEngine | null {
+  return useContext(FormEngineContext)
+}
 
 /** Blocks set this so nested conditions can resolve `{path}.{blockType}.{name}`. */
 const BlockScopeContext = createContext<string | undefined>(undefined)

@@ -20,6 +20,32 @@ export type FieldSlots = {
 
 const fieldSlots: Record<string, FieldSlots> = {}
 
+// ---- Action components (codegen passthrough of listMenuItems / -------------
+// admin.components.edit.editMenuItems). They take no props — they read the
+// shim's selection / document scopes — and render as menu entries in the
+// SelectionBar (list) and doc menus (edit).
+export type ActionComponentKind = 'list' | 'edit'
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- actions take
+// no meaningful props (they read shim scopes); any keeps JSX key/list usage sane.
+const actionComponents: Record<string, ComponentType<any>[]> = {}
+
+export function registerActionComponents(
+  slug: string,
+  kind: ActionComponentKind,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  components: ComponentType<any>[],
+): void {
+  actionComponents[`${slug}.${kind}`] = components
+}
+
+export function getActionComponents(
+  slug: string,
+  kind: ActionComponentKind,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): ComponentType<any>[] {
+  return actionComponents[`${slug}.${kind}`] ?? []
+}
+
 export function registerFieldComponents(key: string, slots: FieldSlots): void {
   fieldSlots[key] = { ...fieldSlots[key], ...slots }
 }

@@ -6,6 +6,9 @@
 import { useState } from 'react'
 import type { NativeActionMeta } from '@payload-universal/admin-schema'
 import { resolveHandler, type ActionContext } from '../../../lib/actions'
+import { getActionComponents } from '../../../form/registry'
+import { DocInfoScopeProvider, SelectionScopeProvider } from '../../../form/ui-shim/scopes'
+import { ActionBoundary } from '../../../form/ui-shim/ActionBoundary'
 import { useActionSteps } from '../../preview/ActionSteps'
 import { useToast } from '../../toast/ToastProvider'
 
@@ -124,6 +127,24 @@ export function SelectionBar({
         >
           {running === '__delete' && progress ? `${progress.done}/${progress.total}…` : 'Delete'}
         </button>
+        {/* Codegen passthrough bulk actions (config listMenuItems): the
+            ORIGINAL admin components, reading the selection via the shim's
+            useSelection and rendering inline as chips. */}
+        {getActionComponents(slug, 'list').length > 0 && (
+          <DocInfoScopeProvider value={{ slug, docId: null, serverURL }}>
+            <SelectionScopeProvider
+              value={{ slug, docs: selected, totalDocs: count, clear: onClear }}
+            >
+              {getActionComponents(slug, 'list').map((Action, i) => (
+                <span key={i} className="selection-action passthrough">
+                  <ActionBoundary label={`${slug}.list[${i}]`}>
+                    <Action />
+                  </ActionBoundary>
+                </span>
+              ))}
+            </SelectionScopeProvider>
+          </DocInfoScopeProvider>
+        )}
       </div>
     </div>
   )

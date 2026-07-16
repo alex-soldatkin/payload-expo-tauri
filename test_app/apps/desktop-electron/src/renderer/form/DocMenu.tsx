@@ -11,9 +11,12 @@ export type DocMenuItem = {
 type Props = {
   items: DocMenuItem[]
   disabled?: boolean
+  /** Codegen passthrough edit actions — original admin components, rendered
+   *  as menu entries below the built-ins (they self-handle clicks). */
+  passthrough?: React.ReactNode
 }
 
-export function DocMenu({ items, disabled }: Props) {
+export function DocMenu({ items, disabled, passthrough }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement | null>(null)
 
@@ -60,6 +63,7 @@ export function DocMenu({ items, disabled }: Props) {
               {item.label}
             </button>
           ))}
+          {passthrough && <div className="doc-menu-passthrough">{passthrough}</div>}
         </div>
       )}
     </div>

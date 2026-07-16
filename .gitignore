@@ -129,3 +129,4 @@ playwright-report/
 *.zip
 .vercel/
 .netlify/
+test_app/apps/desktop-electron/src/renderer/form/custom/gen/

@@ -5,13 +5,28 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "target": "es2022",
-    "lib": ["es2022", "dom"],
-    "types": ["vite/client"],
+    "lib": [
+      "es2022",
+      "dom"
+    ],
+    "types": [
+      "vite/client"
+    ],
     "paths": {
-      "@payloadcms/ui": ["./form/ui-shim/index.ts"]
+      "@payloadcms/ui": [
+        "./form/ui-shim/index.ts"
+      ],
+      "next/navigation": [
+        "./form/ui-shim/navigation.ts"
+      ]
     },
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["./**/*"]
+  "include": [
+    "./**/*"
+  ],
+  "exclude": [
+    "./form/custom/gen/**/*"
+  ]
 }
