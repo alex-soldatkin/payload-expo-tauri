@@ -90,3 +90,14 @@ form-scoped actions "defer" from list context to the editor menu). The '@'
 vite alias maps onto the gen mirror, so specifier rewriting isn't load-bearing.
 Known skips on assemblon: ketcher/d3/next-dynamic components (sequence editor,
 monomer tools), jszip/exceljs importers, @payloadcms/ui subpath imports.
+
+## 2026-07-16 — T3 design language (b810abd)
+
+Tokens came from the INSTALLED T3 Code app (no public repo): extract
+`/Applications/T3 Code (Nightly).app/Contents/Resources/app.asar` with
+@electron/asar; the UI stylesheet is apps/server/dist/client/assets/index-*.css.
+System: DM Sans Variable, radius .625rem, primary oklch(48.8/58.8% .217 264),
+solid #fff / #161616 backgrounds, 4%-alpha fills, 6-8%-alpha hairlines,
+emerald/amber/red semantics. Migration was ALIAS-BASED in base.css (T3
+primitives + old tokens as aliases in all three palette blocks) — future
+restyles should keep that layer; vibrancy/transparency removed in windows.mjs.
