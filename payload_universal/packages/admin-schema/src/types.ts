@@ -65,6 +65,10 @@ export type MenuModel = {
     hidden?: boolean
     drafts?: boolean
     versions?: boolean
+    /** True for upload collections (config has an `upload` block) — the desktop
+     *  form shows a file picker and uploads binaries via direct multipart POST
+     *  (the JSON sync push can't carry file bytes). */
+    upload?: boolean
     useAsTitle?: string
     /** admin.defaultColumns from the config — default list columns. */
     defaultColumns?: string[]

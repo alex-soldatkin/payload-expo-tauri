@@ -15,7 +15,7 @@ import { useLocalDB, useLocalMutations } from '@payload-universal/local-db'
 import { setShimNavSink, setShimSession, setShimToastSink } from '../form/ui-shim/scopes'
 import { useToast } from './toast/ToastProvider'
 import { collectionLabel, firstCollectionSlug } from '../lib/collections'
-import { getRootFields } from '../lib/schemaFields'
+import { getRootFields, isUploadCollection } from '../lib/schemaFields'
 import { SplitLayout } from '../workspace/SplitLayout'
 import { TabErrorBoundary } from './TabErrorBoundary'
 import { GlobalForm } from './globals/GlobalForm'
@@ -317,11 +317,13 @@ export function WorkspaceMain({ schema, serverURL, token, wsURLOverride, email, 
                     hasDrafts={Boolean(
                       schema.menuModel.collections.find((c) => c.slug === tab.slug)?.drafts,
                     )}
+                    isUpload={isUploadCollection(schema, tab.slug)}
                     onClose={() => dispatch({ type: 'close', tabId: tab.id })}
                     onDeleted={() => dispatch({ type: 'close', tabId: tab.id })}
                     onTitle={(title) => dispatch({ type: 'retitle', tabId: tab.id, title })}
                     onDirtyChange={(dirty) => dispatch({ type: 'setDirty', tabId: tab.id, dirty })}
                     onDuplicated={(newId) => tab.slug && openEditor(tab.slug, newId)}
+                    onReplaceDoc={(newId) => tab.slug && openEditor(tab.slug, newId)}
                     editActions={
                       schema.menuModel.collections.find((c) => c.slug === tab.slug)?.editActions ?? []
                     }

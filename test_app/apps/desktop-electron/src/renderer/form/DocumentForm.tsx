@@ -10,6 +10,7 @@ import {
 } from '@payload-universal/local-db'
 import type { SchemaField } from './types'
 import { FormEngineProvider, renderField } from './FieldRenderer'
+import { uploadToCollection } from './upload'
 import { VersionsPanel } from './versions/VersionsPanel'
 import { DocMenu, type DocMenuItem } from './DocMenu'
 import { getActionComponents } from './registry'
@@ -44,12 +45,17 @@ type Props = {
   token: string
   rootFields: SchemaField[]
   hasDrafts: boolean
+  /** True for upload collections — enables the file picker + multipart upload. */
+  isUpload?: boolean
   onClose: () => void
   onDeleted: () => void
   /** Reports the doc's display title (tab labels). */
   onTitle?: (title: string) => void
   /** Called after a successful Duplicate with the new doc's id. */
   onDuplicated?: (newId: string) => void
+  /** Navigate this tab to a different doc id in the same collection — used
+   *  after an upload creates the real server doc (replacing the local stub). */
+  onReplaceDoc?: (newId: string) => void
   /** Reports the form's dirty state (feeds the workspace dirty-tab guard). */
   onDirtyChange?: (dirty: boolean) => void
   /**
@@ -60,7 +66,7 @@ type Props = {
   editActions?: Array<{ key: string; label: string; destructive?: boolean }>
 }
 
-export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, onClose, onDeleted, onTitle, onDuplicated, onDirtyChange, editActions = [] }: Props) {
+export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts, isUpload = false, onClose, onDeleted, onTitle, onDuplicated, onReplaceDoc, onDirtyChange, editActions = [] }: Props) {
   const localDB = useLocalDB()
   const { showToast } = useToast()
   const { doc, loading } = useLocalDocument(localDB, slug, id)
@@ -78,6 +84,9 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
   const [saved, setSaved] = useState(false)
   const [submitError, setSubmitError] = useState<string | null>(null)
   const [showVersions, setShowVersions] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const seededFor = useRef<string | null>(null)
 
   // Seed/reseed from the live doc — but never clobber unsaved edits.
@@ -163,6 +172,67 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
     } finally {
       setBusy(false)
     }
+  }
+
+  // Upload a binary to this (upload) collection. The JSON sync push can't carry
+  // file bytes, so the file goes straight to the server via multipart POST with
+  // the current editable field values in the `_payload` envelope (so required
+  // fields like `alt` are satisfied). The server assigns the real doc id; we
+  // upsert the returned doc into the local DB, drop the local stub this "New
+  // document" flow created, and navigate the tab to the real doc.
+  const onUploadFile = async (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    try {
+      const values = editableValues(getValues())
+      // Never send upload-managed metadata back as user input.
+      for (const k of ['filename', 'mimeType', 'filesize', 'url', 'sizes', 'thumbnailURL', 'width', 'height', 'focalX', 'focalY']) {
+        delete values[k]
+      }
+
+      // If this doc already exists on the server (it has a file), REPLACE that
+      // file in place (PATCH) so we don't spawn a duplicate. A stub from "New
+      // document" has no file and no server record yet, so it's a create.
+      const record = doc as Record<string, unknown> | undefined
+      const existingOnServer = Boolean(record?.filename) && !record?._locallyModified
+      const uploaded = await uploadToCollection(
+        file,
+        slug,
+        serverURL,
+        token,
+        values,
+        existingOnServer ? id : undefined,
+      )
+
+      // Make the doc available locally right away (next sync pull would also
+      // bring it, but upsert avoids a blank editor in the meantime).
+      const collection = localDB ? await localDB.ensureCollection(slug) : null
+      if (collection) {
+        await collection.upsert({
+          ...(uploaded as Record<string, unknown>),
+          _deleted: false,
+          // Server-authored: not a local edit, so it won't be re-pushed.
+          _locallyModified: false,
+        } as never)
+        // Remove the unsyncable local stub (different id) after a fresh create.
+        if (uploaded.id !== id) {
+          const stub = await collection.findOne(id).exec()
+          if (stub) await stub.remove()
+        }
+      }
+
+      if (uploaded.id !== id) onReplaceDoc?.(uploaded.id)
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'Upload failed.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const onPickFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    if (file) void onUploadFile(file)
   }
 
   // Dispatch a schema-declared edit action through the desktop ActionRegistry
@@ -303,6 +373,47 @@ export function DocumentForm({ slug, id, serverURL, token, rootFields, hasDrafts
               />
             </div>
           )}
+
+        {isUpload && (
+          <div className="upload-panel">
+            <input ref={fileInputRef} type="file" hidden onChange={onPickFile} />
+            {record.filename ? (
+              <>
+                <span className="doc-meta">
+                  {String(record.filename)}
+                  {typeof record.filesize === 'number'
+                    ? ` · ${Math.max(1, Math.round(Number(record.filesize) / 1024))} KB`
+                    : ''}
+                  {record.url ? (
+                    <>
+                      {' · '}
+                      <a
+                        href={new URL(String(record.url), serverURL).toString()}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        open
+                      </a>
+                    </>
+                  ) : null}
+                </span>
+                <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                  {uploading ? 'Uploading…' : 'Replace file'}
+                </button>
+              </>
+            ) : (
+              <>
+                <span className="doc-meta">
+                  {uploading ? 'Uploading…' : 'No file yet — choose a file to upload'}
+                </span>
+                <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                  Choose file
+                </button>
+              </>
+            )}
+            {uploadError && <span className="editor-error">{uploadError}</span>}
+          </div>
+        )}
 
         <div className="form-layout">
           <div className="form-main">{mainFields.map((f) => renderField(f, ''))}</div>

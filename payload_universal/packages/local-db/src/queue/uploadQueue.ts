@@ -139,14 +139,17 @@ export class UploadQueueManager {
         })
 
         try {
-          // Build FormData for upload
+          // Build FormData for upload. Payload reads non-file document fields
+          // from a single `_payload` JSON part, NOT from individual form fields:
+          // a bare `alt` field is silently dropped and collections that require
+          // `alt` reject the upload ("This field is required"). Send `_payload`.
           const formData = new FormData()
           formData.append('file', {
             uri: item.localUri,
             name: item.fileName,
             type: item.mimeType,
           } as unknown as Blob)
-          formData.append('alt', item.fileName.replace(/\.[^.]+$/, ''))
+          formData.append('_payload', JSON.stringify({ alt: item.fileName.replace(/\.[^.]+$/, '') }))
 
           const token = this.getToken()
           const res = await fetch(`${this.baseURL}/api/${item.targetCollection}`, {

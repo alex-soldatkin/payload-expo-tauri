@@ -17,6 +17,19 @@
   background: var(--input-bg);
 }
 .media-preview img { max-height: 240px; max-width: 100%; border-radius: 6px; object-fit: contain; }
+.upload-panel {
+  margin: 12px 20px 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  background: var(--input-bg);
+}
+.upload-panel .doc-meta { flex: 1; min-width: 0; }
+.upload-panel a { color: var(--accent, inherit); }
 .form-main {
   flex: 1;
   min-width: 0;

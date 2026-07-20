@@ -1,11 +1,12 @@
 // Upload editor: value is a media doc id (same shape as a mono relationship).
 // Renders the current selection as a thumbnail + filename; the picker is a grid
 // of local media docs. Thumbnail URLs are resolved against the server base URL.
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useLocalCollection, useLocalDB, useLocalDocument } from '@payload-universal/local-db'
 import type { PayloadDoc } from '@payload-universal/local-db'
 import type { FieldComponentProps } from '../types'
 import { useFormEngine } from '../FieldRenderer'
+import { uploadToCollection } from '../upload'
 import { FieldShell, isReadOnly, useFieldValue } from './shared'
 
 /** Read a possibly-populated upload id defensively (depth>0 → object). */
@@ -34,23 +35,6 @@ function thumbSrc(doc: PayloadDoc | MediaShape | null, serverURL: string): strin
   }
 }
 
-/** POST a File to {serverURL}/api/media as multipart, returning the new id. */
-async function uploadMedia(file: File, serverURL: string, token: string): Promise<string> {
-  const form = new FormData()
-  form.append('file', file)
-  form.append('alt', file.name)
-  const res = await fetch(new URL('/api/media', serverURL).toString(), {
-    method: 'POST',
-    headers: token ? { Authorization: `JWT ${token}` } : undefined,
-    body: form,
-  })
-  const json = (await res.json().catch(() => null)) as { doc?: { id?: string }; errors?: unknown } | null
-  if (!res.ok || !json?.doc?.id) {
-    throw new Error(`Upload failed (${res.status})`)
-  }
-  return json.doc.id
-}
-
 export function UploadField(props: FieldComponentProps) {
   const { field } = props
   const { value, setValue } = useFieldValue(props)
@@ -66,26 +50,39 @@ export function UploadField(props: FieldComponentProps) {
   const [dragOver, setDragOver] = useState(false)
   const [uploading, setUploading] = useState(false)
   const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const select = (id: string) => {
     setValue(id)
     setOpen(false)
   }
 
-  // Drop → upload the first image directly to the server; the local copy
-  // arrives on the next sync pull, but the value id is set immediately.
+  // Upload a file directly to the related upload collection and select it. The
+  // local copy arrives on the next sync pull; the value id is set immediately.
+  // `alt` defaults to the filename so collections that require it don't reject.
+  const upload = (file: File) => {
+    setUploading(true)
+    setUploadError(null)
+    uploadToCollection(file, mediaSlug, serverURL, token, { alt: file.name })
+      .then((doc) => setValue(doc.id))
+      .catch((err) => setUploadError(err instanceof Error ? err.message : 'Upload failed.'))
+      .finally(() => setUploading(false))
+  }
+
+  // Drop → upload the first file of ANY type (images, PDFs, documents): the
+  // related collection decides which MIME types it accepts, not the client.
   const onDrop = (e: React.DragEvent) => {
     e.preventDefault()
     setDragOver(false)
     if (readOnly || uploading) return
-    const file = Array.from(e.dataTransfer.files).find((f) => f.type.startsWith('image/'))
-    if (!file) return
-    setUploading(true)
-    setUploadError(null)
-    uploadMedia(file, serverURL, token)
-      .then((id) => setValue(id))
-      .catch((err) => setUploadError(err instanceof Error ? err.message : 'Upload failed.'))
-      .finally(() => setUploading(false))
+    const file = Array.from(e.dataTransfer.files)[0]
+    if (file) upload(file)
+  }
+
+  const onPick = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = '' // allow re-picking the same file
+    if (file) upload(file)
   }
 
   const dropHandlers = readOnly
@@ -105,12 +102,23 @@ export function UploadField(props: FieldComponentProps) {
         className={`picker-value upload-drop${dragOver ? ' over' : ''}`}
         {...dropHandlers}
       >
+        {!readOnly && (
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            onChange={onPick}
+          />
+        )}
         {currentId ? (
           <>
             <Thumb doc={current} serverURL={serverURL} />
             <span className="title">{(current as MediaShape | null)?.filename ?? currentId}</span>
             {!readOnly && (
               <>
+                <button type="button" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                  {uploading ? 'Uploading…' : 'Upload'}
+                </button>
                 <button type="button" onClick={() => setOpen((o) => !o)}>
                   Change
                 </button>
@@ -123,12 +131,17 @@ export function UploadField(props: FieldComponentProps) {
         ) : (
           <>
             <span className="doc-meta">
-              {uploading ? 'Uploading…' : 'No file selected — drop an image here'}
+              {uploading ? 'Uploading…' : 'No file selected — drop a file here'}
             </span>
             {!readOnly && !uploading && (
-              <button type="button" onClick={() => setOpen((o) => !o)}>
-                Select
-              </button>
+              <>
+                <button type="button" onClick={() => fileInputRef.current?.click()}>
+                  Upload
+                </button>
+                <button type="button" onClick={() => setOpen((o) => !o)}>
+                  Select
+                </button>
+              </>
             )}
           </>
         )}
