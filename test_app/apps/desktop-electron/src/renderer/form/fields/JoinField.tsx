@@ -9,6 +9,9 @@ import type { FieldComponentProps } from '../types'
 import { useFormEngine } from '../FieldRenderer'
 import { FieldShell } from './shared'
 import { docTitle, formatUpdatedAt } from '../../lib/doc'
+import { longPressHandlers } from '../../lib/longPress'
+import { useDocPeek } from '../../components/preview/DocPeek'
+import { getShimNavSink } from '../ui-shim/scopes'
 
 const CAP = 20
 
@@ -26,6 +29,7 @@ export function JoinField(props: FieldComponentProps) {
   const { field } = props
   const { docId } = useFormEngine()
   const localDB = useLocalDB()
+  const { openPeek } = useDocPeek()
 
   const target = field.collection ?? ''
   const on = field.on ?? ''
@@ -60,7 +64,26 @@ export function JoinField(props: FieldComponentProps) {
       ) : (
         <div className="field-rows">
           {shown.map((row) => (
-            <div key={row.id} className="doc-row" style={{ padding: '8px 10px' }}>
+            // Join rows navigate like list rows: double-click (or Cmd/Ctrl+
+            // click) opens the related doc's editor tab, long-press peeks.
+            <div
+              key={row.id}
+              className="doc-row join-row"
+              style={{ padding: '8px 10px' }}
+              role="button"
+              tabIndex={0}
+              {...longPressHandlers(() => openPeek(target, row.id))}
+              onClick={(e) => {
+                if (e.metaKey || e.ctrlKey) getShimNavSink()?.openEditor(target, row.id)
+              }}
+              onDoubleClick={() => getShimNavSink()?.openEditor(target, row.id)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  getShimNavSink()?.openEditor(target, row.id)
+                }
+              }}
+            >
               <span className="title">{docTitle(row)}</span>
               <span className="meta">{formatUpdatedAt(row.updatedAt)}</span>
             </div>

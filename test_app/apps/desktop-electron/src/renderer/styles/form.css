@@ -428,3 +428,13 @@
 .globals-offline p {
   margin: 0;
 }
+
+/* Join rows are navigable (dblclick/Cmd+click open, long-press peeks). */
+.join-row {
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background 0.1s ease;
+}
+.join-row:hover {
+  background: var(--surface-hover);
+}
