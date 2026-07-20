@@ -72,6 +72,9 @@ export default defineConfig({
   build: {
     outDir: '../../dist',
     emptyOutDir: true,
+    // ketcher-standalone/-react ship mixed CJS/ESM; without this the bundle
+    // keeps literal require() calls that throw in the ESM renderer.
+    commonjsOptions: { transformMixedEsModules: true },
   },
   server: {
     port: 5183,

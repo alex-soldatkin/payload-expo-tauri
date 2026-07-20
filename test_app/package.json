@@ -20,7 +20,8 @@
     "test:web-next": "pnpm --filter @payload-universal-test/web-next test",
     "codegen:native": "tsx ../payload_universal/tools/native-component-codegen/src/cli.ts",
     "codegen:conditions": "tsx ../payload_universal/tools/native-component-codegen/src/cli-conditions.ts",
-    "codegen:dom": "tsx ../payload_universal/tools/native-component-codegen/src/cli-dom.ts"
+    "codegen:dom": "tsx ../payload_universal/tools/native-component-codegen/src/cli-dom.ts",
+    "codegen:dom:assemblon": "tsx ../payload_universal/tools/native-component-codegen/src/cli-dom.ts --config ../assemblon-copy/src/payload.config.ts --out apps/desktop-electron/src/renderer/form/custom/gen --skip-action EditModeToggle --allow lucide-react --allow react-loading-skeleton --allow next/dynamic --allow d3 --allow tailwind-merge --allow ketcher-standalone/dist/binaryWasm --allow ketcher-core --allow ketcher-react --allow react-dom --allow payload --allow @payloadcms/ui/elements/Banner --allow @payloadcms/ui/elements/Button --allow @payloadcms/ui/elements/Collapsible --allow @payloadcms/ui/fields/Select --allow @payloadcms/ui/fields/Text --allow @payloadcms/ui/fields/Textarea"
   },
   "workspaces": [
     "apps/*",

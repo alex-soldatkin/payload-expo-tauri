@@ -528,6 +528,10 @@ program
   .option('-o, --out <dir>', 'output dir (inside the desktop renderer)', './apps/desktop-electron/src/renderer/form/custom/gen')
   .option('--registry <spec>', 'import specifier for the form registry, relative to out', '../../registry')
   .option('--adapters <spec>', 'import specifier for the ui-shim adapters, relative to out', '../../ui-shim/adapters')
+  .option('--skip-action <name>', 'action component NAME to skip (repeatable; e.g. a passthrough superseded by a native feature)', (val: string, acc: string[]) => {
+    acc.push(val)
+    return acc
+  }, [] as string[])
   .option('--allow <pkg>', 'additional bare package import to allow in closures (repeatable)', (val: string, acc: string[]) => {
     acc.push(val)
     return acc
@@ -650,11 +654,17 @@ program
     const sortedActions = [...actionRefs].sort((a, b) =>
       a.slug === b.slug ? (a.kind === b.kind ? a.order - b.order : a.kind < b.kind ? -1 : 1) : a.slug < b.slug ? -1 : 1,
     )
+    const skipActions = new Set<string>((options.skipAction as string[]) ?? [])
     for (const ref of sortedActions) {
       const label = `action ${ref.slug}:${ref.kind}[${ref.order}]`
       const resolved = await resolveFilePath(ref.filePath)
       if (!resolved) {
         skipped.push({ what: label, reason: 'source not found' })
+        actionsSkippedByKind[ref.kind]++
+        continue
+      }
+      if (skipActions.has(componentNameFromPath(resolved))) {
+        skipped.push({ what: label, reason: 'skipped via --skip-action (native equivalent exists)' })
         actionsSkippedByKind[ref.kind]++
         continue
       }

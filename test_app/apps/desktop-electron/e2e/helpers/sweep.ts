@@ -5,15 +5,27 @@
 import { expect, type Page } from '@playwright/test'
 import { resetRecorders } from './safety'
 
-const ARTIFACTS = 'artifacts'
+// Screenshots go under e2e/artifacts/ regardless of the process CWD (Playwright
+// runs specs with CWD = app root, so a bare 'artifacts/' would land there).
+export const ARTIFACTS = 'e2e/artifacts'
 
-/** Click a collection in the sidebar by its slug (nav-item title=slug). */
-export async function openList(page: Page, slug: string): Promise<void> {
+/**
+ * Click a collection in the sidebar by its slug (nav-item title=slug). Returns
+ * false — WITHOUT throwing — when the collection has no sidebar nav-item, which
+ * is the case for `admin: { hidden: true }` collections (e.g. magic-link-tokens,
+ * notifications). Those are still in the passthrough manifest but are not
+ * navigable in the admin UI, so the caller should skip them.
+ */
+export async function openList(page: Page, slug: string): Promise<boolean> {
   const nav = page.locator(`.sidebar .nav-item[title="${slug}"]`)
-  await nav.waitFor({ state: 'visible', timeout: 15_000 })
-  await nav.click()
+  // A short existence probe (not the full 15s) so hidden collections skip fast.
+  if ((await nav.count()) === 0) return false
+  await nav.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
+  if (!(await nav.first().isVisible().catch(() => false))) return false
+  await nav.first().click()
   // The list header renders even while docs sync in.
   await page.locator('.main .main-header h2').first().waitFor({ state: 'visible', timeout: 20_000 })
+  return true
 }
 
 /**
@@ -62,7 +74,30 @@ export type Outcome =
   | { kind: 'modal'; detail: string }
   | { kind: 'toast'; detail: string }
   | { kind: 'blocked'; detail: string }
+  | { kind: 'toggle'; detail: string }
   | { kind: 'none'; detail: string }
+
+/** A pre-click snapshot used to detect NEW toasts and UI-state toggles. */
+export type ActionBaseline = {
+  toasts: number
+  /** How many list cells were already in inline-edit mode. */
+  editingCells: number
+  /** How many passthrough toggle buttons were already "active"/primary. */
+  activeToggles: number
+}
+
+/** Read the toggle-relevant UI state (edit-mode cells + active toggle chips). */
+async function readToggleState(page: Page): Promise<{ editingCells: number; activeToggles: number }> {
+  return page.evaluate(() => ({
+    editingCells: document.querySelectorAll('.list-cell.editing').length,
+    // EditModeToggle renders buttonStyle="primary" when active → the desktop
+    // Button shim emits `pui-btn-primary` (inactive is `pui-btn-secondary`).
+    activeToggles: document.querySelectorAll(
+      '.selection-bar .selection-action.passthrough button.pui-btn-primary, ' +
+        '.selection-bar .selection-action.passthrough button[aria-pressed="true"]',
+    ).length,
+  }))
+}
 
 /** Locator for any "opened modal" surface the passthrough components use. */
 export function modalLocator(page: Page) {
@@ -77,24 +112,36 @@ export function modalLocator(page: Page) {
  * counts NEW toasts (they linger for seconds and would otherwise short-circuit
  * the next action's detection). Also clears the confirm/blocked recorders.
  */
-export async function prepareForAction(page: Page): Promise<number> {
+export async function prepareForAction(page: Page): Promise<ActionBaseline> {
   await resetRecorders(page)
-  return page.locator('.toast-stack .toast').count()
+  const toasts = await page.locator('.toast-stack .toast').count()
+  const toggle = await readToggleState(page)
+  return { toasts, ...toggle }
 }
 
 /**
  * After a passthrough click, classify the outcome within `budget` ms and, if a
  * modal opened, screenshot it and assert its background is OPAQUE.
- * `tag` names the screenshot artifact (<slug>-<action>). `toastBaseline` is the
- * toast count from prepareForAction — only toasts beyond it count as this
- * action's outcome.
+ * `tag` names the screenshot artifact (<slug>-<action>). `baseline` is the
+ * pre-click snapshot from prepareForAction — only toasts beyond its count, and
+ * only UI-state changes relative to it, count as this action's outcome.
+ *
+ * Accepts either the full ActionBaseline object or a bare toast-count number
+ * (back-compat for callers that only track toasts).
  */
 export async function classifyOutcome(
   page: Page,
   tag: string,
-  toastBaseline = 0,
-  budget = 3_000,
+  baseline: ActionBaseline | number = 0,
+  // 5s not 3s: a few actions (e.g. GenerateRemakesListButton) do async work
+  // before firing their confirm(), which can land just past a 3s window.
+  budget = 5_000,
 ): Promise<Outcome> {
+  const base: ActionBaseline =
+    typeof baseline === 'number'
+      ? { toasts: baseline, editingCells: -1, activeToggles: -1 }
+      : baseline
+  const toastBaseline = base.toasts
   const deadline = Date.now() + budget
   const dialog = page.locator('[role="dialog"]')
   const uiModalOverlay = page.locator('[data-ui-modal]')
@@ -132,6 +179,20 @@ export async function classifyOutcome(
     if (blocked > 0) {
       const b = await page.evaluate(() => window.__blocked.at(-1))
       return { kind: 'blocked', detail: `${b?.method} ${b?.url}`.slice(0, 100) }
+    }
+    // 5. a UI-state TOGGLE relative to baseline. Some passthrough actions are
+    //    pure view/state switches with NO modal/toast/confirm/mutation — chiefly
+    //    EditModeToggle (enters/leaves inline edit) and other view toggles. They
+    //    flip either the count of inline-edit cells or the active/primary state
+    //    of a toggle chip. Detect that change so it counts as a real outcome.
+    if (base.editingCells >= 0) {
+      const now = await readToggleState(page)
+      if (now.editingCells !== base.editingCells || now.activeToggles !== base.activeToggles) {
+        return {
+          kind: 'toggle',
+          detail: `editingCells ${base.editingCells}→${now.editingCells}, activeToggles ${base.activeToggles}→${now.activeToggles}`,
+        }
+      }
     }
     await page.waitForTimeout(150)
   }

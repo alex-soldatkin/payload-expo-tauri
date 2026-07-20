@@ -55,7 +55,7 @@ test.describe('Combine orders (read-only)', () => {
     // The CombineOrdersModal (shared ui/modal.tsx) opens as a role=dialog.
     const dialog = page.locator('[role="dialog"]')
     await expect(dialog.first()).toBeVisible({ timeout: 15_000 })
-    await page.screenshot({ path: 'artifacts/flow-combine-orders.png' })
+    await page.screenshot({ path: 'e2e/artifacts/flow-combine-orders.png' })
 
     // Opaque-frame regression.
     const bg = await dialog.first().evaluate((el) => getComputedStyle(el as Element).backgroundColor)
@@ -97,7 +97,7 @@ test.describe('Prepare shipment wizard (read-only)', () => {
     // The shipment wizard opens as a role=dialog (its own Modal instance).
     const dialog = page.locator('[role="dialog"]')
     await expect(dialog.first()).toBeVisible({ timeout: 15_000 })
-    await page.screenshot({ path: 'artifacts/flow-prepare-shipment.png' })
+    await page.screenshot({ path: 'e2e/artifacts/flow-prepare-shipment.png' })
 
     const bg = await dialog.first().evaluate((el) => getComputedStyle(el as Element).backgroundColor)
     expect(bg, `shipment wizard modal must be opaque, got ${bg}`).not.toMatch(
