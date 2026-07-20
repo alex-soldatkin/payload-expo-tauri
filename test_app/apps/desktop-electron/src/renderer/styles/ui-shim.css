@@ -96,3 +96,40 @@
 /* Passthrough components carry the web admin's inline colors in places
    (#ccc borders, #666/#888 text); those stay as-authored — the shim only
    guarantees its own kit renders on-token. */
+
+/* Payload admin theme variables — passthrough components style themselves
+   with the web admin's --theme-* set (modal frames, borders, muted text).
+   The web admin defines these globally; here they map onto the T3 tokens,
+   so they track light/dark automatically. Elevation N ≈ N/10 % foreground
+   mixed into background (Payload's own scale runs bg → text). */
+:root {
+  --theme-bg: var(--background);
+  --theme-text: var(--foreground);
+  --theme-input-bg: var(--input);
+  --theme-border-color: var(--border);
+  --theme-elevation-0: var(--background);
+  --theme-elevation-25: color-mix(in srgb, var(--foreground) 2.5%, var(--background));
+  --theme-elevation-50: color-mix(in srgb, var(--foreground) 5%, var(--background));
+  --theme-elevation-100: color-mix(in srgb, var(--foreground) 10%, var(--background));
+  --theme-elevation-150: color-mix(in srgb, var(--foreground) 15%, var(--background));
+  --theme-elevation-200: color-mix(in srgb, var(--foreground) 20%, var(--background));
+  --theme-elevation-250: color-mix(in srgb, var(--foreground) 25%, var(--background));
+  --theme-elevation-300: color-mix(in srgb, var(--foreground) 30%, var(--background));
+  --theme-elevation-400: color-mix(in srgb, var(--foreground) 40%, var(--background));
+  --theme-elevation-450: color-mix(in srgb, var(--foreground) 45%, var(--background));
+  --theme-elevation-500: color-mix(in srgb, var(--foreground) 55%, var(--background));
+  --theme-elevation-600: color-mix(in srgb, var(--foreground) 65%, var(--background));
+  --theme-elevation-700: color-mix(in srgb, var(--foreground) 75%, var(--background));
+  --theme-elevation-800: color-mix(in srgb, var(--foreground) 85%, var(--background));
+  --theme-elevation-900: color-mix(in srgb, var(--foreground) 92%, var(--background));
+  --theme-elevation-1000: var(--foreground);
+  --theme-success-500: var(--success);
+  --theme-success-400: color-mix(in srgb, var(--success) 80%, var(--background));
+  --theme-success-600: color-mix(in srgb, var(--success) 80%, var(--foreground));
+  --theme-error-500: var(--destructive);
+  --theme-error-400: color-mix(in srgb, var(--destructive) 80%, var(--background));
+  --theme-error-600: color-mix(in srgb, var(--destructive) 80%, var(--foreground));
+  --theme-warning-500: var(--warning);
+  --theme-warning-400: color-mix(in srgb, var(--warning) 80%, var(--background));
+  --theme-warning-600: color-mix(in srgb, var(--warning) 80%, var(--foreground));
+}

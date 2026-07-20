@@ -316,11 +316,14 @@ export function useAllFormFields(): [Record<string, { value: unknown }>, () => v
 /** List-view query context — desktop lists are local-first; minimal surface. */
 export function useListQuery(): {
   data: { docs: Record<string, unknown>[]; totalDocs: number }
+  collectionSlug: string
   refineListData: () => void
 } {
   const scope = useSelectionScope()
+  const doc = useDocInfoScope()
   return {
     data: { docs: scope?.docs ?? [], totalDocs: scope?.totalDocs ?? 0 },
+    collectionSlug: scope?.slug ?? doc?.slug ?? '',
     refineListData: () => {},
   }
 }
