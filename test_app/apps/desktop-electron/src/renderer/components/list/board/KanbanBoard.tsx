@@ -131,7 +131,9 @@ export function KanbanBoard({ slug, field, docs, useAsTitle, onOpen, onPeek, onD
       onDragCancel={() => setDragIds([])}
     >
       <div className="board">
-        {columns.map((col) => (
+        {columns
+          .filter((col) => col.value !== null || (grouped.get(null)?.length ?? 0) > 0)
+          .map((col) => (
           <KanbanColumn
             key={col.value ?? NO_VALUE}
             value={col.value}

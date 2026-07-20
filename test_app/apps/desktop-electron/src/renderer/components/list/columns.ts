@@ -4,6 +4,7 @@
 import type { AdminSchema } from '@payload-universal/admin-schema'
 import type { SchemaField } from '../../form/types'
 import { docTitle } from '../../lib/doc'
+import { flattenTransparent } from './flattenTransparent'
 
 /** Field types renderable as a table column (scalar-ish + containers as badges). */
 const DISPLAYABLE_TYPES = new Set([
@@ -34,7 +35,11 @@ export type DisplayField = {
 /** Root fields the user can pick as columns (skips hidden + presentational). */
 export function displayableFields(rootFields: SchemaField[]): DisplayField[] {
   const out: DisplayField[] = []
-  for (const f of rootFields) {
+  // Transparent containers (rows/collapsibles/unnamed tabs) don't nest data —
+  // their children live at the document root, so they're list columns too.
+  // Without this, container-nested fields fell back to bare text columns
+  // (raw relationship ids, ALL-CAPS key labels).
+  for (const f of flattenTransparent(rootFields)) {
     if (!f.name || f.admin?.hidden || f.admin?.disabled) continue
     if (!DISPLAYABLE_TYPES.has(f.type)) continue
     out.push({

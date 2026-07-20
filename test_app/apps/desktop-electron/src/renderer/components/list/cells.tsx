@@ -7,8 +7,38 @@ import { formatUpdatedAt } from '../../lib/doc'
 import { resolveOptionLabel, optionValue } from '../../form/labels'
 import { StatusBadge } from '../badges/StatusBadge'
 import type { DisplayField } from './columns'
+import { useLocalDB, useLocalDocument } from '@payload-universal/local-db'
+import { docTitle } from '../../lib/doc'
 
 /** Extract a plausible display value out of a relationship row shape. */
+/**
+ * Live-resolving relationship cell: local sync is depth-0 (ids only), so the
+ * related doc's TITLE is looked up from the local DB — lazily opening the
+ * related collection on first use. Falls back to the raw ref while loading.
+ */
+export function RelationCell({ relationTo, value }: { relationTo?: unknown; value: unknown }) {
+  // Normalize the first ref out of string | {relationTo,value} | doc | array.
+  const first = Array.isArray(value) ? value[0] : value
+  let slug = typeof relationTo === 'string' ? relationTo : undefined
+  let id: string | null = null
+  if (typeof first === 'string' || typeof first === 'number') id = String(first)
+  else if (first && typeof first === 'object') {
+    const o = first as Record<string, unknown>
+    if (typeof o.relationTo === 'string') slug = o.relationTo
+    const v = o.value ?? o.id
+    if (typeof v === 'string' || typeof v === 'number') id = String(v)
+    else if (v && typeof v === 'object' && (v as Record<string, unknown>).id != null) {
+      id = String((v as Record<string, unknown>).id)
+    }
+  }
+  const localDB = useLocalDB()
+  const { doc } = useLocalDocument(localDB, slug ?? '', slug ? id : null)
+  if (id == null) return <>{relationshipLabel(value)}</>
+  const title = doc ? docTitle(doc) : relationshipLabel(first)
+  const extra = Array.isArray(value) && value.length > 1 ? ` +${value.length - 1}` : ''
+  return <>{title}{extra}</>
+}
+
 function relationshipLabel(v: unknown): string {
   if (v == null) return '—'
   if (typeof v === 'string' || typeof v === 'number') return String(v)
@@ -94,7 +124,7 @@ export function renderCell(col: DisplayField, doc: Record<string, unknown>): Rea
       return selectBadges(col.field, v)
     case 'relationship':
     case 'upload':
-      return relationshipLabel(v)
+      return <RelationCell relationTo={col.field?.relationTo} value={v} />
     case 'array':
     case 'blocks':
       return countBadge(v)
