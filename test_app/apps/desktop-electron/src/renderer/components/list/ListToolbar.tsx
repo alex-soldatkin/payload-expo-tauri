@@ -24,6 +24,9 @@ type Props = {
   filterSlot?: React.ReactNode
   /** Active filter chips, inline in the same row. */
   chipsSlot?: React.ReactNode
+  /** Native inline Edit Mode toggle. */
+  editMode?: boolean
+  onToggleEditMode?: () => void
 }
 
 export function ListToolbar({
@@ -41,6 +44,7 @@ export function ListToolbar({
   onRefresh,
   filterSlot,
   chipsSlot,
+  editMode, onToggleEditMode,
 }: Props) {
   const [configOpen, setConfigOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)

@@ -1214,3 +1214,27 @@
   border-radius: 4px;
   padding: 1px 6px;
 }
+
+/* Native inline Edit Mode: cell inputs sized to their cells; the toolbar
+   pencil gets the active-primary treatment while editing. */
+.list-cell.editing { padding-top: 4px; padding-bottom: 4px; }
+.inline-edit-input {
+  width: 100%;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--input-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12.5px;
+}
+.inline-edit-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent);
+}
+.icon-btn.active {
+  background: color-mix(in srgb, var(--accent) 15%, transparent);
+  color: var(--accent);
+}

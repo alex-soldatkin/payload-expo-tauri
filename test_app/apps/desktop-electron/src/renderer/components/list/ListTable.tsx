@@ -1,4 +1,5 @@
 import { longPressHandlers } from '../../lib/longPress'
+import { EditableCell, isInlineEditable } from './EditableCell'
 // The grid table: sticky header with click-to-sort, one row per doc. A leading
 // checkbox column drives row selection (header checkbox = select-all-on-page);
 // the second cell of every row carries the locally-modified dot marker.
@@ -19,6 +20,9 @@ type Props = {
   onToggleOne: (id: string) => void
   /** Select/clear every doc on the current page. */
   onToggleAll: (checked: boolean) => void
+  /** Native inline Edit Mode: simple cells edit in place. */
+  editMode?: boolean
+  update?: (id: string, patch: Record<string, unknown>) => Promise<unknown>
 }
 
 export function ListTable({
@@ -33,6 +37,7 @@ export function ListTable({
   selectedIds,
   onToggleOne,
   onToggleAll,
+  editMode, update,
 }: Props) {
   const gridTemplate = `32px 18px ${columns.map(() => 'minmax(120px, 1fr)').join(' ')}`
   const allSelected = docs.length > 0 && docs.every((d) => selectedIds.has(String(d.id ?? '')))
@@ -112,10 +117,18 @@ export function ListTable({
             {columns.map((col, i) => (
               <span
                 key={col.key}
-                className={`list-cell${i === 0 ? ' title' : ''}`}
+                className={`list-cell${i === 0 ? ' title' : ''}${editMode && update && isInlineEditable(col) ? ' editing' : ''}`}
                 title={typeof doc[col.key] === 'string' ? (doc[col.key] as string) : undefined}
+                // Inline inputs own their clicks/keys — don't select/open rows.
+                onClick={editMode ? (e) => e.stopPropagation() : undefined}
+                onKeyDown={editMode ? (e) => e.stopPropagation() : undefined}
+                onDoubleClick={editMode ? (e) => e.stopPropagation() : undefined}
               >
-                {renderCell(col, doc)}
+                {editMode && update ? (
+                  <EditableCell doc={doc} col={col} update={update} />
+                ) : (
+                  renderCell(col, doc)
+                )}
               </span>
             ))}
           </div>

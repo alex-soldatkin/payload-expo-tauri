@@ -135,6 +135,10 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
     )
   const clearSelection = () => setSelectedIds(new Set())
 
+  // Native inline Edit Mode (session-scoped): simple table cells edit in
+  // place through the local-first update path.
+  const [editMode, setEditMode] = useState(false)
+
   // ---- board (Kanban) + calendar -----------------------------------------
   // Top-level select/radio fields that can drive a board; empty → no Kanban.
   const rootFields = useMemo(() => getRootFields(schema, slug), [schema, slug])
@@ -369,6 +373,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
           pageSize={pageSize}
           onPageSize={(n) => update({ pageSize: n })}
           onRefresh={refetch}
+          editMode={editMode}
+          onToggleEditMode={() => setEditMode((v) => !v)}
           filterSlot={
             <FilterControls
               fields={filterFields}
@@ -440,6 +446,8 @@ export function DocumentList({ schema, slug, onOpen, serverURL = '' }: Props) {
           </div>
         ) : (
           <ListTable
+            editMode={editMode}
+            update={updateDoc}
             columns={columnDefs}
             docs={visible as Record<string, unknown>[]}
             sortField={sortField}
