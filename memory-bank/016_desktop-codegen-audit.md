@@ -101,3 +101,19 @@ solid #fff / #161616 backgrounds, 4%-alpha fills, 6-8%-alpha hairlines,
 emerald/amber/red semantics. Migration was ALIAS-BASED in base.css (T3
 primitives + old tokens as aliases in all three palette blocks) — future
 restyles should keep that layer; vibrancy/transparency removed in windows.mjs.
+
+## 2026-07-20 — hardening round closeout (#30)
+
+Modals opaque via --theme-* set in ui-shim.css (Payload elevation scale over
+T3 tokens). Uploads fixed: upload collections get an editor upload panel
+(multipart POST swaps the local stub for the server doc; PATCH replaces
+in place); Payload REST uploads need doc fields in ONE `_payload` JSON part
+(bare form parts → 400 on required fields); drop-zone accepts all MIME now.
+Native inline Edit Mode (list-toolbar pencil) replaced the inert passthrough
+EditModeToggle (removed via cli-dom --skip-action). Ketcher: mixed CJS/ESM
+needs vite build.commonjsOptions.transformMixedEsModules (require-crash
+fixed; canvas-paint still open). Regen via `pnpm codegen:dom:assemblon`
+(full flag set encoded). E2E: playwright-electron suite at
+apps/desktop-electron/e2e — 79 passed/0 failed; opacity regression asserted;
+open fixmes: ketcher canvas, quotations editor mount crash
+(undefined.replace, suspect LiveUnitPriceField). LCMS dashboards → #31.
