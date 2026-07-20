@@ -33,6 +33,46 @@
  * children are emitted WITHOUT block slugs or row indexes (the registry lookup
  * normalizes indexes away). Action components register per collection/global
  * slug + kind ('list' | 'edit') preserving declaration order.
+ *
+ * HEAVYWIDTH SCIENTIFIC COMPONENTS (Ketcher + d3 charts) — conventions the
+ * desktop app must satisfy to un-skip these closures (all via --allow, no hand
+ * edits to generated files):
+ *   - next/dynamic: allow 'next/dynamic'. The app aliases it (vite + tsconfig
+ *     paths) to form/ui-shim/next-dynamic.ts, a React.lazy+Suspense stand-in
+ *     that honors { ssr:false, loading } and forwards refs (Ketcher's loader
+ *     passes a ref through to the wrapper).
+ *   - @payloadcms/ui SUBPATHS: allow each used subpath (e.g.
+ *     '@payloadcms/ui/elements/Button', '/fields/Select', '/fields/Text',
+ *     '/fields/Textarea', '/elements/Collapsible', '/elements/Banner'). A vite
+ *     regex alias /^@payloadcms\/ui\/.*$/ maps them all onto the shim index,
+ *     which re-exports the matching named components; verify each subpath's
+ *     export name exists in the shim (Button/SelectInput/TextInput/…).
+ *   - GROUP passthroughs that render children via '@payloadcms/ui' RenderFields
+ *     (StructureFilesCollapsibleGroup wrapping the Ketcher `ketcherTool`): the
+ *     shim's RenderFields delegates back to the desktop FieldRenderer, so nested
+ *     custom fields mount. Add shim exports (RenderFields, usePreferences) as
+ *     needed when a group/collapsible passthrough reaches for them.
+ *   - Ketcher runtime deps (installed into the desktop app):
+ *     ketcher-standalone/ketcher-react/ketcher-core (match the config's version,
+ *     here 3.12.0-dev.1) + miew, plus 'ketcher-react/dist/index.css',
+ *     'miew/dist/Miew.css', 'ketcher-standalone/dist/binaryWasm'. The
+ *     3.12 binaryWasm build is VITE-NATIVE: it spawns its indigo worker via
+ *     `new Worker(new URL('indigoWorker-*.js', import.meta.url), {type:'module'})`
+ *     and the worker loads the .wasm via `new URL('indigo-ketcher-*.wasm',
+ *     import.meta.url)`. Vite bundles the worker chunk and emits the .wasm as a
+ *     hashed asset automatically — NO manual public/wasm copy or vite plugin is
+ *     required (unlike assemblon's Next postinstall patch). Verify against the
+ *     vite DEV SERVER (http origin), since the worker fetches wasm with
+ *     `fetch(new URL(binaryFile, self.location.origin))`, which an http origin
+ *     satisfies but a bare file:// packaged build may not.
+ *   - d3 charts (TritylCharts, ColumnPerformanceCharts): allow 'd3' — small,
+ *     self-contained closures; no other infra needed.
+ *   - LC-MS / HPLC dashboards (LCMSDashboardWrapper) remain SKIPPED: 150+ file
+ *     closure (>MAX_CLOSURE) with a broad package surface (zustand, idb-keyval,
+ *     @radix-ui/*, class-variance-authority, @payload-config) AND a separate
+ *     Python lcms_backend service ('/api/lcms/*' Next rewrite → lcms_backend:8000).
+ *     Unlocking them is a larger effort (raise the cap, add the deps, stand up
+ *     the backend) intentionally out of scope for the codegen pass.
  */
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -547,7 +587,16 @@ program
         emittedByRel.set(file.relToConfig, file.srcPath)
         const outPath = path.join(outDir, file.relToConfig)
         await fs.mkdir(path.dirname(outPath), { recursive: true })
-        await fs.writeFile(outPath, GENERATED_HEADER(file.relToConfig) + emitBody(file, configDir))
+        // Non-JS/TS closure files (JSON data tables, JSON-imported by a util —
+        // e.g. sequence-conversion presets) must be copied VERBATIM: the JS
+        // '// GENERATED …' header and the 'use client' / '@/'-rewrite pass in
+        // emitBody are only valid for JS/TS. Prepending a comment to a .json
+        // breaks the bundler's JSON parser.
+        const isJsLike = /\.(tsx|ts|jsx|js|mjs|cjs)$/i.test(file.relToConfig)
+        const contents = isJsLike
+          ? GENERATED_HEADER(file.relToConfig) + emitBody(file, configDir)
+          : file.source
+        await fs.writeFile(outPath, contents)
         writtenPaths.add(outPath)
       }
     }

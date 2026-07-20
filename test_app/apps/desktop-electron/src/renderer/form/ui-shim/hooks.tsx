@@ -54,13 +54,20 @@ export function useForm(): {
   )
 }
 
-export function useDocumentInfo(): { id: string; collectionSlug: string } {
+export function useDocumentInfo(): {
+  id: string
+  collectionSlug: string
+  /** Payload's preferences bucket id ('collection-<slug>-<id>'); passthrough
+   *  components (PersistedCollapsible) use it to scope get/setPreference. */
+  preferencesKey: string
+} {
   // Field components run inside the form engine; ACTION components (doc
   // menus, selection bar) get the same identity from the DocInfo scope.
   const engine = useFormEngineMaybe()
   const scope = useDocInfoScope()
-  if (engine) return { id: engine.docId, collectionSlug: engine.slug }
-  return { id: scope?.docId ?? '', collectionSlug: scope?.slug ?? '' }
+  const id = engine ? engine.docId : (scope?.docId ?? '')
+  const slug = engine ? engine.slug : (scope?.slug ?? '')
+  return { id, collectionSlug: slug, preferencesKey: slug ? `collection-${slug}-${id}` : '' }
 }
 
 /** Payload JWTs are unsigned-readable: header.payload.sig with base64url JSON. */
@@ -326,6 +333,47 @@ export function useListQuery(): {
     collectionSlug: scope?.slug ?? doc?.slug ?? '',
     refineListData: () => {},
   }
+}
+
+/** Payload exposes the enclosing Collapsible's state via context; passthrough
+ *  fields (SplitModifierAssignmentsField) read isCollapsed to skip expensive
+ *  work while collapsed. The desktop Collapsible shim is self-contained, so we
+ *  report expanded (false) — components render their full body, which is the
+ *  safe default (never hides content). */
+export function useCollapsible(): { isCollapsed: boolean; toggle: () => void } {
+  return { isCollapsed: false, toggle: () => {} }
+}
+
+/** Payload's per-document UI preferences (collapsed state, column config).
+ *  Desktop has no preferences server; back it with localStorage so passthrough
+ *  components (PersistedCollapsible) persist collapse state locally instead of
+ *  crashing on a missing get/setPreference. Keys are namespaced to avoid
+ *  colliding with other renderer storage. */
+const PREF_PREFIX = 'pui-pref:'
+export function usePreferences(): {
+  getPreference: <T = unknown>(key: string) => Promise<T | null>
+  setPreference: <T = unknown>(key: string, value: T) => Promise<void>
+} {
+  return useMemo(
+    () => ({
+      getPreference: async <T,>(key: string): Promise<T | null> => {
+        try {
+          const raw = localStorage.getItem(PREF_PREFIX + key)
+          return raw ? (JSON.parse(raw) as T) : null
+        } catch {
+          return null
+        }
+      },
+      setPreference: async <T,>(key: string, value: T): Promise<void> => {
+        try {
+          localStorage.setItem(PREF_PREFIX + key, JSON.stringify(value))
+        } catch {
+          /* quota / serialization — best-effort, never fatal */
+        }
+      },
+    }),
+    [],
+  )
 }
 
 /** Table column controls — resetting maps onto the desktop's own

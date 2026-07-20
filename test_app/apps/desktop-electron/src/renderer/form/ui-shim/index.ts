@@ -26,9 +26,16 @@ export {
   useAllFormFields,
   useListQuery,
   useTableColumns,
+  usePreferences,
+  useCollapsible,
 } from './hooks'
 export { toast } from './scopes'
 export { Button, Pill, Banner, Card, Collapsible, Gutter, Link } from './elements'
 export { FieldLabel, FieldDescription, FieldError, TextInput, CheckboxInput, SelectInput, ReactSelect, TextareaInput } from './fields'
 export { TextField, NumberField, RelationshipField, RelationshipInput } from './form-fields'
+// RenderFields delegates back to the desktop FieldRenderer so custom GROUP
+// passthroughs (StructureFilesCollapsibleGroup) can mount their nested field
+// children — including the Ketcher editor. Lives in its own file to keep the
+// FieldRenderer import out of the elements/fields presentational modules.
+export { RenderFields } from './render-fields'
 export type { RowLabelProps } from '../registry'

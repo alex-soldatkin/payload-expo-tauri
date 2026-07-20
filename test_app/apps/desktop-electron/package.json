@@ -15,21 +15,30 @@
     "@fontsource-variable/dm-sans": "^5.2.8",
     "@payload-universal/admin-schema": "workspace:*",
     "@payload-universal/local-db": "workspace:*",
+    "clsx": "^2.1.1",
+    "d3": "^7.9.0",
+    "ketcher-core": "3.12.0-dev.1",
+    "ketcher-react": "3.12.0-dev.1",
+    "ketcher-standalone": "3.12.0-dev.1",
     "lucide-react": "^1.24.0",
+    "miew": "^0.11.1",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-hook-form": "^7.72.1",
     "react-loading-skeleton": "^3.5.0",
     "react-resizable-panels": "^2.1.9",
     "rxdb": "^16.21.1",
-    "rxjs": "^7.8.1"
+    "rxjs": "^7.8.1",
+    "tailwind-merge": "^2.6.1"
   },
   "devDependencies": {
+    "@playwright/test": "1.54.1",
     "@tailwindcss/vite": "^4.3.2",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "electron": "^38.0.0",
+    "playwright": "1.54.1",
     "tailwindcss": "^3.4.19",
     "vite": "^7.0.0"
   }

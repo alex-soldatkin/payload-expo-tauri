@@ -16,8 +16,14 @@
       "@payloadcms/ui": [
         "./form/ui-shim/index.ts"
       ],
+      "@payloadcms/ui/*": [
+        "./form/ui-shim/index.ts"
+      ],
       "next/navigation": [
         "./form/ui-shim/navigation.ts"
+      ],
+      "next/dynamic": [
+        "./form/ui-shim/next-dynamic.ts"
       ]
     },
     "skipLibCheck": true,
